@@ -1,6 +1,6 @@
-option(BP_ENABLE_CPPCHECK "Enable static analysis with cppcheck" OFF)
-option(BP_ENABLE_CLANG_TIDY "Enable static analysis with clang-tidy" OFF)
-if(BP_ENABLE_CPPCHECK)
+option(CHARLIE3D_ENABLE_CPPCHECK "Enable static analysis with cppcheck" OFF)
+option(CHARLIE3D_ENABLE_CLANG_TIDY "Enable static analysis with clang-tidy" OFF)
+if(CHARLIE3D_ENABLE_CPPCHECK)
     find_program(CPPCHECK cppcheck)
     if(CPPCHECK)
         set(CMAKE_CXX_CPPCHECK ${CPPCHECK} --suppress=missingInclude --enable=all
@@ -10,7 +10,7 @@ if(BP_ENABLE_CPPCHECK)
     endif()
 endif()
 
-if(BP_ENABLE_CLANG_TIDY)
+if(CHARLIE3D_ENABLE_CLANG_TIDY)
     find_program(CLANGTIDY clang-tidy)
     if(CLANGTIDY)
         set(CMAKE_CXX_CLANG_TIDY ${CLANGTIDY})
