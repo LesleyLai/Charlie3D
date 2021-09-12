@@ -21,11 +21,13 @@ WindowManager::~WindowManager()
   glfwTerminate();
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void WindowManager::pull_events()
 {
   glfwPollEvents();
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto WindowManager::create(int width, int height, const char* title) -> Window
 {
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);

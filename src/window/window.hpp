@@ -7,6 +7,11 @@
 struct GLFWwindow;
 class WindowManager;
 
+struct Resolution {
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+};
+
 class Window {
   GLFWwindow* window_ = nullptr;
 
@@ -31,6 +36,8 @@ public:
   {
     return window_;
   }
+
+  [[nodiscard]] auto resolution() const noexcept -> Resolution;
 
 private:
   friend WindowManager;

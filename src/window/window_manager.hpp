@@ -15,7 +15,6 @@ public:
 
   ~WindowManager();
   BEYOND_DELETE_COPY(WindowManager)
-  BEYOND_DELETE_MOVE(WindowManager)
 
 private:
   WindowManager();

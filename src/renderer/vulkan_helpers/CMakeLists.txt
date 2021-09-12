@@ -1,0 +1,37 @@
+find_package(Vulkan)
+
+add_library(vulkan_helper
+        buffer.hpp
+        buffer.cpp
+        commands.cpp
+        commands.hpp
+        context.cpp
+        context.hpp
+        debug_utils.hpp
+        debug_utils.cpp
+        deletion_queue.hpp
+        descriptor_allocator.hpp
+        descriptor_allocator.cpp
+        descriptor_pool.hpp
+        descriptor_pool.cpp
+        error_handling.hpp
+        graphics_pipeline.hpp
+        graphics_pipeline.cpp
+        shader_module.hpp
+        shader_module.cpp
+        swapchain.hpp
+        swapchain.cpp
+        sync.hpp
+        sync.cpp
+        unique_resource.hpp
+        vma_impl.cpp)
+target_link_libraries(vulkan_helper
+        PUBLIC
+        charlie3d::compiler_options
+        fmt::fmt
+        vk-bootstrap::vk-bootstrap
+        Vulkan::Vulkan
+        third_party::vma
+        PRIVATE
+        charlie3d::window)
+add_library(charlie3d::vulkan_helper ALIAS vulkan_helper)

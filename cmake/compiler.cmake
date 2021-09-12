@@ -19,7 +19,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(charlie3d_compiler_options
             INTERFACE -Wall
             -Wextra
-            -Wshadow
+            -Wno-missing-field-initializers
             -Wnon-virtual-dtor
             -Wold-style-cast
             -Wcast-align
