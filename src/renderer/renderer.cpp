@@ -8,6 +8,10 @@
 
 #include "mesh.hpp"
 
+struct MeshPushConstants {
+  beyond::Mat4 transformation;
+};
+
 namespace {
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
@@ -144,12 +148,17 @@ void Renderer::init_sync_structures()
 
 void Renderer::init_pipelines()
 {
-  const VkPipelineLayoutCreateInfo pipeline_layout_info{
+  static constexpr VkPushConstantRange push_constant_range{
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = sizeof(MeshPushConstants)};
+
+  static constexpr VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 0,
       .pSetLayouts = nullptr,
-      .pushConstantRangeCount = 0,
-      .pPushConstantRanges = nullptr,
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &push_constant_range,
   };
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
                                   nullptr, &triangle_pipeline_layout_));
@@ -257,6 +266,24 @@ void Renderer::render()
   VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &triangle_buffer_.buffer, &offset);
 
+  beyond::Mat4 view = beyond::look_at(beyond::Vec3{0.f, 0.f, -2.f},
+                                      beyond::Vec3{0.0f, 0.0f, 0.0f},
+                                      beyond::Vec3{0.0f, 1.0f, 0.0f});
+  //  camera projection
+  const auto res = window_->resolution();
+  const float aspect =
+      static_cast<float>(res.width) / static_cast<float>(res.height);
+
+  beyond::Mat4 projection =
+      beyond::perspective(beyond::Degree{70.f}, aspect, 0.1f, 200.0f);
+  const beyond::Mat4 model = beyond::rotate_y(
+      beyond::Degree{static_cast<float>(frame_number_) * 0.4f});
+
+  const MeshPushConstants constants = {.transformation =
+                                           projection * view * model};
+
+  vkCmdPushConstants(cmd, triangle_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT,
+                     0, sizeof(MeshPushConstants), &constants);
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
   vkCmdEndRenderPass(cmd);
@@ -276,8 +303,6 @@ void Renderer::render()
       .pSignalSemaphores = &render_semaphore_,
   };
 
-  // submit command buffer to the queue and execute it.
-  //  _renderFence will now block until the graphic commands finish execution
   VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, render_fence_));
 
   VkSwapchainKHR swapchain = swapchain_.get();
