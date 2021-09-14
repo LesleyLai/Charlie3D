@@ -19,11 +19,9 @@ create_graphics_pipeline(Context& context,
   using beyond::to_u32;
 
   const auto vertex_binding_descriptions =
-      create_info.pipeline_vertex_input_state_create_info
-          .vertex_binding_descriptions;
+      create_info.vertex_input_state_create_info.binding_descriptions;
   const auto vertex_attribute_descriptions =
-      create_info.pipeline_vertex_input_state_create_info
-          .vertex_attribute_descriptions;
+      create_info.vertex_input_state_create_info.attribute_descriptions;
 
   const VkPipelineVertexInputStateCreateInfo vertex_input_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,

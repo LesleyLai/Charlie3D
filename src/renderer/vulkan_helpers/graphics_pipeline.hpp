@@ -26,9 +26,8 @@ enum class CullMode {
 };
 
 struct PipelineVertexInputStateCreateInfo {
-  std::span<const VkVertexInputBindingDescription> vertex_binding_descriptions;
-  std::span<const VkVertexInputAttributeDescription>
-      vertex_attribute_descriptions;
+  std::span<const VkVertexInputBindingDescription> binding_descriptions;
+  std::span<const VkVertexInputAttributeDescription> attribute_descriptions;
 };
 
 struct GraphicsPipelineCreateInfo {
@@ -39,8 +38,7 @@ struct GraphicsPipelineCreateInfo {
 
   // Optional
   const char* debug_name = nullptr;
-  PipelineVertexInputStateCreateInfo pipeline_vertex_input_state_create_info =
-      {};
+  PipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
   std::span<const VkPipelineShaderStageCreateInfo> shader_stages;
   PolygonMode polygon_mode = PolygonMode::fill;
   CullMode cull_mode = CullMode::none;

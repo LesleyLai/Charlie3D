@@ -6,6 +6,8 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
+#include "mesh.hpp"
+
 namespace {
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
@@ -125,6 +127,7 @@ Renderer::Renderer(Window& window)
 {
   init_sync_structures();
   init_pipelines();
+  load_mesh();
 }
 
 void Renderer::init_sync_structures()
@@ -170,17 +173,40 @@ void Renderer::init_pipelines()
        .module = triangle_frag_shader,
        .pName = "main"}};
 
+  VkVertexInputBindingDescription binding_descriptions[] = {
+      Vertex::binding_description()};
   triangle_pipeline_ =
       vkh::create_graphics_pipeline(
-          context_, {.pipeline_layout = triangle_pipeline_layout_,
-                     .render_pass = render_pass_,
-                     .window_extend = to_extent2d(window_->resolution()),
-                     .debug_name = "Triangle Graphics Pipeline",
-                     .shader_stages = triangle_shader_stages})
+          context_,
+          {.pipeline_layout = triangle_pipeline_layout_,
+           .render_pass = render_pass_,
+           .window_extend = to_extent2d(window_->resolution()),
+           .debug_name = "Triangle Graphics Pipeline",
+           .vertex_input_state_create_info =
+               {.binding_descriptions = binding_descriptions,
+                .attribute_descriptions = Vertex::attributes_descriptions()},
+           .shader_stages = triangle_shader_stages})
           .value();
 
   vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
   vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
+}
+
+void Renderer::load_mesh()
+{
+  Vertex triangle_vertices[3] = {
+      {.position = {1.f, 1.f, 0.0f}, .color = {1.f, 0.f, 0.0f}},
+      {.position = {-1.f, 1.f, 0.0f}, .color = {0.f, 1.f, 0.0f}},
+      {.position = {0.f, -1.f, 0.0f}, .color = {0.f, 0.f, 1.0f}}};
+
+  triangle_buffer_ =
+      vkh::create_buffer_from_data(context_,
+                                   {.size = sizeof(triangle_vertices),
+                                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                    .debug_name = "Triangle Mesh"},
+                                   triangle_vertices)
+          .value();
 }
 
 void Renderer::render()
@@ -204,9 +230,7 @@ void Renderer::render()
   };
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  const float flash =
-      std::abs(std::sin(static_cast<float>(frame_number_) / 120.f));
-  VkClearValue clear_value = {.color = {{0.0f, 0.0f, flash, 1.0f}}};
+  VkClearValue clear_value = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
 
   const VkRenderPassBeginInfo rp_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -229,6 +253,10 @@ void Renderer::render()
   vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline_);
+
+  VkDeviceSize offset = 0;
+  vkCmdBindVertexBuffers(cmd, 0, 1, &triangle_buffer_.buffer, &offset);
+
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
   vkCmdEndRenderPass(cmd);
@@ -271,6 +299,8 @@ void Renderer::render()
 Renderer::~Renderer()
 {
   vkDeviceWaitIdle(context_);
+
+  vkh::destroy_buffer(context_, triangle_buffer_);
 
   vkDestroyPipeline(context_, triangle_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_, triangle_pipeline_layout_, nullptr);

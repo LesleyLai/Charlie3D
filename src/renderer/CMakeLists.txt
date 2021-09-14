@@ -2,7 +2,7 @@ add_subdirectory(vulkan_helpers)
 
 add_library(charlie3d_renderer
         renderer.hpp
-        renderer.cpp)
+        renderer.cpp mesh.cpp mesh.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 target_link_libraries(charlie3d_renderer

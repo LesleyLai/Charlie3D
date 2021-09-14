@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include <functional>
+#include <ranges>
 #include <utility>
 
 #include "context.hpp"
@@ -44,7 +45,10 @@ public:
 
   void flush()
   {
-    for (auto& deleter : deleters_) { deleter(*context_); }
+    for (auto& deleter : std::ranges::reverse_view(deleters_)) {
+      deleter(*context_);
+    }
+
     deleters_.clear();
   }
 };
