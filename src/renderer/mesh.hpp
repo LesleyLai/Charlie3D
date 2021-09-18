@@ -7,6 +7,12 @@
 
 #include "vulkan_helpers/buffer.hpp"
 
+namespace vkh {
+
+class Context;
+
+}
+
 struct Vertex {
   beyond::Vec3 position;
   beyond::Vec3 normal;
@@ -39,9 +45,13 @@ struct Vertex {
   }
 };
 
-struct mesh {
-
-  vkh::Buffer buffer;
+struct Mesh {
+  vkh::Buffer vertex_buffer{};
+  vkh::Buffer index_buffer{};
+  std::uint32_t index_count{};
 };
+
+[[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
+    -> Mesh;
 
 #endif // CHARLIE3D_MESH_HPP

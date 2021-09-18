@@ -46,15 +46,16 @@ auto create_buffer_from_data(vkh::Context& context,
                                  static_cast<const void*>(data));
 }
 
-template <typename T>
-auto create_buffer_from_data(vkh::Context& context,
-                             const BufferCreateInfo& buffer_create_info,
-                             const T& data) -> Expected<Buffer>
-{
-  BEYOND_ENSURE(sizeof(T) <= buffer_create_info.size);
-  return create_buffer_from_data(context, buffer_create_info,
-                                 static_cast<const void*>(&data));
-}
+// TODO: this is currently broken
+// template <typename T>
+// auto create_buffer_from_data(vkh::Context& context,
+//                              const BufferCreateInfo& buffer_create_info,
+//                              const T& data) -> Expected<Buffer>
+//{
+//   BEYOND_ENSURE(sizeof(T) <= buffer_create_info.size);
+//   return create_buffer_from_data(context, buffer_create_info,
+//                                  static_cast<const void*>(&data));
+// }
 
 void destroy_buffer(vkh::Context& context, Buffer buffer);
 

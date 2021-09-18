@@ -5,11 +5,15 @@ add_library(charlie3d_renderer
         renderer.cpp mesh.cpp mesh.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
+find_package(assimp)
+
 target_link_libraries(charlie3d_renderer
         PUBLIC
         fmt::fmt
         charlie3d::vulkan_helper
         beyond::core
+        PRIVATE
+        assimp::assimp
         )
 
 include(../../cmake/CompileShader.cmake)

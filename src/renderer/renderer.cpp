@@ -131,7 +131,7 @@ Renderer::Renderer(Window& window)
 {
   init_sync_structures();
   init_pipelines();
-  load_mesh();
+  mesh_ = load_mesh(context_, "bunny.obj");
 }
 
 void Renderer::init_sync_structures()
@@ -201,23 +201,6 @@ void Renderer::init_pipelines()
   vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
 }
 
-void Renderer::load_mesh()
-{
-  Vertex triangle_vertices[3] = {
-      {.position = {1.f, 1.f, 0.0f}, .color = {1.f, 0.f, 0.0f}},
-      {.position = {-1.f, 1.f, 0.0f}, .color = {0.f, 1.f, 0.0f}},
-      {.position = {0.f, -1.f, 0.0f}, .color = {0.f, 0.f, 1.0f}}};
-
-  triangle_buffer_ =
-      vkh::create_buffer_from_data(context_,
-                                   {.size = sizeof(triangle_vertices),
-                                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                    .debug_name = "Triangle Mesh"},
-                                   triangle_vertices)
-          .value();
-}
-
 void Renderer::render()
 {
   // wait until the GPU has finished rendering the last frame.
@@ -239,7 +222,8 @@ void Renderer::render()
   };
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  VkClearValue clear_value = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
+  static constexpr VkClearValue clear_value = {
+      .color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
 
   const VkRenderPassBeginInfo rp_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -264,7 +248,8 @@ void Renderer::render()
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline_);
 
   VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &triangle_buffer_.buffer, &offset);
+  vkCmdBindVertexBuffers(cmd, 0, 1, &mesh_.vertex_buffer.buffer, &offset);
+  vkCmdBindIndexBuffer(cmd, mesh_.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
   beyond::Mat4 view = beyond::look_at(beyond::Vec3{0.f, 0.f, -2.f},
                                       beyond::Vec3{0.0f, 0.0f, 0.0f},
@@ -277,14 +262,14 @@ void Renderer::render()
   beyond::Mat4 projection =
       beyond::perspective(beyond::Degree{70.f}, aspect, 0.1f, 200.0f);
   const beyond::Mat4 model = beyond::rotate_y(
-      beyond::Degree{static_cast<float>(frame_number_) * 0.4f});
+      beyond::Degree{static_cast<float>(frame_number_) * 0.04f});
 
   const MeshPushConstants constants = {.transformation =
                                            projection * view * model};
 
   vkCmdPushConstants(cmd, triangle_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT,
                      0, sizeof(MeshPushConstants), &constants);
-  vkCmdDraw(cmd, 3, 1, 0, 0);
+  vkCmdDrawIndexed(cmd, mesh_.index_count, 1, 0, 0, 0);
 
   vkCmdEndRenderPass(cmd);
   VK_CHECK(vkEndCommandBuffer(cmd));
@@ -325,7 +310,8 @@ Renderer::~Renderer()
 {
   vkDeviceWaitIdle(context_);
 
-  vkh::destroy_buffer(context_, triangle_buffer_);
+  vkh::destroy_buffer(context_, mesh_.vertex_buffer);
+  vkh::destroy_buffer(context_, mesh_.index_buffer);
 
   vkDestroyPipeline(context_, triangle_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_, triangle_pipeline_layout_, nullptr);

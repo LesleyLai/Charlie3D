@@ -5,6 +5,8 @@
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/swapchain.hpp"
 
+#include "mesh.hpp"
+
 #include <vector>
 
 namespace charlie {
@@ -40,11 +42,11 @@ private:
   std::size_t frame_number_ = 0;
   VkPipelineLayout triangle_pipeline_layout_{};
   VkPipeline triangle_pipeline_{};
-  vkh::Buffer triangle_buffer_{};
+
+  Mesh mesh_;
 
   void init_sync_structures();
   void init_pipelines();
-  void load_mesh();
 };
 
 } // namespace charlie
