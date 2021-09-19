@@ -99,8 +99,8 @@ create_graphics_pipeline(Context& context,
       .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
       .depthBoundsTestEnable = VK_FALSE,
       .stencilTestEnable = VK_FALSE,
-      .minDepthBounds = 0.0f, // Optional
-      .maxDepthBounds = 1.0f, // Optional
+      .minDepthBounds = 0.0f,
+      .maxDepthBounds = 1.0f,
   };
 
   const VkGraphicsPipelineCreateInfo pipeline_create_info{

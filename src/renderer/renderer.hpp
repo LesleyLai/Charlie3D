@@ -9,6 +9,15 @@
 
 #include <vector>
 
+namespace vkh {
+
+struct Image {
+  VkImage image = {};
+  VmaAllocation allocation = {};
+};
+
+} // namespace vkh
+
 namespace charlie {
 
 class Renderer {
@@ -30,6 +39,10 @@ private:
 
   vkh::Swapchain swapchain_;
 
+  VkFormat depth_format_{};
+  vkh::Image depth_image_;
+  VkImageView depth_image_view_ = {};
+
   VkCommandPool command_pool_{};
   VkCommandBuffer main_command_buffer_{};
 
@@ -46,6 +59,7 @@ private:
   Mesh mesh_;
 
   void init_sync_structures();
+  void init_depth_image();
   void init_pipelines();
 };
 

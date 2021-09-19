@@ -8,7 +8,7 @@
 namespace vkh {
 
 struct CommandBufferAllocInfo {
-  VkCommandPool command_pool;
+  VkCommandPool command_pool{};
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   const char* debug_name = nullptr;
 };

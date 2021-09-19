@@ -13,6 +13,8 @@ class Context;
 
 }
 
+namespace charlie {
+
 struct Vertex {
   beyond::Vec3 position;
   beyond::Vec3 normal;
@@ -53,5 +55,7 @@ struct Mesh {
 
 [[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
     -> Mesh;
+
+} // namespace charlie
 
 #endif // CHARLIE3D_MESH_HPP

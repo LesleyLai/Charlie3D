@@ -6,6 +6,8 @@
 
 #include "vulkan_helpers/context.hpp"
 
+namespace charlie {
+
 [[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
     -> Mesh
 {
@@ -19,10 +21,12 @@
 
   std::vector<Vertex> vertices;
   for (unsigned i = 0; i != mesh->mNumVertices; i++) {
-    const aiVector3D v = mesh->mVertices[i];
+    const auto v = mesh->mVertices[i];
+    const auto n = mesh->mNormals[i];
     // const aiVector3D t = mesh->mTextureCoords[0][i];
-    vertices.push_back(
-        Vertex{.position = {v.x, v.z, v.y}, .color = {1.f, 0.f, 0.f}});
+    vertices.push_back(Vertex{.position = {v.x, v.z, v.y},
+                              .normal = {n.x, n.y, n.z},
+                              .color = {n.x, n.y, n.z}});
   }
 
   std::vector<std::uint32_t> indices;
@@ -51,3 +55,5 @@
 
   };
 }
+
+} // namespace charlie

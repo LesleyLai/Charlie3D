@@ -42,7 +42,8 @@ namespace {
 }
 
 [[nodiscard]] auto init_default_render_pass(vkh::Context& context,
-                                            const vkh::Swapchain& swapchain)
+                                            const vkh::Swapchain& swapchain,
+                                            VkFormat depth_image_format)
     -> VkRenderPass
 {
   // the renderpass will use this color attachment.
@@ -61,16 +62,37 @@ namespace {
       .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
   };
 
+  const VkAttachmentDescription depth_attachment = {
+      .flags = 0,
+      .format = depth_image_format,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
+  static constexpr VkAttachmentReference depth_attachment_ref = {
+      .attachment = 1,
+      .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
   static constexpr VkSubpassDescription subpass = {
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
       .colorAttachmentCount = 1,
       .pColorAttachments = &color_attachment_ref,
+      .pDepthStencilAttachment = &depth_attachment_ref,
   };
+
+  const VkAttachmentDescription attachments[] = {color_attachment,
+                                                 depth_attachment};
 
   const VkRenderPassCreateInfo render_pass_create_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .attachmentCount = 1,
-      .pAttachments = &color_attachment,
+      .attachmentCount = beyond::size(attachments),
+      .pAttachments = attachments,
       .subpassCount = 1,
       .pSubpasses = &subpass,
   };
@@ -84,14 +106,15 @@ namespace {
 [[nodiscard]] auto init_framebuffers(const Window& window,
                                      vkh::Context& context,
                                      const vkh::Swapchain& swapchain,
-                                     VkRenderPass render_pass)
+                                     VkRenderPass render_pass,
+                                     VkImageView depth_image_view)
 {
   Resolution res = window.resolution();
   VkFramebufferCreateInfo framebuffers_create_info = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
       .pNext = nullptr,
       .renderPass = render_pass,
-      .attachmentCount = 1,
+      .attachmentCount = 2,
       .width = res.width,
       .height = res.height,
       .layers = 1,
@@ -101,7 +124,9 @@ namespace {
   std::vector<VkFramebuffer> framebuffers(swapchain_imagecount);
 
   for (std::size_t i = 0; i < swapchain_imagecount; ++i) {
-    framebuffers_create_info.pAttachments = &swapchain.image_views()[i];
+    VkImageView attachments[2] = {swapchain.image_views()[i], depth_image_view};
+
+    framebuffers_create_info.pAttachments = attachments;
     VK_CHECK(vkCreateFramebuffer(context.device(), &framebuffers_create_info,
                                  nullptr, &framebuffers[i]));
   }
@@ -116,19 +141,22 @@ Renderer::Renderer(Window& window)
     : window_{&window}, context_{window},
       graphics_queue_{context_.graphics_queue()},
       graphics_queue_family_index{context_.graphics_queue_family_index()},
-      swapchain_{init_swapchain(context_, window)},
-      command_pool_{init_command_pool(context_)},
-      main_command_buffer_{
-          vkh::allocate_command_buffer(context_,
-                                       {
-                                           .command_pool = command_pool_,
-                                           .debug_name = "Main Command Buffer",
-                                       })
-              .value()},
-      render_pass_{init_default_render_pass(context_, swapchain_)},
-      framebuffers_{
-          init_framebuffers(window, context_, swapchain_, render_pass_)}
+      swapchain_{init_swapchain(context_, window)}
 {
+  init_depth_image();
+
+  command_pool_ = init_command_pool(context_);
+  main_command_buffer_ =
+      vkh::allocate_command_buffer(context_,
+                                   {
+                                       .command_pool = command_pool_,
+                                       .debug_name = "Main Command Buffer",
+                                   })
+          .value();
+  render_pass_ = init_default_render_pass(context_, swapchain_, depth_format_);
+  framebuffers_ = init_framebuffers(window, context_, swapchain_, render_pass_,
+                                    depth_image_view_),
+
   init_sync_structures();
   init_pipelines();
   mesh_ = load_mesh(context_, "bunny.obj");
@@ -144,6 +172,53 @@ void Renderer::init_sync_structures()
           .value();
   render_fence_ =
       vkh::create_fence(context_, {.debug_name = "Render Fence"}).value();
+}
+
+void Renderer::init_depth_image()
+{
+  depth_format_ = VK_FORMAT_D32_SFLOAT;
+
+  const VkImageCreateInfo image_create_info{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = depth_format_,
+      .extent = VkExtent3D{window_->resolution().width,
+                           window_->resolution().height, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
+
+  static constexpr VmaAllocationCreateInfo depth_image_alloc_info = {
+      .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+      .requiredFlags =
+          VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
+
+  VK_CHECK(vmaCreateImage(context_.allocator(), &image_create_info,
+                          &depth_image_alloc_info, &depth_image_.image,
+                          &depth_image_.allocation, nullptr));
+
+  const VkImageViewCreateInfo image_view_create_info{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .image = depth_image_.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = depth_format_,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      }};
+
+  VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr,
+                             &depth_image_view_));
 }
 
 void Renderer::init_pipelines()
@@ -222,8 +297,9 @@ void Renderer::render()
   };
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  static constexpr VkClearValue clear_value = {
-      .color = {{0.0f, 0.0f, 0.0f, 1.0f}}};
+  static constexpr VkClearValue clear_values[] = {
+      {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
+      {.depthStencil = {.depth = 1.f}}};
 
   const VkRenderPassBeginInfo rp_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -239,8 +315,8 @@ void Renderer::render()
                   },
               .extent = to_extent2d(window_->resolution()),
           },
-      .clearValueCount = 1,
-      .pClearValues = &clear_value,
+      .clearValueCount = beyond::size(clear_values),
+      .pClearValues = clear_values,
   };
 
   vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
@@ -259,10 +335,12 @@ void Renderer::render()
   const float aspect =
       static_cast<float>(res.width) / static_cast<float>(res.height);
 
-  beyond::Mat4 projection =
-      beyond::perspective(beyond::Degree{70.f}, aspect, 0.1f, 200.0f);
-  const beyond::Mat4 model = beyond::rotate_y(
-      beyond::Degree{static_cast<float>(frame_number_) * 0.04f});
+  using namespace beyond::literals;
+  beyond::Mat4 projection = beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
+  const beyond::Mat4 model = beyond::translate(0.f, -0.5f, 0.f) *
+                             beyond::rotate_y(beyond::Degree{
+                                 static_cast<float>(frame_number_) * 0.2f}) *
+                             beyond::rotate_x(-90._deg);
 
   const MeshPushConstants constants = {.transformation =
                                            projection * view * model};
@@ -315,6 +393,10 @@ Renderer::~Renderer()
 
   vkDestroyPipeline(context_, triangle_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_, triangle_pipeline_layout_, nullptr);
+
+  vkDestroyImageView(context_, depth_image_view_, nullptr);
+  vmaDestroyImage(context_.allocator(), depth_image_.image,
+                  depth_image_.allocation);
 
   vkDestroyFence(context_, render_fence_, nullptr);
   vkDestroySemaphore(context_, render_semaphore_, nullptr);
