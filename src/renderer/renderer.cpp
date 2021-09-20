@@ -159,7 +159,18 @@ Renderer::Renderer(Window& window)
 
   init_sync_structures();
   init_pipelines();
-  mesh_ = load_mesh(context_, "bunny.obj");
+
+  meshes_["bunny"] = load_mesh(context_, "bunny.obj");
+
+  static constexpr Vertex triangle_vertices[3] = {
+      {.position = {1.f, 1.f, 0.5f}, .color = {0.f, 1.f, 0.0f}},
+      {.position = {-1.f, 1.f, 0.5f}, .color = {0.f, 1.f, 0.0f}},
+      {.position = {0.f, -1.f, 0.5f}, .color = {0.f, 1.f, 0.0f}}};
+  static constexpr std::uint32_t triangle_indices[3] = {0, 1, 2};
+  meshes_["triangle"] =
+      upload_mesh_data(context_, triangle_vertices, triangle_indices);
+
+  init_scene();
 }
 
 void Renderer::init_sync_structures()
@@ -236,7 +247,7 @@ void Renderer::init_pipelines()
       .pPushConstantRanges = &push_constant_range,
   };
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
-                                  nullptr, &triangle_pipeline_layout_));
+                                  nullptr, &default_pipeline_layout_));
 
   auto triangle_vert_shader =
       vkh::load_shader_module_from_file(context_, "shaders/triangle.vert.spv",
@@ -259,13 +270,13 @@ void Renderer::init_pipelines()
 
   VkVertexInputBindingDescription binding_descriptions[] = {
       Vertex::binding_description()};
-  triangle_pipeline_ =
+  default_pipeline_ =
       vkh::create_graphics_pipeline(
           context_,
-          {.pipeline_layout = triangle_pipeline_layout_,
+          {.pipeline_layout = default_pipeline_layout_,
            .render_pass = render_pass_,
            .window_extend = to_extent2d(window_->resolution()),
-           .debug_name = "Triangle Graphics Pipeline",
+           .debug_name = "Default Graphics Pipeline",
            .vertex_input_state_create_info =
                {.binding_descriptions = binding_descriptions,
                 .attribute_descriptions = Vertex::attributes_descriptions()},
@@ -274,6 +285,42 @@ void Renderer::init_pipelines()
 
   vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
   vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
+
+  create_material(default_pipeline_, default_pipeline_layout_, "default");
+}
+
+void Renderer::init_scene()
+{
+  using namespace beyond::literals;
+
+  Mesh* bunny_mesh = get_mesh("bunny");
+  BEYOND_ENSURE(bunny_mesh != nullptr);
+  Material* default_mat = get_material("default");
+  BEYOND_ENSURE(default_mat != nullptr);
+  const beyond::Mat4 bunny_transform =
+      beyond::translate(0.f, -0.5f, 0.f) *
+      beyond::rotate_y(
+          beyond::Degree{static_cast<float>(frame_number_) * 0.2f}) *
+      beyond::rotate_x(-90._deg);
+
+  render_objects_.push_back(RenderObject{.mesh = bunny_mesh,
+                                         .material = default_mat,
+                                         .transform_matrix = bunny_transform});
+
+  Mesh* triangle_mesh = get_mesh("triangle");
+  BEYOND_ENSURE(triangle_mesh != nullptr);
+
+  for (int x = -20; x <= 20; x++) {
+    for (int y = -20; y <= 20; y++) {
+      const beyond::Mat4 translation =
+          beyond::translate(static_cast<float>(x), 0.f, static_cast<float>(y));
+      constexpr beyond::Mat4 scale = beyond::scale(0.2f, 0.2f, 0.2f);
+      render_objects_.push_back(
+          RenderObject{.mesh = get_mesh("triangle"),
+                       .material = default_mat,
+                       .transform_matrix = translation * scale});
+    }
+  }
 }
 
 void Renderer::render()
@@ -321,33 +368,7 @@ void Renderer::render()
 
   vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, triangle_pipeline_);
-
-  VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &mesh_.vertex_buffer.buffer, &offset);
-  vkCmdBindIndexBuffer(cmd, mesh_.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-  beyond::Mat4 view = beyond::look_at(beyond::Vec3{0.f, 0.f, -2.f},
-                                      beyond::Vec3{0.0f, 0.0f, 0.0f},
-                                      beyond::Vec3{0.0f, 1.0f, 0.0f});
-  //  camera projection
-  const auto res = window_->resolution();
-  const float aspect =
-      static_cast<float>(res.width) / static_cast<float>(res.height);
-
-  using namespace beyond::literals;
-  beyond::Mat4 projection = beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
-  const beyond::Mat4 model = beyond::translate(0.f, -0.5f, 0.f) *
-                             beyond::rotate_y(beyond::Degree{
-                                 static_cast<float>(frame_number_) * 0.2f}) *
-                             beyond::rotate_x(-90._deg);
-
-  const MeshPushConstants constants = {.transformation =
-                                           projection * view * model};
-
-  vkCmdPushConstants(cmd, triangle_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT,
-                     0, sizeof(MeshPushConstants), &constants);
-  vkCmdDrawIndexed(cmd, mesh_.index_count, 1, 0, 0, 0);
+  draw_objects(cmd, render_objects_);
 
   vkCmdEndRenderPass(cmd);
   VK_CHECK(vkEndCommandBuffer(cmd));
@@ -384,15 +405,73 @@ void Renderer::render()
   ++frame_number_;
 }
 
+[[nodiscard]] auto Renderer::create_material(VkPipeline pipeline,
+                                             VkPipelineLayout layout,
+                                             std::string name) -> Material&
+{
+  [[maybe_unused]] auto [itr, inserted] =
+      materials_.emplace(std::move(name), Material{pipeline, layout});
+  BEYOND_ENSURE(inserted);
+  return itr->second;
+}
+
+[[nodiscard]] auto Renderer::get_material(const std::string& name) -> Material*
+{
+  auto it = materials_.find(name);
+  return it == materials_.end() ? nullptr : &it->second;
+}
+
+[[nodiscard]] auto Renderer::get_mesh(const std::string& name) -> Mesh*
+{
+  auto it = meshes_.find(name);
+  return it == meshes_.end() ? nullptr : &it->second;
+}
+
+void Renderer::draw_objects(VkCommandBuffer cmd,
+                            std::span<RenderObject> objects)
+{
+  beyond::Mat4 view = beyond::look_at(beyond::Vec3{10.f, 5.f, 5.f},
+                                      beyond::Vec3{0.0f, 0.0f, 0.0f},
+                                      beyond::Vec3{0.0f, 1.0f, 0.0f});
+  //  camera projection
+  const auto res = window_->resolution();
+  const float aspect =
+      static_cast<float>(res.width) / static_cast<float>(res.height);
+
+  using namespace beyond::literals;
+  beyond::Mat4 projection = beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
+
+  for (auto object : objects) {
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      object.material->pipeline);
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
+                           &offset);
+    vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
+                         VK_INDEX_TYPE_UINT32);
+
+    const MeshPushConstants constants = {
+        .transformation = projection * view * object.transform_matrix};
+
+    vkCmdPushConstants(cmd, object.material->pipeline_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),
+                       &constants);
+    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0, 0);
+  }
+}
+
 Renderer::~Renderer()
 {
   vkDeviceWaitIdle(context_);
 
-  vkh::destroy_buffer(context_, mesh_.vertex_buffer);
-  vkh::destroy_buffer(context_, mesh_.index_buffer);
+  for (auto& [_, mesh] : meshes_) {
+    vkh::destroy_buffer(context_, mesh.vertex_buffer);
+    vkh::destroy_buffer(context_, mesh.index_buffer);
+  }
 
-  vkDestroyPipeline(context_, triangle_pipeline_, nullptr);
-  vkDestroyPipelineLayout(context_, triangle_pipeline_layout_, nullptr);
+  vkDestroyPipeline(context_, default_pipeline_, nullptr);
+  vkDestroyPipelineLayout(context_, default_pipeline_layout_, nullptr);
 
   vkDestroyImageView(context_, depth_image_view_, nullptr);
   vmaDestroyImage(context_.allocator(), depth_image_.image,

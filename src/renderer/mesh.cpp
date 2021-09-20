@@ -34,6 +34,14 @@ namespace charlie {
     for (unsigned j = 0; j != 3; j++)
       indices.push_back(mesh->mFaces[i].mIndices[j]);
 
+  return upload_mesh_data(context, vertices, indices);
+}
+
+[[nodiscard]] auto upload_mesh_data(vkh::Context& context,
+                                    std::span<const Vertex> vertices,
+                                    std::span<const std::uint32_t> indices)
+    -> Mesh
+{
   return Mesh{.vertex_buffer = vkh::create_buffer_from_data(
                                    context,
                                    {.size = vertices.size() * sizeof(Vertex),
@@ -51,9 +59,7 @@ namespace charlie {
                        .debug_name = "Mesh Index Buffer"},
                       indices.data())
                       .value(),
-              .index_count = static_cast<std::uint32_t>(indices.size())
-
-  };
+              .index_count = static_cast<std::uint32_t>(indices.size())};
 }
 
 } // namespace charlie

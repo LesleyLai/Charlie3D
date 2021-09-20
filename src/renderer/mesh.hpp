@@ -3,7 +3,8 @@
 
 #include <beyond/math/vector.hpp>
 
-#include <vector>
+#include <array>
+#include <span>
 
 #include "vulkan_helpers/buffer.hpp"
 
@@ -54,6 +55,11 @@ struct Mesh {
 };
 
 [[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
+    -> Mesh;
+
+[[nodiscard]] auto upload_mesh_data(vkh::Context& context,
+                                    std::span<const Vertex> vertices,
+                                    std::span<const std::uint32_t> indices)
     -> Mesh;
 
 } // namespace charlie
