@@ -28,19 +28,6 @@ namespace {
   return swapchain;
 }
 
-[[nodiscard]] auto init_command_pool(vkh::Context& context) -> VkCommandPool
-{
-  const VkCommandPoolCreateInfo command_pool_create_info{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = context.graphics_queue_family_index()};
-
-  VkCommandPool command_pool{};
-  VK_CHECK(vkCreateCommandPool(context.device(), &command_pool_create_info,
-                               nullptr, &command_pool));
-  return command_pool;
-}
-
 [[nodiscard]] auto init_default_render_pass(vkh::Context& context,
                                             const vkh::Swapchain& swapchain,
                                             VkFormat depth_image_format)
@@ -145,19 +132,11 @@ Renderer::Renderer(Window& window)
 {
   init_depth_image();
 
-  command_pool_ = init_command_pool(context_);
-  main_command_buffer_ =
-      vkh::allocate_command_buffer(context_,
-                                   {
-                                       .command_pool = command_pool_,
-                                       .debug_name = "Main Command Buffer",
-                                   })
-          .value();
   render_pass_ = init_default_render_pass(context_, swapchain_, depth_format_);
   framebuffers_ = init_framebuffers(window, context_, swapchain_, render_pass_,
                                     depth_image_view_),
 
-  init_sync_structures();
+  init_frame_data();
   init_pipelines();
 
   meshes_["bunny"] = load_mesh(context_, "bunny.obj");
@@ -171,16 +150,32 @@ Renderer::Renderer(Window& window)
       upload_mesh_data(context_, triangle_vertices, triangle_indices);
 }
 
-void Renderer::init_sync_structures()
+void Renderer::init_frame_data()
 {
-  present_semaphore_ =
-      vkh::create_semaphore(context_, {.debug_name = "Present Semaphore"})
-          .value();
-  render_semaphore_ =
-      vkh::create_semaphore(context_, {.debug_name = "Render Semaphore"})
-          .value();
-  render_fence_ =
-      vkh::create_fence(context_, {.debug_name = "Render Fence"}).value();
+  const VkCommandPoolCreateInfo command_pool_create_info{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = context_.graphics_queue_family_index()};
+
+  for (auto& frame : frames_) {
+    VK_CHECK(vkCreateCommandPool(context_, &command_pool_create_info, nullptr,
+                                 &frame.command_pool));
+    frame.main_command_buffer =
+        vkh::allocate_command_buffer(context_,
+                                     {
+                                         .command_pool = frame.command_pool,
+                                         .debug_name = "Main Command Buffer",
+                                     })
+            .value();
+    frame.present_semaphore =
+        vkh::create_semaphore(context_, {.debug_name = "Present Semaphore"})
+            .value();
+    frame.render_semaphore =
+        vkh::create_semaphore(context_, {.debug_name = "Render Semaphore"})
+            .value();
+    frame.render_fence =
+        vkh::create_fence(context_, {.debug_name = "Render Fence"}).value();
+  }
 }
 
 void Renderer::init_depth_image()
@@ -289,17 +284,20 @@ void Renderer::init_pipelines()
 
 void Renderer::render()
 {
+  const auto& frame = current_frame();
+
   // wait until the GPU has finished rendering the last frame.
-  VK_CHECK(vkWaitForFences(context_, 1, &render_fence_, true, 1e9));
-  VK_CHECK(vkResetFences(context_, 1, &render_fence_));
+  VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, 1e9));
+  VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
 
   std::uint32_t swapchain_image_index = 0;
-  VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, 1e9, present_semaphore_,
-                                 nullptr, &swapchain_image_index));
+  VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, 1e9,
+                                 frame.present_semaphore, nullptr,
+                                 &swapchain_image_index));
 
-  VK_CHECK(vkResetCommandBuffer(main_command_buffer_, 0));
+  VK_CHECK(vkResetCommandBuffer(frame.main_command_buffer, 0));
 
-  VkCommandBuffer cmd = main_command_buffer_;
+  VkCommandBuffer cmd = frame.main_command_buffer;
   constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .pNext = nullptr,
@@ -343,22 +341,22 @@ void Renderer::render()
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &present_semaphore_,
+      .pWaitSemaphores = &frame.present_semaphore,
       .pWaitDstStageMask = &waitStage,
       .commandBufferCount = 1,
       .pCommandBuffers = &cmd,
       .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &render_semaphore_,
+      .pSignalSemaphores = &frame.render_semaphore,
   };
 
-  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, render_fence_));
+  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, frame.render_fence));
 
   VkSwapchainKHR swapchain = swapchain_.get();
   VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &render_semaphore_,
+      .pWaitSemaphores = &frame.render_semaphore,
       .swapchainCount = 1,
       .pSwapchains = &swapchain,
       .pImageIndices = &swapchain_image_index,
@@ -441,15 +439,17 @@ Renderer::~Renderer()
   vmaDestroyImage(context_.allocator(), depth_image_.image,
                   depth_image_.allocation);
 
-  vkDestroyFence(context_, render_fence_, nullptr);
-  vkDestroySemaphore(context_, render_semaphore_, nullptr);
-  vkDestroySemaphore(context_, present_semaphore_, nullptr);
+  for (auto& frame : frames_) {
+    vkDestroyFence(context_, frame.render_fence, nullptr);
+    vkDestroySemaphore(context_, frame.render_semaphore, nullptr);
+    vkDestroySemaphore(context_, frame.present_semaphore, nullptr);
+    vkDestroyCommandPool(context_, frame.command_pool, nullptr);
+  }
 
   for (auto framebuffer : framebuffers_) {
     vkDestroyFramebuffer(context_, framebuffer, nullptr);
   }
   vkDestroyRenderPass(context_, render_pass_, nullptr);
-  vkDestroyCommandPool(context_, command_pool_, nullptr);
 }
 void Renderer::add_object(RenderObject object)
 {

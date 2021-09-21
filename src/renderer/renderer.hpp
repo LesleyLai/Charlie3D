@@ -33,6 +33,15 @@ struct RenderObject {
   beyond::Mat4 transform_matrix;
 };
 
+constexpr unsigned int frame_overlap = 2;
+struct FrameData {
+  VkSemaphore present_semaphore{}, render_semaphore{};
+  VkFence render_fence{};
+
+  VkCommandPool command_pool{};
+  VkCommandBuffer main_command_buffer{};
+};
+
 class Renderer {
 public:
   explicit Renderer(Window& window);
@@ -62,6 +71,11 @@ public:
     return frame_number_;
   }
 
+  [[nodiscard]] auto current_frame() -> FrameData&
+  {
+    return frames_[frame_number_ % frame_overlap];
+  }
+
 private:
   Window* window_ = nullptr;
   vkh::Context context_;
@@ -74,16 +88,11 @@ private:
   vkh::Image depth_image_;
   VkImageView depth_image_view_ = {};
 
-  VkCommandPool command_pool_{};
-  VkCommandBuffer main_command_buffer_{};
-
   VkRenderPass render_pass_{};
   std::vector<VkFramebuffer> framebuffers_{};
 
-  VkSemaphore present_semaphore_{}, render_semaphore_{};
-  VkFence render_fence_{};
-
   std::size_t frame_number_ = 0;
+  FrameData frames_[frame_overlap];
 
   VkPipelineLayout default_pipeline_layout_ = {};
   VkPipeline default_pipeline_ = {};
@@ -92,7 +101,7 @@ private:
   std::unordered_map<std::string, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
-  void init_sync_structures();
+  void init_frame_data();
   void init_depth_image();
   void init_pipelines();
 };
