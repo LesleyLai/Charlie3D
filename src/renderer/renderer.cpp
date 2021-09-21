@@ -169,8 +169,6 @@ Renderer::Renderer(Window& window)
   static constexpr std::uint32_t triangle_indices[3] = {0, 1, 2};
   meshes_["triangle"] =
       upload_mesh_data(context_, triangle_vertices, triangle_indices);
-
-  init_scene();
 }
 
 void Renderer::init_sync_structures()
@@ -287,40 +285,6 @@ void Renderer::init_pipelines()
   vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
 
   create_material(default_pipeline_, default_pipeline_layout_, "default");
-}
-
-void Renderer::init_scene()
-{
-  using namespace beyond::literals;
-
-  Mesh* bunny_mesh = get_mesh("bunny");
-  BEYOND_ENSURE(bunny_mesh != nullptr);
-  Material* default_mat = get_material("default");
-  BEYOND_ENSURE(default_mat != nullptr);
-  const beyond::Mat4 bunny_transform =
-      beyond::translate(0.f, -0.5f, 0.f) *
-      beyond::rotate_y(
-          beyond::Degree{static_cast<float>(frame_number_) * 0.2f}) *
-      beyond::rotate_x(-90._deg);
-
-  render_objects_.push_back(RenderObject{.mesh = bunny_mesh,
-                                         .material = default_mat,
-                                         .transform_matrix = bunny_transform});
-
-  Mesh* triangle_mesh = get_mesh("triangle");
-  BEYOND_ENSURE(triangle_mesh != nullptr);
-
-  for (int x = -20; x <= 20; x++) {
-    for (int y = -20; y <= 20; y++) {
-      const beyond::Mat4 translation =
-          beyond::translate(static_cast<float>(x), 0.f, static_cast<float>(y));
-      constexpr beyond::Mat4 scale = beyond::scale(0.2f, 0.2f, 0.2f);
-      render_objects_.push_back(
-          RenderObject{.mesh = get_mesh("triangle"),
-                       .material = default_mat,
-                       .transform_matrix = translation * scale});
-    }
-  }
 }
 
 void Renderer::render()
@@ -486,6 +450,10 @@ Renderer::~Renderer()
   }
   vkDestroyRenderPass(context_, render_pass_, nullptr);
   vkDestroyCommandPool(context_, command_pool_, nullptr);
+}
+void Renderer::add_object(RenderObject object)
+{
+  render_objects_.push_back(std::move(object));
 }
 
 } // namespace charlie

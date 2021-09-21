@@ -44,6 +44,24 @@ public:
 
   void render();
 
+  auto create_material(VkPipeline pipeline, VkPipelineLayout layout,
+                       std::string name) -> Material&;
+
+  // returns nullptr if it can't be found
+  [[nodiscard]] auto get_material(const std::string& name) -> Material*;
+
+  // returns nullptr if it can't be found
+  [[nodiscard]] auto get_mesh(const std::string& name) -> Mesh*;
+  void add_object(RenderObject object);
+
+  // our draw function
+  void draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects);
+
+  [[nodiscard]] auto frame_number() const -> std::size_t
+  {
+    return frame_number_;
+  }
+
 private:
   Window* window_ = nullptr;
   vkh::Context context_;
@@ -74,22 +92,9 @@ private:
   std::unordered_map<std::string, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
-  auto create_material(VkPipeline pipeline, VkPipelineLayout layout,
-                       std::string name) -> Material&;
-
-  // returns nullptr if it can't be found
-  [[nodiscard]] auto get_material(const std::string& name) -> Material*;
-
-  // returns nullptr if it can't be found
-  [[nodiscard]] auto get_mesh(const std::string& name) -> Mesh*;
-
-  // our draw function
-  void draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects);
-
   void init_sync_structures();
   void init_depth_image();
   void init_pipelines();
-  void init_scene();
 };
 
 } // namespace charlie
