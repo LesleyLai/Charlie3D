@@ -40,6 +40,15 @@ struct FrameData {
 
   VkCommandPool command_pool{};
   VkCommandBuffer main_command_buffer{};
+
+  vkh::Buffer camera_buffer{};
+  VkDescriptorSet global_descriptor_set{};
+};
+
+struct GPUCameraData {
+  beyond::Mat4 view;
+  beyond::Mat4 proj;
+  beyond::Mat4 view_proj;
 };
 
 class Renderer {
@@ -94,7 +103,10 @@ private:
   std::size_t frame_number_ = 0;
   FrameData frames_[frame_overlap];
 
-  VkPipelineLayout default_pipeline_layout_ = {};
+  VkDescriptorSetLayout global_descriptor_set_layout_ = {};
+  VkDescriptorPool descriptor_pool_ = {};
+
+  VkPipelineLayout mesh_pipeline_layout_ = {};
   VkPipeline default_pipeline_ = {};
 
   std::unordered_map<std::string, Material> materials_;
@@ -103,6 +115,7 @@ private:
 
   void init_frame_data();
   void init_depth_image();
+  void init_descriptors();
   void init_pipelines();
 };
 

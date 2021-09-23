@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
 #include "vulkan_helpers/commands.hpp"
+#include "vulkan_helpers/descriptor_pool.hpp"
 #include "vulkan_helpers/error_handling.hpp"
 #include "vulkan_helpers/graphics_pipeline.hpp"
 #include "vulkan_helpers/shader_module.hpp"
@@ -137,6 +138,7 @@ Renderer::Renderer(Window& window)
                                     depth_image_view_),
 
   init_frame_data();
+  init_descriptors();
   init_pipelines();
 
   meshes_["bunny"] = load_mesh(context_, "bunny.obj");
@@ -225,6 +227,71 @@ void Renderer::init_depth_image()
                              &depth_image_view_));
 }
 
+void Renderer::init_descriptors()
+{
+  static constexpr VkDescriptorSetLayoutBinding cam_buffer_binding = {
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
+
+  const VkDescriptorSetLayoutCreateInfo layout_create_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .flags = 0,
+      .bindingCount = 1,
+      .pBindings = &cam_buffer_binding};
+  VK_CHECK(vkCreateDescriptorSetLayout(context_, &layout_create_info, nullptr,
+                                       &global_descriptor_set_layout_));
+
+  std::array sizes = {
+      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10}};
+
+  descriptor_pool_ =
+      vkh::create_descriptor_pool(context_, {.flags = 0,
+                                             .max_sets = 10,
+                                             .pool_sizes = sizes,
+                                             .debug_name = "Descriptor Pool"})
+          .value();
+
+  for (auto i = 0u; i < frame_overlap; ++i) {
+    FrameData& frame = frames_[i];
+    frame.camera_buffer =
+        vkh::create_buffer(
+            context_,
+            vkh::BufferCreateInfo{
+                .size = sizeof(GPUCameraData),
+                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                .debug_name = fmt::format("Camera Buffer {}", i).c_str(),
+            })
+            .value();
+
+    const VkDescriptorSetAllocateInfo alloc_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool_,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &global_descriptor_set_layout_,
+    };
+    VK_CHECK(vkAllocateDescriptorSets(context_, &alloc_info,
+                                      &frame.global_descriptor_set));
+
+    const VkDescriptorBufferInfo buffer_info = {.buffer =
+                                                    frame.camera_buffer.buffer,
+                                                .offset = 0,
+                                                .range = sizeof(GPUCameraData)};
+
+    const VkWriteDescriptorSet set_write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.global_descriptor_set,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &buffer_info};
+
+    vkUpdateDescriptorSets(context_, 1, &set_write, 0, nullptr);
+  }
+}
+
 void Renderer::init_pipelines()
 {
   static constexpr VkPushConstantRange push_constant_range{
@@ -232,23 +299,23 @@ void Renderer::init_pipelines()
       .offset = 0,
       .size = sizeof(MeshPushConstants)};
 
-  static constexpr VkPipelineLayoutCreateInfo pipeline_layout_info{
+  const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 0,
-      .pSetLayouts = nullptr,
+      .setLayoutCount = 1,
+      .pSetLayouts = &global_descriptor_set_layout_,
       .pushConstantRangeCount = 1,
       .pPushConstantRanges = &push_constant_range,
   };
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
-                                  nullptr, &default_pipeline_layout_));
+                                  nullptr, &mesh_pipeline_layout_));
 
   auto triangle_vert_shader =
       vkh::load_shader_module_from_file(context_, "shaders/triangle.vert.spv",
-                                        {.debug_name = "Vertex Shader"})
+                                        {.debug_name = "Mesh Vertex Shader"})
           .value();
   auto triangle_frag_shader =
       vkh::load_shader_module_from_file(context_, "shaders/triangle.frag.spv",
-                                        {.debug_name = "Fragment Shader"})
+                                        {.debug_name = "Mesh Fragment Shader"})
           .value();
 
   const VkPipelineShaderStageCreateInfo triangle_shader_stages[] = {
@@ -266,10 +333,10 @@ void Renderer::init_pipelines()
   default_pipeline_ =
       vkh::create_graphics_pipeline(
           context_,
-          {.pipeline_layout = default_pipeline_layout_,
+          {.pipeline_layout = mesh_pipeline_layout_,
            .render_pass = render_pass_,
            .window_extend = to_extent2d(window_->resolution()),
-           .debug_name = "Default Graphics Pipeline",
+           .debug_name = "Mesh Graphics Pipeline",
            .vertex_input_state_create_info =
                {.binding_descriptions = binding_descriptions,
                 .attribute_descriptions = Vertex::attributes_descriptions()},
@@ -279,7 +346,7 @@ void Renderer::init_pipelines()
   vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
   vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
 
-  create_material(default_pipeline_, default_pipeline_layout_, "default");
+  create_material(default_pipeline_, mesh_pipeline_layout_, "default");
 }
 
 void Renderer::render()
@@ -403,9 +470,25 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   using namespace beyond::literals;
   beyond::Mat4 projection = beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
 
+  GPUCameraData cam_data;
+  cam_data.proj = projection;
+  cam_data.view = view;
+  cam_data.view_proj = projection * view;
+
+  // and copy it to the buffer
+  vkh::Buffer& camera_buffer = current_frame().camera_buffer;
+
+  void* data = nullptr;
+  vmaMapMemory(context_.allocator(), camera_buffer.allocation, &data);
+  memcpy(data, &cam_data, sizeof(GPUCameraData));
+  vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
+
   for (auto object : objects) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       object.material->pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            object.material->pipeline_layout, 0, 1,
+                            &current_frame().global_descriptor_set, 0, nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
@@ -413,8 +496,8 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
     vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
                          VK_INDEX_TYPE_UINT32);
 
-    const MeshPushConstants constants = {
-        .transformation = projection * view * object.transform_matrix};
+    const MeshPushConstants constants = {.transformation =
+                                             object.transform_matrix};
 
     vkCmdPushConstants(cmd, object.material->pipeline_layout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),
@@ -433,13 +516,19 @@ Renderer::~Renderer()
   }
 
   vkDestroyPipeline(context_, default_pipeline_, nullptr);
-  vkDestroyPipelineLayout(context_, default_pipeline_layout_, nullptr);
+  vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
 
   vkDestroyImageView(context_, depth_image_view_, nullptr);
   vmaDestroyImage(context_.allocator(), depth_image_.image,
                   depth_image_.allocation);
 
+  vkDestroyDescriptorSetLayout(context_, global_descriptor_set_layout_,
+                               nullptr);
+  vkDestroyDescriptorPool(context_, descriptor_pool_, nullptr);
+
   for (auto& frame : frames_) {
+    vkh::destroy_buffer(context_, frame.camera_buffer);
+
     vkDestroyFence(context_, frame.render_fence, nullptr);
     vkDestroySemaphore(context_, frame.render_semaphore, nullptr);
     vkDestroySemaphore(context_, frame.present_semaphore, nullptr);
