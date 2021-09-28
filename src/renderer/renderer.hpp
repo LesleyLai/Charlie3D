@@ -5,6 +5,8 @@
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/swapchain.hpp"
 
+#include <beyond/utils/function_ref.hpp>
+
 #include "mesh.hpp"
 
 #include <span>
@@ -30,7 +32,7 @@ struct Material {
 struct RenderObject {
   Mesh* mesh = nullptr;
   Material* material = nullptr;
-  beyond::Mat4 transform_matrix;
+  beyond::Mat4 model_matrix;
 };
 
 constexpr unsigned int frame_overlap = 2;
@@ -43,12 +45,24 @@ struct FrameData {
 
   vkh::Buffer camera_buffer{};
   VkDescriptorSet global_descriptor_set{};
+
+  vkh::Buffer object_buffer{};
+  VkDescriptorSet object_descriptor_set{};
+};
+
+struct GPUObjectData {
+  beyond::Mat4 model;
 };
 
 struct GPUCameraData {
   beyond::Mat4 view;
   beyond::Mat4 proj;
   beyond::Mat4 view_proj;
+};
+
+struct UploadContext {
+  VkFence fence = {};
+  VkCommandPool command_pool = {};
 };
 
 class Renderer {
@@ -85,6 +99,8 @@ public:
     return frames_[frame_number_ % frame_overlap];
   }
 
+  void immediate_submit(beyond::function_ref<void(VkCommandBuffer)> function);
+
 private:
   Window* window_ = nullptr;
   vkh::Context context_;
@@ -92,6 +108,8 @@ private:
   std::uint32_t graphics_queue_family_index{};
 
   vkh::Swapchain swapchain_;
+
+  UploadContext upload_context_;
 
   VkFormat depth_format_{};
   vkh::Image depth_image_;
@@ -104,6 +122,7 @@ private:
   FrameData frames_[frame_overlap];
 
   VkDescriptorSetLayout global_descriptor_set_layout_ = {};
+  VkDescriptorSetLayout object_descriptor_set_layout_ = {};
   VkDescriptorPool descriptor_pool_ = {};
 
   VkPipelineLayout mesh_pipeline_layout_ = {};
@@ -117,6 +136,15 @@ private:
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
+  void init_upload_context();
+
+  [[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
+      -> Mesh;
+
+  [[nodiscard]] auto upload_mesh_data(vkh::Context& context,
+                                      std::span<const Vertex> vertices,
+                                      std::span<const std::uint32_t> indices)
+      -> Mesh;
 };
 
 } // namespace charlie

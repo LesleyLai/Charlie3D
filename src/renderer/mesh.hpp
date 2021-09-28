@@ -54,14 +54,6 @@ struct Mesh {
   std::uint32_t index_count{};
 };
 
-[[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
-    -> Mesh;
-
-[[nodiscard]] auto upload_mesh_data(vkh::Context& context,
-                                    std::span<const Vertex> vertices,
-                                    std::span<const std::uint32_t> indices)
-    -> Mesh;
-
 } // namespace charlie
 
 #endif // CHARLIE3D_MESH_HPP

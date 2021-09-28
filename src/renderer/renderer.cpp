@@ -7,6 +7,10 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
 #include "mesh.hpp"
 
 struct MeshPushConstants {
@@ -14,6 +18,8 @@ struct MeshPushConstants {
 };
 
 namespace {
+
+constexpr std::size_t max_object_count = 10000;
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
 {
@@ -140,6 +146,7 @@ Renderer::Renderer(Window& window)
   init_frame_data();
   init_descriptors();
   init_pipelines();
+  init_upload_context();
 
   meshes_["bunny"] = load_mesh(context_, "bunny.obj");
 
@@ -176,7 +183,9 @@ void Renderer::init_frame_data()
         vkh::create_semaphore(context_, {.debug_name = "Render Semaphore"})
             .value();
     frame.render_fence =
-        vkh::create_fence(context_, {.debug_name = "Render Fence"}).value();
+        vkh::create_fence(context_, {.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+                                     .debug_name = "Render Fence"})
+            .value();
   }
 }
 
@@ -235,16 +244,34 @@ void Renderer::init_descriptors()
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
 
-  const VkDescriptorSetLayoutCreateInfo layout_create_info = {
+  const VkDescriptorSetLayoutCreateInfo global_layout_create_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .flags = 0,
       .bindingCount = 1,
       .pBindings = &cam_buffer_binding};
-  VK_CHECK(vkCreateDescriptorSetLayout(context_, &layout_create_info, nullptr,
+  VK_CHECK(vkCreateDescriptorSetLayout(context_, &global_layout_create_info,
+                                       nullptr,
                                        &global_descriptor_set_layout_));
 
+  static constexpr VkDescriptorSetLayoutBinding object_buffer_binding = {
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
+
+  const VkDescriptorSetLayoutCreateInfo object_layout_create_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .flags = 0,
+      .bindingCount = 1,
+      .pBindings = &object_buffer_binding};
+
+  VK_CHECK(vkCreateDescriptorSetLayout(context_, &object_layout_create_info,
+                                       nullptr,
+                                       &object_descriptor_set_layout_));
+
   std::array sizes = {
-      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10}};
+      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}};
 
   descriptor_pool_ =
       vkh::create_descriptor_pool(context_, {.flags = 0,
@@ -266,29 +293,65 @@ void Renderer::init_descriptors()
             })
             .value();
 
-    const VkDescriptorSetAllocateInfo alloc_info{
+    frame.object_buffer =
+        vkh::create_buffer(
+            context_,
+            vkh::BufferCreateInfo{
+                .size = sizeof(GPUObjectData) * max_object_count,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                .debug_name = fmt::format("Objects Buffer {}", i).c_str(),
+            })
+            .value();
+
+    const VkDescriptorSetAllocateInfo global_set_alloc_info{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = descriptor_pool_,
         .descriptorSetCount = 1,
         .pSetLayouts = &global_descriptor_set_layout_,
     };
-    VK_CHECK(vkAllocateDescriptorSets(context_, &alloc_info,
+    VK_CHECK(vkAllocateDescriptorSets(context_, &global_set_alloc_info,
                                       &frame.global_descriptor_set));
 
-    const VkDescriptorBufferInfo buffer_info = {.buffer =
-                                                    frame.camera_buffer.buffer,
-                                                .offset = 0,
-                                                .range = sizeof(GPUCameraData)};
+    const VkDescriptorSetAllocateInfo object_set_alloc_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool_,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &object_descriptor_set_layout_,
+    };
+    VK_CHECK(vkAllocateDescriptorSets(context_, &object_set_alloc_info,
+                                      &frame.object_descriptor_set));
 
-    const VkWriteDescriptorSet set_write = {
+    const VkDescriptorBufferInfo camera_buffer_info = {
+        .buffer = frame.camera_buffer.buffer,
+        .offset = 0,
+        .range = sizeof(GPUCameraData)};
+
+    const VkWriteDescriptorSet camera_write = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = frame.global_descriptor_set,
         .dstBinding = 0,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pBufferInfo = &buffer_info};
+        .pBufferInfo = &camera_buffer_info};
 
-    vkUpdateDescriptorSets(context_, 1, &set_write, 0, nullptr);
+    const VkDescriptorBufferInfo object_buffer_info = {
+        .buffer = frame.object_buffer.buffer,
+        .offset = 0,
+        .range = sizeof(GPUObjectData) * max_object_count};
+
+    const VkWriteDescriptorSet object_write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.object_descriptor_set,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &object_buffer_info};
+
+    VkWriteDescriptorSet set_writes[] = {camera_write, object_write};
+
+    vkUpdateDescriptorSets(context_, beyond::size(set_writes), set_writes, 0,
+                           nullptr);
   }
 }
 
@@ -299,10 +362,13 @@ void Renderer::init_pipelines()
       .offset = 0,
       .size = sizeof(MeshPushConstants)};
 
+  const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
+                                               object_descriptor_set_layout_};
+
   const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &global_descriptor_set_layout_,
+      .setLayoutCount = beyond::size(set_layouts),
+      .pSetLayouts = set_layouts,
       .pushConstantRangeCount = 1,
       .pPushConstantRanges = &push_constant_range,
   };
@@ -349,6 +415,21 @@ void Renderer::init_pipelines()
   create_material(default_pipeline_, mesh_pipeline_layout_, "default");
 }
 
+void Renderer::init_upload_context()
+{
+  upload_context_.fence =
+      vkh::create_fence(context_,
+                        vkh::FenceCreateInfo{.debug_name = "Upload Fence"})
+          .value();
+  const VkCommandPoolCreateInfo command_pool_create_info{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = context_.graphics_queue_family_index()};
+
+  VK_CHECK(vkCreateCommandPool(context_, &command_pool_create_info, nullptr,
+                               &upload_context_.command_pool));
+}
+
 void Renderer::render()
 {
   const auto& frame = current_frame();
@@ -367,9 +448,7 @@ void Renderer::render()
   VkCommandBuffer cmd = frame.main_command_buffer;
   constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .pNext = nullptr,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-      .pInheritanceInfo = nullptr,
   };
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
@@ -456,13 +535,128 @@ void Renderer::render()
   return it == meshes_.end() ? nullptr : &it->second;
 }
 
+[[nodiscard]] auto Renderer::load_mesh(vkh::Context& context,
+                                       const char* filename) -> Mesh
+{
+  Assimp::Importer importer;
+
+  const aiScene* scene = importer.ReadFile(filename, aiProcess_Triangulate);
+  if (!scene || !scene->HasMeshes()) {
+    beyond::panic(fmt::format("Unable to load {}", filename));
+  }
+  const aiMesh* mesh = scene->mMeshes[0];
+
+  std::vector<Vertex> vertices;
+  for (unsigned i = 0; i != mesh->mNumVertices; i++) {
+    const auto v = mesh->mVertices[i];
+    const auto n = mesh->mNormals[i];
+    // const aiVector3D t = mesh->mTextureCoords[0][i];
+    vertices.push_back(Vertex{.position = {v.x, v.z, v.y},
+                              .normal = {n.x, n.y, n.z},
+                              .color = {n.x, n.y, n.z}});
+  }
+
+  std::vector<std::uint32_t> indices;
+  for (unsigned i = 0; i != mesh->mNumFaces; i++)
+    for (unsigned j = 0; j != 3; j++)
+      indices.push_back(mesh->mFaces[i].mIndices[j]);
+
+  return upload_mesh_data(context, vertices, indices);
+}
+
+[[nodiscard]] auto
+Renderer::upload_mesh_data(vkh::Context& context,
+                           std::span<const Vertex> vertices,
+                           std::span<const std::uint32_t> indices) -> Mesh
+{
+  const auto vertex_buffer_size = vertices.size() * sizeof(Vertex);
+  const auto index_buffer_size = indices.size() * sizeof(std::uint32_t);
+
+  auto vertex_staging_buffer =
+      vkh::create_buffer_from_data(context,
+                                   {.size = vertex_buffer_size,
+                                    .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                    .debug_name = "Mesh Vertex Staging Buffer"},
+                                   vertices.data())
+          .value();
+  auto vertex_buffer =
+      vkh::create_buffer(context, {.size = vertex_buffer_size,
+                                   .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                                   .debug_name = "Mesh Vertex Buffer"})
+          .value();
+
+  immediate_submit([=](VkCommandBuffer cmd) {
+    const VkBufferCopy copy = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = vertex_buffer_size,
+    };
+    vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, vertex_buffer.buffer, 1,
+                    &copy);
+  });
+  vkh::destroy_buffer(context, vertex_staging_buffer);
+
+  auto index_staging_buffer =
+      vkh::create_buffer_from_data(context,
+                                   {.size = index_buffer_size,
+                                    .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                    .debug_name = "Mesh Index Staging Buffer"},
+                                   indices.data())
+          .value();
+
+  auto index_buffer =
+      vkh::create_buffer(context, {.size = index_buffer_size,
+                                   .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                                   .debug_name = "Mesh Index Buffer"})
+          .value();
+
+  immediate_submit([=](VkCommandBuffer cmd) {
+    const VkBufferCopy copy = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = index_buffer_size,
+    };
+    vkCmdCopyBuffer(cmd, index_staging_buffer.buffer, index_buffer.buffer, 1,
+                    &copy);
+  });
+
+  vkh::destroy_buffer(context, index_staging_buffer);
+
+  return Mesh{.vertex_buffer = vertex_buffer,
+              .index_buffer = index_buffer,
+              .index_count = static_cast<std::uint32_t>(indices.size())};
+}
+
 void Renderer::draw_objects(VkCommandBuffer cmd,
                             std::span<RenderObject> objects)
 {
+  // Copy to object buffer
+  void* object_data = nullptr;
+  vmaMapMemory(context_.allocator(), current_frame().object_buffer.allocation,
+               &object_data);
+
+  auto* object_data_typed = static_cast<GPUObjectData*>(object_data);
+
+  std::size_t object_count = objects.size();
+  BEYOND_ENSURE(object_count <= max_object_count);
+  for (std::size_t i = 0; i < objects.size(); ++i) {
+    RenderObject& object = objects[i];
+    object_data_typed[i].model = object.model_matrix;
+  }
+
+  vmaUnmapMemory(context_.allocator(),
+                 current_frame().object_buffer.allocation);
+
+  // Camera
   beyond::Mat4 view = beyond::look_at(beyond::Vec3{10.f, 5.f, 5.f},
                                       beyond::Vec3{0.0f, 0.0f, 0.0f},
                                       beyond::Vec3{0.0f, 1.0f, 0.0f});
-  //  camera projection
   const auto res = window_->resolution();
   const float aspect =
       static_cast<float>(res.width) / static_cast<float>(res.height);
@@ -475,7 +669,6 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   cam_data.view = view;
   cam_data.view_proj = projection * view;
 
-  // and copy it to the buffer
   vkh::Buffer& camera_buffer = current_frame().camera_buffer;
 
   void* data = nullptr;
@@ -483,12 +676,17 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   memcpy(data, &cam_data, sizeof(GPUCameraData));
   vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
 
-  for (auto object : objects) {
+  // Render objects
+  for (std::size_t i = 0; i < object_count; ++i) {
+    RenderObject& object = objects[i];
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       object.material->pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             object.material->pipeline_layout, 0, 1,
                             &current_frame().global_descriptor_set, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            object.material->pipeline_layout, 1, 1,
+                            &current_frame().object_descriptor_set, 0, nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
@@ -496,13 +694,13 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
     vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
                          VK_INDEX_TYPE_UINT32);
 
-    const MeshPushConstants constants = {.transformation =
-                                             object.transform_matrix};
+    const MeshPushConstants constants = {.transformation = object.model_matrix};
 
     vkCmdPushConstants(cmd, object.material->pipeline_layout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),
                        &constants);
-    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0,
+                     static_cast<std::uint32_t>(i));
   }
 }
 
@@ -515,6 +713,9 @@ Renderer::~Renderer()
     vkh::destroy_buffer(context_, mesh.index_buffer);
   }
 
+  vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
+  vkDestroyFence(context_, upload_context_.fence, nullptr);
+
   vkDestroyPipeline(context_, default_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
 
@@ -522,11 +723,14 @@ Renderer::~Renderer()
   vmaDestroyImage(context_.allocator(), depth_image_.image,
                   depth_image_.allocation);
 
+  vkDestroyDescriptorSetLayout(context_, object_descriptor_set_layout_,
+                               nullptr);
   vkDestroyDescriptorSetLayout(context_, global_descriptor_set_layout_,
                                nullptr);
   vkDestroyDescriptorPool(context_, descriptor_pool_, nullptr);
 
   for (auto& frame : frames_) {
+    vkh::destroy_buffer(context_, frame.object_buffer);
     vkh::destroy_buffer(context_, frame.camera_buffer);
 
     vkDestroyFence(context_, frame.render_fence, nullptr);
@@ -542,7 +746,38 @@ Renderer::~Renderer()
 }
 void Renderer::add_object(RenderObject object)
 {
-  render_objects_.push_back(std::move(object));
+  render_objects_.push_back(object);
+}
+
+void Renderer::immediate_submit(
+    beyond::function_ref<void(VkCommandBuffer)> function)
+{
+  VkCommandBuffer cmd =
+      vkh::allocate_command_buffer(
+          context_, {.command_pool = upload_context_.command_pool,
+                     .debug_name = "Uploading Command Buffer"})
+          .value();
+
+  constexpr VkCommandBufferBeginInfo cmd_begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
+
+  function(cmd);
+
+  VK_CHECK(vkEndCommandBuffer(cmd));
+
+  const VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                               .commandBufferCount = 1,
+                               .pCommandBuffers = &cmd};
+
+  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, upload_context_.fence));
+  VK_CHECK(
+      vkWaitForFences(context_, 1, &upload_context_.fence, true, 9999999999));
+  VK_CHECK(vkResetFences(context_, 1, &upload_context_.fence));
+
+  VK_CHECK(vkResetCommandPool(context_, upload_context_.command_pool, 0));
 }
 
 } // namespace charlie

@@ -17,10 +17,9 @@ void init_scene(charlie::Renderer& renderer)
       beyond::rotate_y(
           beyond::Degree{static_cast<float>(renderer.frame_number()) * 0.2f}) *
       beyond::rotate_x(-90._deg);
-  renderer.add_object(
-      charlie::RenderObject{.mesh = bunny_mesh,
-                            .material = default_mat,
-                            .transform_matrix = bunny_transform});
+  renderer.add_object(charlie::RenderObject{.mesh = bunny_mesh,
+                                            .material = default_mat,
+                                            .model_matrix = bunny_transform});
 
   charlie::Mesh* triangle_mesh = renderer.get_mesh("triangle");
   BEYOND_ENSURE(triangle_mesh != nullptr);
@@ -33,7 +32,7 @@ void init_scene(charlie::Renderer& renderer)
       renderer.add_object(
           charlie::RenderObject{.mesh = triangle_mesh,
                                 .material = default_mat,
-                                .transform_matrix = translation * scale});
+                                .model_matrix = translation * scale});
     }
   }
 }
