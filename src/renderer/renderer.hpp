@@ -145,6 +145,9 @@ private:
                                       std::span<const Vertex> vertices,
                                       std::span<const std::uint32_t> indices)
       -> Mesh;
+
+  auto upload_buffer(std::size_t gpu_buffer, const void* data,
+                     VkBufferUsageFlags usage) -> vkh::Expected<vkh::Buffer>;
 };
 
 } // namespace charlie

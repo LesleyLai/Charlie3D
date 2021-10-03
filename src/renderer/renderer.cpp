@@ -569,35 +569,13 @@ Renderer::upload_mesh_data(vkh::Context& context,
                            std::span<const Vertex> vertices,
                            std::span<const std::uint32_t> indices) -> Mesh
 {
-  const auto vertex_buffer_size = vertices.size() * sizeof(Vertex);
-  const auto index_buffer_size = indices.size() * sizeof(std::uint32_t);
 
-  auto vertex_staging_buffer =
-      vkh::create_buffer_from_data(context,
-                                   {.size = vertex_buffer_size,
-                                    .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                    .debug_name = "Mesh Vertex Staging Buffer"},
-                                   vertices.data())
-          .value();
-  auto vertex_buffer =
-      vkh::create_buffer(context, {.size = vertex_buffer_size,
-                                   .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                   .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                   .debug_name = "Mesh Vertex Buffer"})
-          .value();
+  const auto index_buffer_size = indices.size() * sizeof(uint32_t);
 
-  immediate_submit([=](VkCommandBuffer cmd) {
-    const VkBufferCopy copy = {
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = vertex_buffer_size,
-    };
-    vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, vertex_buffer.buffer, 1,
-                    &copy);
-  });
-  vkh::destroy_buffer(context, vertex_staging_buffer);
+  vkh::Buffer vertex_buffer =
+      upload_buffer(vertices.size_bytes(), vertices.data(),
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
+          .value();
 
   auto index_staging_buffer =
       vkh::create_buffer_from_data(context,
@@ -631,6 +609,39 @@ Renderer::upload_mesh_data(vkh::Context& context,
   return Mesh{.vertex_buffer = vertex_buffer,
               .index_buffer = index_buffer,
               .index_count = static_cast<std::uint32_t>(indices.size())};
+}
+
+auto Renderer::upload_buffer(std::size_t size, const void* data,
+                             VkBufferUsageFlags usage)
+    -> vkh::Expected<vkh::Buffer>
+{
+  return vkh::create_buffer(context_,
+                            {.size = size,
+                             .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                             .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                             .debug_name = "Mesh Vertex Buffer"})
+      .and_then([=, this](vkh::Buffer gpu_buffer) {
+        auto vertex_staging_buffer =
+            vkh::create_buffer_from_data(
+                context_,
+                {.size = size,
+                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                 .debug_name = "Mesh Vertex Staging Buffer"},
+                data)
+                .value();
+        immediate_submit([=](VkCommandBuffer cmd) {
+          const VkBufferCopy copy = {
+              .srcOffset = 0,
+              .dstOffset = 0,
+              .size = size,
+          };
+          vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, gpu_buffer.buffer,
+                          1, &copy);
+        });
+        vkh::destroy_buffer(context_, vertex_staging_buffer);
+        return vkh::Expected<vkh::Buffer>(gpu_buffer);
+      });
 }
 
 void Renderer::draw_objects(VkCommandBuffer cmd,
