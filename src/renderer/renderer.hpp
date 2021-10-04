@@ -6,6 +6,7 @@
 #include "vulkan_helpers/swapchain.hpp"
 
 #include <beyond/utils/function_ref.hpp>
+#include <beyond/math/matrix.hpp>
 
 #include "mesh.hpp"
 

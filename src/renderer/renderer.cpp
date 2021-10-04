@@ -11,6 +11,8 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 
+#include <beyond/math/transform.hpp>
+
 #include "mesh.hpp"
 
 struct MeshPushConstants {

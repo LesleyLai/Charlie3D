@@ -3,6 +3,9 @@
 
 #include "renderer/renderer.hpp"
 
+#include <beyond/math/angle.hpp>
+#include <beyond/math/transform.hpp>
+
 void init_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;

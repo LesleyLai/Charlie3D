@@ -4,7 +4,9 @@
 #include "debug_utils.hpp"
 #include "error_handling.hpp"
 
+#include <beyond/utils/assert.hpp>
 #include <beyond/utils/conversion.hpp>
+#include <beyond/utils/bit_cast.hpp>
 
 namespace vkh {
 
