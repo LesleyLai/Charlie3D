@@ -433,20 +433,21 @@ void Renderer::init_upload_context()
 void Renderer::render()
 {
   const auto& frame = current_frame();
+  constexpr std::uint64_t one_second = 1'000'000'000;
 
   // wait until the GPU has finished rendering the last frame.
-  VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, 1e9));
+  VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, one_second));
   VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
 
   std::uint32_t swapchain_image_index = 0;
-  VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, 1e9,
+  VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, one_second,
                                  frame.present_semaphore, nullptr,
                                  &swapchain_image_index));
 
   VK_CHECK(vkResetCommandBuffer(frame.main_command_buffer, 0));
 
   VkCommandBuffer cmd = frame.main_command_buffer;
-  constexpr VkCommandBufferBeginInfo cmd_begin_info = {
+  static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };

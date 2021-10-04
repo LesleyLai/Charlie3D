@@ -58,6 +58,8 @@ Context::Context(Window& window)
                                  VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
                              .set_required_features({
                                  .fillModeNonSolid = true,
+                             }).set_required_features_11({
+                                 .shaderDrawParameters = true
                              })
                              .select();
   if (!phys_device_ret) {

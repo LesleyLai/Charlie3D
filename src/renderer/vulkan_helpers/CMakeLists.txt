@@ -1,4 +1,5 @@
 find_package(Vulkan)
+find_package(vulkan-memory-allocator)
 
 add_library(vulkan_helper
         buffer.hpp
@@ -31,7 +32,7 @@ target_link_libraries(vulkan_helper
         fmt::fmt
         vk-bootstrap::vk-bootstrap
         Vulkan::Vulkan
-        third_party::vma
+        vulkan-memory-allocator::vulkan-memory-allocator
         PRIVATE
         charlie3d::window)
 add_library(charlie3d::vulkan_helper ALIAS vulkan_helper)
