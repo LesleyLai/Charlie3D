@@ -5,8 +5,8 @@
 #include "vulkan_helpers/context.hpp"
 #include "vulkan_helpers/swapchain.hpp"
 
-#include <beyond/utils/function_ref.hpp>
 #include <beyond/math/matrix.hpp>
+#include <beyond/utils/function_ref.hpp>
 
 #include "mesh.hpp"
 
@@ -95,12 +95,17 @@ public:
     return frame_number_;
   }
 
-  [[nodiscard]] auto current_frame() -> FrameData&
+  [[nodiscard]] auto current_frame() noexcept -> FrameData&
   {
     return frames_[frame_number_ % frame_overlap];
   }
 
   void immediate_submit(beyond::function_ref<void(VkCommandBuffer)> function);
+
+  [[nodiscard]] auto context() noexcept -> vkh::Context&
+  {
+    return context_;
+  }
 
 private:
   Window* window_ = nullptr;

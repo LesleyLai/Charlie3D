@@ -5,7 +5,8 @@ add_library(charlie3d_renderer
         renderer.cpp mesh.cpp mesh.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
-find_package(assimp)
+find_package(assimp REQUIRED)
+find_package(stb REQUIRED)
 
 target_link_libraries(charlie3d_renderer
         PUBLIC
@@ -14,6 +15,7 @@ target_link_libraries(charlie3d_renderer
         beyond::core
         PRIVATE
         assimp::assimp
+        stb::stb
         )
 
 include(../../cmake/CompileShader.cmake)

@@ -5,8 +5,8 @@
 #include "error_handling.hpp"
 
 #include <beyond/utils/assert.hpp>
-#include <beyond/utils/conversion.hpp>
 #include <beyond/utils/bit_cast.hpp>
+#include <beyond/utils/conversion.hpp>
 
 namespace vkh {
 
@@ -15,8 +15,8 @@ create_graphics_pipeline(Context& context,
                          const GraphicsPipelineCreateInfo& create_info)
     -> beyond::expected<VkPipeline, VkResult>
 {
-  BEYOND_ENSURE(create_info.pipeline_layout != VK_NULL_HANDLE);
-  BEYOND_ENSURE(create_info.render_pass != VK_NULL_HANDLE);
+  BEYOND_ENSURE(create_info.layout.value != VK_NULL_HANDLE);
+  BEYOND_ENSURE(create_info.render_pass.value != VK_NULL_HANDLE);
 
   using beyond::to_u32;
 
@@ -40,11 +40,11 @@ create_graphics_pipeline(Context& context,
       .primitiveRestartEnable = VK_FALSE,
   };
 
-  const VkExtent2D window_extend = create_info.window_extend;
+  const VkExtent2D window_extend = create_info.window_extend.value;
 
   const VkViewport viewport{
       .x = 0.0f,
-      .y = static_cast<float>(create_info.window_extend.height),
+      .y = static_cast<float>(window_extend.height),
       .width = static_cast<float>(window_extend.width),
       .height = -static_cast<float>(window_extend.height),
       .minDepth = 0.0f,
@@ -116,8 +116,8 @@ create_graphics_pipeline(Context& context,
       .pMultisampleState = &multisampling,
       .pDepthStencilState = &depth_stencil_state,
       .pColorBlendState = &color_blending,
-      .layout = create_info.pipeline_layout,
-      .renderPass = create_info.render_pass,
+      .layout = create_info.layout.value,
+      .renderPass = create_info.render_pass.value,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
   };

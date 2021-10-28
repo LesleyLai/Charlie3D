@@ -30,11 +30,15 @@ struct PipelineVertexInputStateCreateInfo {
   std::span<const VkVertexInputAttributeDescription> attribute_descriptions;
 };
 
+template <typename T> struct RequiredField {
+  T value;
+  explicit(false) RequiredField(T v) : value{v} {}
+};
+
 struct GraphicsPipelineCreateInfo {
-  // Required
-  VkPipelineLayout pipeline_layout = {};
-  VkRenderPass render_pass = {};
-  VkExtent2D window_extend = {};
+  RequiredField<VkPipelineLayout> layout;
+  RequiredField<VkRenderPass> render_pass;
+  RequiredField<VkExtent2D> window_extend;
 
   // Optional
   const char* debug_name = nullptr;

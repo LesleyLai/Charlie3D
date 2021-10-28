@@ -12,6 +12,12 @@
 #include <assimp/scene.h>
 
 #include <beyond/math/transform.hpp>
+#include <cstddef>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+#include <beyond/types/optional.hpp>
 
 #include "mesh.hpp"
 
@@ -129,6 +135,134 @@ constexpr std::size_t max_object_count = 10000;
   return framebuffers;
 }
 
+[[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer,
+                                        const char* filename)
+    -> beyond::optional<vkh::Image>
+{
+  vkh::Context& context = renderer.context();
+
+  int tex_width{}, tex_height{}, tex_channels{};
+  stbi_uc* pixels = stbi_load(filename, &tex_width, &tex_height, &tex_channels,
+                              STBI_rgb_alpha);
+
+  if (!pixels) {
+    fmt::print(stderr, "Failed to load texture file {}\n", filename);
+    std::fflush(stderr);
+    return beyond::nullopt;
+  }
+
+  void* pixel_ptr = static_cast<void*>(pixels);
+  const auto image_size = static_cast<VkDeviceSize>(tex_width * tex_height * 4);
+
+  constexpr VkFormat image_format = VK_FORMAT_R8G8B8A8_SRGB;
+
+  // allocate temporary buffer for holding texture data to upload
+  auto staging_buffer =
+      vkh::create_buffer(
+          context,
+          vkh::BufferCreateInfo{.size = image_size,
+                                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
+                                .debug_name = "Image Staging Buffer"})
+          .value();
+
+  // copy data to buffer
+  void* data = context.map(staging_buffer).value();
+  memcpy(data, pixel_ptr, static_cast<size_t>(image_size));
+  context.unmap(staging_buffer);
+  stbi_image_free(pixels);
+
+  VkExtent3D image_extent = {
+      .width = static_cast<uint32_t>(tex_width),
+      .height = static_cast<uint32_t>(tex_height),
+      .depth = 1,
+  };
+
+  const VkImageCreateInfo image_create_info{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = image_format,
+      .extent = image_extent,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+
+  vkh::Image image;
+  VmaAllocationCreateInfo image_allocation_create_info = {
+      .usage = VMA_MEMORY_USAGE_GPU_ONLY};
+
+  // allocate and create the image
+  VK_CHECK(vmaCreateImage(context.allocator(), &image_create_info,
+                          &image_allocation_create_info, &image.image,
+                          &image.allocation, nullptr));
+
+  renderer.immediate_submit([&](VkCommandBuffer cmd) {
+    static constexpr VkImageSubresourceRange range = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+
+    const VkImageMemoryBarrier image_barrier_to_transfer = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = image.image,
+        .subresourceRange = range,
+
+    };
+
+    // barrier the image into the transfer-receive layout
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &image_barrier_to_transfer);
+
+    const VkBufferImageCopy copy_region = {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        .imageExtent = image_extent};
+
+    // copy the buffer into the image
+    vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, image.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &copy_region);
+
+    VkImageMemoryBarrier image_barrier_to_readable = image_barrier_to_transfer;
+
+    image_barrier_to_readable.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    image_barrier_to_readable.newLayout =
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_barrier_to_readable.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    image_barrier_to_readable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    // barrier the image into the shader readable layout
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &image_barrier_to_readable);
+  });
+
+  vmaDestroyBuffer(context.allocator(), staging_buffer.buffer,
+                   staging_buffer.allocation);
+  fmt::print("Texture loaded successfully {}\n", filename);
+  return image;
+}
+
 } // anonymous namespace
 
 namespace charlie {
@@ -149,6 +283,9 @@ Renderer::Renderer(Window& window)
   init_descriptors();
   init_pipelines();
   init_upload_context();
+
+  auto image =
+      load_image_from_file(*this, "assets/lost_empire-RGBA.png").value();
 
   meshes_["bunny"] = load_mesh(context_, "bunny.obj");
 
@@ -197,8 +334,6 @@ void Renderer::init_depth_image()
 
   const VkImageCreateInfo image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = depth_format_,
       .extent = VkExtent3D{window_->resolution().width,
@@ -401,7 +536,7 @@ void Renderer::init_pipelines()
   default_pipeline_ =
       vkh::create_graphics_pipeline(
           context_,
-          {.pipeline_layout = mesh_pipeline_layout_,
+          {.layout = mesh_pipeline_layout_,
            .render_pass = render_pass_,
            .window_extend = to_extent2d(window_->resolution()),
            .debug_name = "Mesh Graphics Pipeline",
