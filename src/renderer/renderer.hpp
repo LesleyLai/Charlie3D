@@ -21,6 +21,11 @@ struct Image {
   VmaAllocation allocation = {};
 };
 
+struct Texture {
+  Image image;
+  VkImageView image_view = {};
+};
+
 } // namespace vkh
 
 namespace charlie {
@@ -137,6 +142,8 @@ private:
   std::unordered_map<std::string, Material> materials_;
   std::unordered_map<std::string, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
+
+  vkh::Texture texture_;
 
   void init_frame_data();
   void init_depth_image();

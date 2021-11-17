@@ -15,7 +15,6 @@ namespace {
 [[nodiscard]] auto read_file(const std::string_view filename)
     -> std::vector<char>
 {
-
   std::ifstream file(filename.data(), std::ios::ate | std::ios::binary);
 
   if (!file.is_open()) {

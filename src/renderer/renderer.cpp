@@ -284,8 +284,22 @@ Renderer::Renderer(Window& window)
   init_pipelines();
   init_upload_context();
 
-  auto image =
+  texture_.image =
       load_image_from_file(*this, "assets/lost_empire-RGBA.png").value();
+  const VkImageViewCreateInfo image_view_create_info{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = texture_.image.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_SRGB,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      }};
+  VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr,
+                             &texture_.image_view));
 
   meshes_["bunny"] = load_mesh(context_, "bunny.obj");
 
@@ -857,6 +871,10 @@ Renderer::~Renderer()
 {
   vkDeviceWaitIdle(context_);
 
+  vkDestroyImageView(context_, texture_.image_view, nullptr);
+  vmaDestroyImage(context_.allocator(), texture_.image.image,
+                  texture_.image.allocation);
+
   for (auto& [_, mesh] : meshes_) {
     vkh::destroy_buffer(context_, mesh.vertex_buffer);
     vkh::destroy_buffer(context_, mesh.index_buffer);
@@ -925,7 +943,6 @@ void Renderer::immediate_submit(
   VK_CHECK(
       vkWaitForFences(context_, 1, &upload_context_.fence, true, 9999999999));
   VK_CHECK(vkResetFences(context_, 1, &upload_context_.fence));
-
   VK_CHECK(vkResetCommandPool(context_, upload_context_.command_pool, 0));
 }
 
