@@ -2,10 +2,10 @@ add_subdirectory(vulkan_helpers)
 
 add_library(charlie3d_renderer
         renderer.hpp
-        renderer.cpp mesh.cpp mesh.hpp)
+        renderer.cpp mesh.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
-find_package(assimp REQUIRED)
+find_package(tinyobjloader REQUIRED)
 find_package(stb REQUIRED)
 
 target_link_libraries(charlie3d_renderer
@@ -13,8 +13,9 @@ target_link_libraries(charlie3d_renderer
         fmt::fmt
         charlie3d::vulkan_helper
         beyond::core
+        third-party::imgui_bindings
         PRIVATE
-        assimp::assimp
+        tinyobjloader::tinyobjloader
         stb::stb
         )
 

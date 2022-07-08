@@ -7,9 +7,8 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #include <beyond/math/transform.hpp>
 #include <cstddef>
@@ -21,6 +20,9 @@
 
 #include "mesh.hpp"
 
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
+
 struct MeshPushConstants {
   beyond::Mat4 transformation;
 };
@@ -28,6 +30,41 @@ struct MeshPushConstants {
 namespace {
 
 constexpr std::size_t max_object_count = 10000;
+
+VkSamplerCreateInfo
+sampler_create_info(VkFilter filters,
+                    VkSamplerAddressMode
+                        samplerAddressMode /*= VK_SAMPLER_ADDRESS_MODE_REPEAT*/)
+{
+  VkSamplerCreateInfo info = {};
+  info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  info.pNext = nullptr;
+
+  info.magFilter = filters;
+  info.minFilter = filters;
+  info.addressModeU = samplerAddressMode;
+  info.addressModeV = samplerAddressMode;
+  info.addressModeW = samplerAddressMode;
+
+  return info;
+}
+VkWriteDescriptorSet write_descriptor_image(VkDescriptorType type,
+                                            VkDescriptorSet dstSet,
+                                            VkDescriptorImageInfo* imageInfo,
+                                            uint32_t binding)
+{
+  VkWriteDescriptorSet write = {};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.pNext = nullptr;
+
+  write.dstBinding = binding;
+  write.dstSet = dstSet;
+  write.descriptorCount = 1;
+  write.descriptorType = type;
+  write.pImageInfo = imageInfo;
+
+  return write;
+}
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
 {
@@ -284,8 +321,11 @@ Renderer::Renderer(Window& window)
   init_pipelines();
   init_upload_context();
 
+  init_imgui();
+
   texture_.image =
-      load_image_from_file(*this, "assets/lost_empire-RGBA.png").value();
+      load_image_from_file(*this, "assets/lost_empire/lost_empire-RGBA.png")
+          .value();
   const VkImageViewCreateInfo image_view_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .image = texture_.image.image,
@@ -301,15 +341,40 @@ Renderer::Renderer(Window& window)
   VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr,
                              &texture_.image_view));
 
-  meshes_["bunny"] = load_mesh(context_, "bunny.obj");
+  meshes_["lost_empire"] =
+      load_mesh(context_, "assets/lost_empire/lost_empire.obj");
 
-  static constexpr Vertex triangle_vertices[3] = {
-      {.position = {1.f, 1.f, 0.5f}, .color = {0.f, 1.f, 0.0f}},
-      {.position = {-1.f, 1.f, 0.5f}, .color = {0.f, 1.f, 0.0f}},
-      {.position = {0.f, -1.f, 0.5f}, .color = {0.f, 1.f, 0.0f}}};
-  static constexpr std::uint32_t triangle_indices[3] = {0, 1, 2};
-  meshes_["triangle"] =
-      upload_mesh_data(context_, triangle_vertices, triangle_indices);
+  // Create sampler
+  const VkSamplerCreateInfo sampler_info =
+      sampler_create_info(VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+  vkCreateSampler(context_, &sampler_info, nullptr, &blocky_sampler_);
+
+  // alloc descriptor set for material
+  auto* material = get_material("default");
+  BEYOND_ENSURE(material != nullptr);
+  {
+    VkDescriptorSetAllocateInfo alloc_info = {};
+    alloc_info.pNext = nullptr;
+    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc_info.descriptorPool = descriptor_pool_;
+    alloc_info.descriptorSetCount = 1;
+    alloc_info.pSetLayouts = &single_texture_set_layout_;
+
+    vkAllocateDescriptorSets(context_, &alloc_info, &material->texture_set);
+
+    // write to the descriptor set so that it points to our empire_diffuse
+    // texture
+    VkDescriptorImageInfo imageBufferInfo;
+    imageBufferInfo.sampler = blocky_sampler_;
+    imageBufferInfo.imageView = texture_.image_view;
+    imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet texture1 =
+        write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                               material->texture_set, &imageBufferInfo, 0);
+
+    vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
+  }
 }
 
 void Renderer::init_frame_data()
@@ -397,7 +462,6 @@ void Renderer::init_descriptors()
 
   const VkDescriptorSetLayoutCreateInfo global_layout_create_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .flags = 0,
       .bindingCount = 1,
       .pBindings = &cam_buffer_binding};
   VK_CHECK(vkCreateDescriptorSetLayout(context_, &global_layout_create_info,
@@ -410,9 +474,8 @@ void Renderer::init_descriptors()
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
 
-  const VkDescriptorSetLayoutCreateInfo object_layout_create_info = {
+  static constexpr VkDescriptorSetLayoutCreateInfo object_layout_create_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .flags = 0,
       .bindingCount = 1,
       .pBindings = &object_buffer_binding};
 
@@ -420,9 +483,26 @@ void Renderer::init_descriptors()
                                        nullptr,
                                        &object_descriptor_set_layout_));
 
+  static constexpr VkDescriptorSetLayoutBinding single_texture_binding = {
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
+
+  static constexpr VkDescriptorSetLayoutCreateInfo
+      single_texture_layout_create_info = {
+          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+          .bindingCount = 1,
+          .pBindings = &single_texture_binding};
+
+  VK_CHECK(vkCreateDescriptorSetLayout(context_,
+                                       &single_texture_layout_create_info,
+                                       nullptr, &single_texture_set_layout_));
+
   std::array sizes = {
       VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}};
+      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
+      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}};
 
   descriptor_pool_ =
       vkh::create_descriptor_pool(context_, {.flags = 0,
@@ -514,7 +594,8 @@ void Renderer::init_pipelines()
       .size = sizeof(MeshPushConstants)};
 
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
-                                               object_descriptor_set_layout_};
+                                               object_descriptor_set_layout_,
+                                               single_texture_set_layout_};
 
   const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -581,6 +662,59 @@ void Renderer::init_upload_context()
                                &upload_context_.command_pool));
 }
 
+void Renderer::init_imgui()
+{
+  // 1: create descriptor pool for IMGUI
+  //  the size of the pool is very oversize, but it's copied from imgui demo
+  //  itself.
+  static constexpr VkDescriptorPoolSize pool_sizes[] = {
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
+
+  VkDescriptorPoolCreateInfo pool_info = {};
+  pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  pool_info.maxSets = 1000;
+  pool_info.poolSizeCount = beyond::size(pool_sizes);
+  pool_info.pPoolSizes = pool_sizes;
+
+  VK_CHECK(vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
+                                  &imgui_pool_));
+
+  // 2: initialize imgui library
+
+  ImGui::CreateContext();
+
+  ImGui_ImplGlfw_InitForVulkan(window_->glfw_window(), true);
+
+  ImGui_ImplVulkan_InitInfo init_info = {};
+  init_info.Instance = context_.instance();
+  init_info.PhysicalDevice = context_.physical_device();
+  init_info.Device = context_.device();
+  init_info.Queue = context_.graphics_queue();
+  init_info.DescriptorPool = imgui_pool_;
+  init_info.MinImageCount = 3;
+  init_info.ImageCount = 3;
+  init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+  ImGui_ImplVulkan_Init(&init_info, render_pass_);
+
+  // execute a gpu command to upload imgui font textures
+  immediate_submit(
+      [&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
+
+  // clear font textures from cpu data
+  ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
 void Renderer::render()
 {
   const auto& frame = current_frame();
@@ -608,6 +742,7 @@ void Renderer::render()
       {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
       {.depthStencil = {.depth = 1.f}}};
 
+  ImGui::Render();
   const VkRenderPassBeginInfo rp_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .pNext = nullptr,
@@ -629,6 +764,8 @@ void Renderer::render()
   vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
   draw_objects(cmd, render_objects_);
+
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
   vkCmdEndRenderPass(cmd);
   VK_CHECK(vkEndCommandBuffer(cmd));
@@ -670,7 +807,7 @@ void Renderer::render()
                                              std::string name) -> Material&
 {
   [[maybe_unused]] auto [itr, inserted] =
-      materials_.emplace(std::move(name), Material{pipeline, layout});
+      materials_.try_emplace(std::move(name), Material{pipeline, layout});
   BEYOND_ENSURE(inserted);
   return itr->second;
 }
@@ -690,76 +827,100 @@ void Renderer::render()
 [[nodiscard]] auto Renderer::load_mesh(vkh::Context& context,
                                        const char* filename) -> Mesh
 {
-  Assimp::Importer importer;
+  tinyobj::attrib_t attrib;
+  std::vector<tinyobj::shape_t> shapes;
+  std::vector<tinyobj::material_t> materials;
 
-  const aiScene* scene = importer.ReadFile(filename, aiProcess_Triangulate);
-  if (!scene || !scene->HasMeshes()) {
-    beyond::panic(fmt::format("Unable to load {}", filename));
-  }
-  const aiMesh* mesh = scene->mMeshes[0];
+  std::string err;
+
+  const bool ret =
+      tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filename);
+  if (!ret) { beyond::panic(fmt::format("Mesh loading error: {}", err)); }
 
   std::vector<Vertex> vertices;
-  for (unsigned i = 0; i != mesh->mNumVertices; i++) {
-    const auto v = mesh->mVertices[i];
-    const auto n = mesh->mNormals[i];
-    // const aiVector3D t = mesh->mTextureCoords[0][i];
-    vertices.push_back(Vertex{.position = {v.x, v.z, v.y},
-                              .normal = {n.x, n.y, n.z},
-                              .color = {n.x, n.y, n.z}});
-  }
-
   std::vector<std::uint32_t> indices;
-  for (unsigned i = 0; i != mesh->mNumFaces; i++)
-    for (unsigned j = 0; j != 3; j++)
-      indices.push_back(mesh->mFaces[i].mIndices[j]);
+
+  for (const auto& shape : shapes) {
+    std::size_t index_offset = 0;
+    for (std::size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
+      const auto fv = std::size_t(shape.mesh.num_face_vertices[f]);
+      for (std::size_t v = 0; v < fv; v++) {
+        const tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
+
+        const auto vx = attrib.vertices[3 * idx.vertex_index + 0];
+        const auto vy = attrib.vertices[3 * idx.vertex_index + 1];
+        const auto vz = attrib.vertices[3 * idx.vertex_index + 2];
+
+        const auto nx = attrib.normals[3 * idx.normal_index + 0];
+        const auto ny = attrib.normals[3 * idx.normal_index + 1];
+        const auto nz = attrib.normals[3 * idx.normal_index + 2];
+
+        // vertex uv
+        const auto ux = attrib.texcoords[2 * idx.texcoord_index + 0];
+        const auto uy = attrib.texcoords[2 * idx.texcoord_index + 1];
+
+        vertices.push_back(Vertex{.position = {vx, vy, vz},
+                                  .normal = {nx, ny, nz},
+                                  .color = {vx, vy, vz},
+                                  .uv = {ux, 1 - uy}});
+      }
+      index_offset += fv;
+    }
+  }
 
   return upload_mesh_data(context, vertices, indices);
 }
 
 [[nodiscard]] auto
-Renderer::upload_mesh_data(vkh::Context& context,
+Renderer::upload_mesh_data(vkh::Context& /*context*/,
                            std::span<const Vertex> vertices,
                            std::span<const std::uint32_t> indices) -> Mesh
 {
 
-  const auto index_buffer_size = indices.size() * sizeof(uint32_t);
+  // const auto index_buffer_size = indices.size() * sizeof(uint32_t);
 
   vkh::Buffer vertex_buffer =
       upload_buffer(vertices.size_bytes(), vertices.data(),
                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
           .value();
 
-  auto index_staging_buffer =
-      vkh::create_buffer_from_data(context,
-                                   {.size = index_buffer_size,
-                                    .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                    .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                    .debug_name = "Mesh Index Staging Buffer"},
-                                   indices.data())
-          .value();
+  //  auto index_staging_buffer =
+  //      vkh::create_buffer_from_data(context,
+  //                                   {.size = index_buffer_size,
+  //                                    .usage =
+  //                                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+  //                                    .memory_usage =
+  //                                    VMA_MEMORY_USAGE_CPU_TO_GPU, .debug_name
+  //                                    = "Mesh Index Staging Buffer"},
+  //                                   indices.data())
+  //          .value();
+  //
+  //  auto index_buffer =
+  //      vkh::create_buffer(context, {.size = index_buffer_size,
+  //                                   .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+  //                                   |
+  //                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+  //                                   .memory_usage =
+  //                                   VMA_MEMORY_USAGE_GPU_ONLY, .debug_name =
+  //                                   "Mesh Index Buffer"})
+  //          .value();
+  //
+  //  immediate_submit([=](VkCommandBuffer cmd) {
+  //    const VkBufferCopy copy = {
+  //        .srcOffset = 0,
+  //        .dstOffset = 0,
+  //        .size = index_buffer_size,
+  //    };
+  //    vkCmdCopyBuffer(cmd, index_staging_buffer.buffer, index_buffer.buffer,
+  //    1,
+  //                    &copy);
+  //  });
 
-  auto index_buffer =
-      vkh::create_buffer(context, {.size = index_buffer_size,
-                                   .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                   .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                   .debug_name = "Mesh Index Buffer"})
-          .value();
-
-  immediate_submit([=](VkCommandBuffer cmd) {
-    const VkBufferCopy copy = {
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = index_buffer_size,
-    };
-    vkCmdCopyBuffer(cmd, index_staging_buffer.buffer, index_buffer.buffer, 1,
-                    &copy);
-  });
-
-  vkh::destroy_buffer(context, index_staging_buffer);
+  // vkh::destroy_buffer(context, index_staging_buffer);
 
   return Mesh{.vertex_buffer = vertex_buffer,
-              .index_buffer = index_buffer,
+              //.index_buffer = index_buffer,
+              .vertices_count = static_cast<std::uint32_t>(vertices.size()),
               .index_count = static_cast<std::uint32_t>(indices.size())};
 }
 
@@ -809,7 +970,7 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   std::size_t object_count = objects.size();
   BEYOND_ENSURE(object_count <= max_object_count);
   for (std::size_t i = 0; i < objects.size(); ++i) {
-    RenderObject& object = objects[i];
+    const RenderObject& object = objects[i];
     object_data_typed[i].model = object.model_matrix;
   }
 
@@ -817,20 +978,22 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
                  current_frame().object_buffer.allocation);
 
   // Camera
-  beyond::Mat4 view = beyond::look_at(beyond::Vec3{10.f, 5.f, 5.f},
-                                      beyond::Vec3{0.0f, 0.0f, 0.0f},
-                                      beyond::Vec3{0.0f, 1.0f, 0.0f});
+  const beyond::Mat4 view = beyond::look_at(beyond::Vec3{0.f, 6.f, 100.f},
+                                            beyond::Vec3{0.0f, 0.0f, 0.0f},
+                                            beyond::Vec3{0.0f, 1.0f, 0.0f});
   const auto res = window_->resolution();
   const float aspect =
       static_cast<float>(res.width) / static_cast<float>(res.height);
 
   using namespace beyond::literals;
-  beyond::Mat4 projection = beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
+  const beyond::Mat4 projection =
+      beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
 
-  GPUCameraData cam_data;
-  cam_data.proj = projection;
-  cam_data.view = view;
-  cam_data.view_proj = projection * view;
+  const GPUCameraData cam_data = {
+      .view = view,
+      .proj = projection,
+      .view_proj = projection * view,
+  };
 
   vkh::Buffer& camera_buffer = current_frame().camera_buffer;
 
@@ -850,20 +1013,27 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             object.material->pipeline_layout, 1, 1,
                             &current_frame().object_descriptor_set, 0, nullptr);
-
+    if (object.material->texture_set != VK_NULL_HANDLE) {
+      // texture descriptor
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              object.material->pipeline_layout, 2, 1,
+                              &object.material->texture_set, 0, nullptr);
+    }
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
                            &offset);
-    vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
-                         VK_INDEX_TYPE_UINT32);
+    //    vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
+    //                         VK_INDEX_TYPE_UINT32);
 
     const MeshPushConstants constants = {.transformation = object.model_matrix};
 
     vkCmdPushConstants(cmd, object.material->pipeline_layout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),
                        &constants);
-    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0,
-                     static_cast<std::uint32_t>(i));
+    vkCmdDraw(cmd, object.mesh->vertices_count, 1, 0, 0);
+
+    //    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0,
+    //                     static_cast<std::uint32_t>(i));
   }
 }
 
@@ -871,11 +1041,17 @@ Renderer::~Renderer()
 {
   vkDeviceWaitIdle(context_);
 
+  vkDestroyDescriptorPool(context_, imgui_pool_, nullptr);
+
+  ImGui_ImplVulkan_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
+
   vkDestroyImageView(context_, texture_.image_view, nullptr);
   vmaDestroyImage(context_.allocator(), texture_.image.image,
                   texture_.image.allocation);
 
-  for (auto& [_, mesh] : meshes_) {
+  for (const auto& [_, mesh] : meshes_) {
     vkh::destroy_buffer(context_, mesh.vertex_buffer);
     vkh::destroy_buffer(context_, mesh.index_buffer);
   }
@@ -890,6 +1066,9 @@ Renderer::~Renderer()
   vmaDestroyImage(context_.allocator(), depth_image_.image,
                   depth_image_.allocation);
 
+  vkDestroySampler(context_, blocky_sampler_, nullptr);
+
+  vkDestroyDescriptorSetLayout(context_, single_texture_set_layout_, nullptr);
   vkDestroyDescriptorSetLayout(context_, object_descriptor_set_layout_,
                                nullptr);
   vkDestroyDescriptorSetLayout(context_, global_descriptor_set_layout_,

@@ -20,6 +20,7 @@ struct Vertex {
   beyond::Vec3 position;
   beyond::Vec3 normal;
   beyond::Vec3 color;
+  beyond::Vec2 uv;
 
   [[nodiscard]] static constexpr auto binding_description()
   {
@@ -44,13 +45,18 @@ struct Vertex {
          {.location = 2,
           .binding = 0,
           .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, color)}});
+          .offset = offsetof(Vertex, color)},
+         {.location = 3,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32_SFLOAT,
+          .offset = offsetof(Vertex, uv)}});
   }
 };
 
 struct Mesh {
   vkh::Buffer vertex_buffer{};
   vkh::Buffer index_buffer{};
+  std::uint32_t vertices_count{};
   std::uint32_t index_count{};
 };
 

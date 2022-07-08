@@ -10,6 +10,8 @@
 
 #include "mesh.hpp"
 
+#include <imgui.h>
+
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -33,6 +35,7 @@ namespace charlie {
 struct Material {
   VkPipeline pipeline = {};
   VkPipelineLayout pipeline_layout = {};
+  VkDescriptorSet texture_set = {};
 };
 
 struct RenderObject {
@@ -134,6 +137,7 @@ private:
 
   VkDescriptorSetLayout global_descriptor_set_layout_ = {};
   VkDescriptorSetLayout object_descriptor_set_layout_ = {};
+  VkDescriptorSetLayout single_texture_set_layout_ = {};
   VkDescriptorPool descriptor_pool_ = {};
 
   VkPipelineLayout mesh_pipeline_layout_ = {};
@@ -143,13 +147,17 @@ private:
   std::unordered_map<std::string, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
+  VkSampler blocky_sampler_;
   vkh::Texture texture_;
+
+  VkDescriptorPool imgui_pool_;
 
   void init_frame_data();
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
   void init_upload_context();
+  void init_imgui();
 
   [[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
       -> Mesh;

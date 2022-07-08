@@ -7,3 +7,5 @@ FetchContent_Declare(
         GIT_TAG 95b82a95378c2900f7d1d7908cee322b5f3bf120
 )
 FetchContent_MakeAvailable(fetch_vk_bootstrap)
+
+add_subdirectory(imgui)
