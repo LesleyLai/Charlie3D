@@ -11,8 +11,8 @@ add_library(vulkan_helper
         debug_utils.hpp
         debug_utils.cpp
         deletion_queue.hpp
-        descriptor_allocator.hpp
-        descriptor_allocator.cpp
+        descriptor_utils.hpp
+        descriptor_utils.cpp
         descriptor_pool.hpp
         descriptor_pool.cpp
         error_handling.hpp

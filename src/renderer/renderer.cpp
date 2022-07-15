@@ -978,16 +978,15 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
                  current_frame().object_buffer.allocation);
 
   // Camera
-  const beyond::Mat4 view = beyond::look_at(beyond::Vec3{0.f, 6.f, 100.f},
-                                            beyond::Vec3{0.0f, 0.0f, 0.0f},
-                                            beyond::Vec3{0.0f, 1.0f, 0.0f});
+  const beyond::Mat4 view =
+      look_at(beyond::Vec3{0.f, 6.f, 100.f}, beyond::Vec3{0.0f, 0.0f, 0.0f},
+              beyond::Vec3{0.0f, 1.0f, 0.0f});
   const auto res = window_->resolution();
   const float aspect =
       static_cast<float>(res.width) / static_cast<float>(res.height);
 
-  using namespace beyond::literals;
-  const beyond::Mat4 projection =
-      beyond::perspective(70._deg, aspect, 0.1f, 200.0f);
+  using beyond::literals::operator""_deg;
+  const beyond::Mat4 projection = perspective(70._deg, aspect, 0.1f, 200.0f);
 
   const GPUCameraData cam_data = {
       .view = view,
