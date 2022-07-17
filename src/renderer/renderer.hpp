@@ -28,6 +28,10 @@ struct Texture {
   VkImageView image_view = {};
 };
 
+class DescriptorAllocator;
+class DescriptorLayoutCache;
+class DescriptorBuilder;
+
 } // namespace vkh
 
 namespace charlie {
@@ -135,10 +139,12 @@ private:
   std::size_t frame_number_ = 0;
   FrameData frames_[frame_overlap];
 
+  std::unique_ptr<vkh::DescriptorAllocator> descriptor_allocator_ = nullptr;
+  std::unique_ptr<vkh::DescriptorLayoutCache> descriptor_layout_cache_ =
+      nullptr;
   VkDescriptorSetLayout global_descriptor_set_layout_ = {};
   VkDescriptorSetLayout object_descriptor_set_layout_ = {};
   VkDescriptorSetLayout single_texture_set_layout_ = {};
-  VkDescriptorPool descriptor_pool_ = {};
 
   VkPipelineLayout mesh_pipeline_layout_ = {};
   VkPipeline default_pipeline_ = {};

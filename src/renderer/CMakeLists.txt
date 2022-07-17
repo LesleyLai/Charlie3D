@@ -2,7 +2,7 @@ add_subdirectory(vulkan_helpers)
 
 add_library(charlie3d_renderer
         renderer.hpp
-        renderer.cpp mesh.hpp)
+        renderer.cpp mesh.hpp header_only_libs_impl.cpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(tinyobjloader REQUIRED)

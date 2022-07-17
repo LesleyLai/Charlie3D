@@ -2,18 +2,16 @@
 
 #include "vulkan_helpers/commands.hpp"
 #include "vulkan_helpers/descriptor_pool.hpp"
-#include "vulkan_helpers/error_handling.hpp"
+#include "vulkan_helpers/descriptor_utils.hpp"
 #include "vulkan_helpers/graphics_pipeline.hpp"
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
-#define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
 #include <beyond/math/transform.hpp>
 #include <cstddef>
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #include <beyond/types/optional.hpp>
@@ -353,29 +351,22 @@ Renderer::Renderer(Window& window)
   auto* material = get_material("default");
   BEYOND_ENSURE(material != nullptr);
   {
-    VkDescriptorSetAllocateInfo alloc_info = {};
-    alloc_info.pNext = nullptr;
-    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc_info.descriptorPool = descriptor_pool_;
-    alloc_info.descriptorSetCount = 1;
-    alloc_info.pSetLayouts = &single_texture_set_layout_;
-
-    vkAllocateDescriptorSets(context_, &alloc_info, &material->texture_set);
+    material->texture_set =
+        descriptor_allocator_->allocate(single_texture_set_layout_).value();
 
     // write to the descriptor set so that it points to our empire_diffuse
     // texture
-    VkDescriptorImageInfo imageBufferInfo;
-    imageBufferInfo.sampler = blocky_sampler_;
-    imageBufferInfo.imageView = texture_.image_view;
-    imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
+    VkDescriptorImageInfo image_buffer_info = {
+        .sampler = blocky_sampler_,
+        .imageView = texture_.image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
     VkWriteDescriptorSet texture1 =
         write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                               material->texture_set, &imageBufferInfo, 0);
-
+                               material->texture_set, &image_buffer_info, 0);
     vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
   }
-}
+} // namespace charlie
 
 void Renderer::init_frame_data()
 {
@@ -454,6 +445,10 @@ void Renderer::init_depth_image()
 
 void Renderer::init_descriptors()
 {
+  descriptor_allocator_ = std::make_unique<vkh::DescriptorAllocator>(context_);
+  descriptor_layout_cache_ =
+      std::make_unique<vkh::DescriptorLayoutCache>(context_.device());
+
   static constexpr VkDescriptorSetLayoutBinding cam_buffer_binding = {
       .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -464,9 +459,10 @@ void Renderer::init_descriptors()
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .bindingCount = 1,
       .pBindings = &cam_buffer_binding};
-  VK_CHECK(vkCreateDescriptorSetLayout(context_, &global_layout_create_info,
-                                       nullptr,
-                                       &global_descriptor_set_layout_));
+
+  global_descriptor_set_layout_ =
+      descriptor_layout_cache_->create_descriptor_layout(
+          &global_layout_create_info);
 
   static constexpr VkDescriptorSetLayoutBinding object_buffer_binding = {
       .binding = 0,
@@ -479,9 +475,9 @@ void Renderer::init_descriptors()
       .bindingCount = 1,
       .pBindings = &object_buffer_binding};
 
-  VK_CHECK(vkCreateDescriptorSetLayout(context_, &object_layout_create_info,
-                                       nullptr,
-                                       &object_descriptor_set_layout_));
+  object_descriptor_set_layout_ =
+      descriptor_layout_cache_->create_descriptor_layout(
+          &object_layout_create_info);
 
   static constexpr VkDescriptorSetLayoutBinding single_texture_binding = {
       .binding = 0,
@@ -495,21 +491,9 @@ void Renderer::init_descriptors()
           .bindingCount = 1,
           .pBindings = &single_texture_binding};
 
-  VK_CHECK(vkCreateDescriptorSetLayout(context_,
-                                       &single_texture_layout_create_info,
-                                       nullptr, &single_texture_set_layout_));
-
-  std::array sizes = {
-      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
-      VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}};
-
-  descriptor_pool_ =
-      vkh::create_descriptor_pool(context_, {.flags = 0,
-                                             .max_sets = 10,
-                                             .pool_sizes = sizes,
-                                             .debug_name = "Descriptor Pool"})
-          .value();
+  single_texture_set_layout_ =
+      descriptor_layout_cache_->create_descriptor_layout(
+          &single_texture_layout_create_info);
 
   for (auto i = 0u; i < frame_overlap; ++i) {
     FrameData& frame = frames_[i];
@@ -535,23 +519,10 @@ void Renderer::init_descriptors()
             })
             .value();
 
-    const VkDescriptorSetAllocateInfo global_set_alloc_info{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = descriptor_pool_,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &global_descriptor_set_layout_,
-    };
-    VK_CHECK(vkAllocateDescriptorSets(context_, &global_set_alloc_info,
-                                      &frame.global_descriptor_set));
-
-    const VkDescriptorSetAllocateInfo object_set_alloc_info{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = descriptor_pool_,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &object_descriptor_set_layout_,
-    };
-    VK_CHECK(vkAllocateDescriptorSets(context_, &object_set_alloc_info,
-                                      &frame.object_descriptor_set));
+    frame.global_descriptor_set =
+        descriptor_allocator_->allocate(global_descriptor_set_layout_).value();
+    frame.object_descriptor_set =
+        descriptor_allocator_->allocate(object_descriptor_set_layout_).value();
 
     const VkDescriptorBufferInfo camera_buffer_info = {
         .buffer = frame.camera_buffer.buffer,
@@ -1067,12 +1038,8 @@ Renderer::~Renderer()
 
   vkDestroySampler(context_, blocky_sampler_, nullptr);
 
-  vkDestroyDescriptorSetLayout(context_, single_texture_set_layout_, nullptr);
-  vkDestroyDescriptorSetLayout(context_, object_descriptor_set_layout_,
-                               nullptr);
-  vkDestroyDescriptorSetLayout(context_, global_descriptor_set_layout_,
-                               nullptr);
-  vkDestroyDescriptorPool(context_, descriptor_pool_, nullptr);
+  descriptor_allocator_ = nullptr;
+  descriptor_layout_cache_ = nullptr;
 
   for (auto& frame : frames_) {
     vkh::destroy_buffer(context_, frame.object_buffer);
@@ -1103,7 +1070,7 @@ void Renderer::immediate_submit(
                      .debug_name = "Uploading Command Buffer"})
           .value();
 
-  constexpr VkCommandBufferBeginInfo cmd_begin_info = {
+  static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };
