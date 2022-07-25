@@ -24,7 +24,7 @@
 
 namespace {
 
-struct MeshPushConstants {
+struct ObjectPushConstants {
   beyond::Mat4 transformation;
 };
 
@@ -570,7 +570,7 @@ void Renderer::init_pipelines()
   static constexpr VkPushConstantRange push_constant_range{
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
       .offset = 0,
-      .size = sizeof(MeshPushConstants)};
+      .size = sizeof(ObjectPushConstants)};
 
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
                                                object_descriptor_set_layout_,
@@ -980,34 +980,48 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
 
   // Render objects
+
+  const Material* last_material = nullptr;
+  const Mesh* last_mesh = nullptr;
+
   for (std::size_t i = 0; i < object_count; ++i) {
     RenderObject& object = objects[i];
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      object.material->pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            object.material->pipeline_layout, 0, 1,
-                            &current_frame().global_descriptor_set, 0, nullptr);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            object.material->pipeline_layout, 1, 1,
-                            &current_frame().object_descriptor_set, 0, nullptr);
-    if (object.material->texture_set != VK_NULL_HANDLE) {
-      // texture descriptor
+    if (object.material != last_material) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        object.material->pipeline);
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              object.material->pipeline_layout, 2, 1,
-                              &object.material->texture_set, 0, nullptr);
+                              object.material->pipeline_layout, 0, 1,
+                              &current_frame().global_descriptor_set, 0,
+                              nullptr);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              object.material->pipeline_layout, 1, 1,
+                              &current_frame().object_descriptor_set, 0,
+                              nullptr);
+      if (object.material->texture_set != VK_NULL_HANDLE) {
+        // texture descriptor
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                object.material->pipeline_layout, 2, 1,
+                                &object.material->texture_set, 0, nullptr);
+      }
     }
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
-                           &offset);
-    //    vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
-    //                         VK_INDEX_TYPE_UINT32);
 
-    const MeshPushConstants constants = {.transformation = object.model_matrix};
+    if (object.mesh != last_mesh) {
+      VkDeviceSize offset = 0;
+      vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
+                             &offset);
+      //    vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
+      //                         VK_INDEX_TYPE_UINT32);
+    }
 
+    const ObjectPushConstants constants = {.transformation =
+                                               object.model_matrix};
     vkCmdPushConstants(cmd, object.material->pipeline_layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants),
-                       &constants);
+                       VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(ObjectPushConstants), &constants);
     vkCmdDraw(cmd, object.mesh->vertices_count, 1, 0, 0);
+
+    last_material = object.material;
+    last_mesh = object.mesh;
 
     //    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0,
     //                     static_cast<std::uint32_t>(i));
