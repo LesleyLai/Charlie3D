@@ -6,8 +6,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include <beyond/types/optional.hpp>
-
 #include "error_handling.hpp"
 
 namespace vkh {
@@ -68,7 +66,7 @@ public:
   DescriptorLayoutCache(const DescriptorLayoutCache&) = delete;
   auto operator=(const DescriptorLayoutCache&) = delete;
 
-  auto create_descriptor_layout(const VkDescriptorSetLayoutCreateInfo* info)
+  auto create_descriptor_layout(const VkDescriptorSetLayoutCreateInfo& info)
       -> VkDescriptorSetLayout;
 
   struct DescriptorLayoutInfo {
@@ -96,6 +94,11 @@ private:
   VkDevice device_;
 };
 
+struct DescriptorBuilderResult {
+  VkDescriptorSetLayout layout;
+  VkDescriptorSet set;
+};
+
 class DescriptorBuilder {
   std::vector<VkWriteDescriptorSet> writes_;
   std::vector<VkDescriptorSetLayoutBinding> bindings_;
@@ -107,15 +110,15 @@ public:
   DescriptorBuilder(DescriptorLayoutCache& layout_cache,
                     DescriptorAllocator& allocator);
 
-  auto bind_buffer(uint32_t binding, VkDescriptorBufferInfo* buffer_info,
+  auto bind_buffer(uint32_t binding, const VkDescriptorBufferInfo& buffer_info,
                    VkDescriptorType type, VkShaderStageFlags stage_flags)
       -> DescriptorBuilder&;
 
-  auto bind_image(uint32_t binding, VkDescriptorImageInfo* image_info,
+  auto bind_image(uint32_t binding, const VkDescriptorImageInfo& image_info,
                   VkDescriptorType type, VkShaderStageFlags stage_flags)
       -> DescriptorBuilder&;
 
-  auto build(VkDescriptorSet& set) -> beyond::optional<VkDescriptorSetLayout>;
+  auto build() -> Expected<DescriptorBuilderResult>;
 };
 
 } // namespace vkh

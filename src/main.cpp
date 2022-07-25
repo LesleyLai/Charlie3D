@@ -1,12 +1,23 @@
 #include "window/window.hpp"
 #include "window/window_manager.hpp"
 
+#include "renderer/camera.hpp"
 #include "renderer/renderer.hpp"
 
 #include <beyond/math/angle.hpp>
 #include <beyond/math/transform.hpp>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+
+#include <GLFW/glfw3.h>
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action,
+                  int mods)
+{
+  auto* camera =
+      static_cast<charlie::Camera*>(glfwGetWindowUserPointer(window));
+  camera->process_key_input(key, scancode, action, mods);
+}
 
 void init_load_empire_scene(charlie::Renderer& renderer)
 {
@@ -17,13 +28,13 @@ void init_load_empire_scene(charlie::Renderer& renderer)
   BEYOND_ENSURE(lost_empire_mesh != nullptr);
   charlie::Material* default_mat = renderer.get_material("default");
   BEYOND_ENSURE(default_mat != nullptr);
-  renderer.add_object(charlie::RenderObject{
-      .mesh = lost_empire_mesh,
-      .material = default_mat,
-      .model_matrix = beyond::translate(5.f, -10.f, 0.f)});
+  renderer.add_object(
+      charlie::RenderObject{.mesh = lost_empire_mesh,
+                            .material = default_mat,
+                            .model_matrix = beyond::translate(5.f, 10.f, 0.f)});
 }
 
-void show_gui()
+void show_gui(charlie::Camera& camera)
 {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -51,6 +62,8 @@ void show_gui()
     ImGui::EndListBox();
   }
 
+  ImGui::InputFloat3("position", reinterpret_cast<float*>(&camera.position));
+
   ImGui::End();
 }
 
@@ -60,14 +73,21 @@ auto main() -> int
   Window window = window_manager.create(1024, 768, "Charlie3D");
   charlie::Renderer renderer{window};
 
+  charlie::Camera camera;
+
+  glfwSetWindowUserPointer(window.glfw_window(), &camera);
+  glfwSetKeyCallback(window.glfw_window(), key_callback);
+
   init_load_empire_scene(renderer);
 
   while (!window.should_close()) {
     window_manager.pull_events();
     window.swap_buffers();
 
-    show_gui();
+    camera.update();
 
-    renderer.render();
+    show_gui(camera);
+
+    renderer.render(camera);
   }
 }

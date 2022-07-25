@@ -16,23 +16,34 @@
 
 #include <beyond/types/optional.hpp>
 
+#include "camera.hpp"
 #include "mesh.hpp"
 
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
+namespace {
+
 struct MeshPushConstants {
   beyond::Mat4 transformation;
 };
 
-namespace {
+struct GPUObjectData {
+  beyond::Mat4 model;
+};
+
+struct GPUCameraData {
+  beyond::Mat4 view;
+  beyond::Mat4 proj;
+  beyond::Mat4 view_proj;
+};
 
 constexpr std::size_t max_object_count = 10000;
 
-VkSamplerCreateInfo
-sampler_create_info(VkFilter filters,
-                    VkSamplerAddressMode
-                        samplerAddressMode /*= VK_SAMPLER_ADDRESS_MODE_REPEAT*/)
+[[nodiscard]] auto sampler_create_info(
+    VkFilter filters,
+    VkSamplerAddressMode address_mode /*= VK_SAMPLER_ADDRESS_MODE_REPEAT*/)
+    -> VkSamplerCreateInfo
 {
   VkSamplerCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -40,28 +51,24 @@ sampler_create_info(VkFilter filters,
 
   info.magFilter = filters;
   info.minFilter = filters;
-  info.addressModeU = samplerAddressMode;
-  info.addressModeV = samplerAddressMode;
-  info.addressModeW = samplerAddressMode;
+  info.addressModeU = address_mode;
+  info.addressModeV = address_mode;
+  info.addressModeW = address_mode;
 
   return info;
 }
-VkWriteDescriptorSet write_descriptor_image(VkDescriptorType type,
-                                            VkDescriptorSet dstSet,
-                                            VkDescriptorImageInfo* imageInfo,
-                                            uint32_t binding)
+auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
+                            VkDescriptorImageInfo* image_info, uint32_t binding)
+    -> VkWriteDescriptorSet
 {
-  VkWriteDescriptorSet write = {};
-  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  write.pNext = nullptr;
-
-  write.dstBinding = binding;
-  write.dstSet = dstSet;
-  write.descriptorCount = 1;
-  write.descriptorType = type;
-  write.pImageInfo = imageInfo;
-
-  return write;
+  return VkWriteDescriptorSet{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = dstSet,
+      .dstBinding = binding,
+      .descriptorCount = 1,
+      .descriptorType = type,
+      .pImageInfo = image_info,
+  };
 }
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
@@ -158,6 +165,7 @@ VkWriteDescriptorSet write_descriptor_image(VkDescriptorType type,
   };
 
   const auto swapchain_imagecount = swapchain.images().size();
+
   std::vector<VkFramebuffer> framebuffers(swapchain_imagecount);
 
   for (std::size_t i = 0; i < swapchain_imagecount; ++i) {
@@ -462,7 +470,7 @@ void Renderer::init_descriptors()
 
   global_descriptor_set_layout_ =
       descriptor_layout_cache_->create_descriptor_layout(
-          &global_layout_create_info);
+          global_layout_create_info);
 
   static constexpr VkDescriptorSetLayoutBinding object_buffer_binding = {
       .binding = 0,
@@ -477,7 +485,7 @@ void Renderer::init_descriptors()
 
   object_descriptor_set_layout_ =
       descriptor_layout_cache_->create_descriptor_layout(
-          &object_layout_create_info);
+          object_layout_create_info);
 
   static constexpr VkDescriptorSetLayoutBinding single_texture_binding = {
       .binding = 0,
@@ -493,7 +501,7 @@ void Renderer::init_descriptors()
 
   single_texture_set_layout_ =
       descriptor_layout_cache_->create_descriptor_layout(
-          &single_texture_layout_create_info);
+          single_texture_layout_create_info);
 
   for (auto i = 0u; i < frame_overlap; ++i) {
     FrameData& frame = frames_[i];
@@ -609,7 +617,8 @@ void Renderer::init_pipelines()
            .vertex_input_state_create_info =
                {.binding_descriptions = binding_descriptions,
                 .attribute_descriptions = Vertex::attributes_descriptions()},
-           .shader_stages = triangle_shader_stages})
+           .shader_stages = triangle_shader_stages,
+           .cull_mode = vkh::CullMode::none})
           .value();
 
   vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
@@ -651,12 +660,13 @@ void Renderer::init_imgui()
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
       {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
 
-  VkDescriptorPoolCreateInfo pool_info = {};
-  pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-  pool_info.maxSets = 1000;
-  pool_info.poolSizeCount = beyond::size(pool_sizes);
-  pool_info.pPoolSizes = pool_sizes;
+  static constexpr VkDescriptorPoolCreateInfo pool_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+      .maxSets = 1000,
+      .poolSizeCount = beyond::size(pool_sizes),
+      .pPoolSizes = pool_sizes,
+  };
 
   VK_CHECK(vkCreateDescriptorPool(context_.device(), &pool_info, nullptr,
                                   &imgui_pool_));
@@ -667,15 +677,16 @@ void Renderer::init_imgui()
 
   ImGui_ImplGlfw_InitForVulkan(window_->glfw_window(), true);
 
-  ImGui_ImplVulkan_InitInfo init_info = {};
-  init_info.Instance = context_.instance();
-  init_info.PhysicalDevice = context_.physical_device();
-  init_info.Device = context_.device();
-  init_info.Queue = context_.graphics_queue();
-  init_info.DescriptorPool = imgui_pool_;
-  init_info.MinImageCount = 3;
-  init_info.ImageCount = 3;
-  init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+  ImGui_ImplVulkan_InitInfo init_info = {
+      .Instance = context_.instance(),
+      .PhysicalDevice = context_.physical_device(),
+      .Device = context_.device(),
+      .Queue = context_.graphics_queue(),
+      .DescriptorPool = imgui_pool_,
+      .MinImageCount = 3,
+      .ImageCount = 3,
+      .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+  };
   ImGui_ImplVulkan_Init(&init_info, render_pass_);
 
   // execute a gpu command to upload imgui font textures
@@ -686,7 +697,7 @@ void Renderer::init_imgui()
   ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
-void Renderer::render()
+void Renderer::render(const charlie::Camera& camera)
 {
   const auto& frame = current_frame();
   constexpr std::uint64_t one_second = 1'000'000'000;
@@ -734,7 +745,7 @@ void Renderer::render()
 
   vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
-  draw_objects(cmd, render_objects_);
+  draw_objects(cmd, render_objects_, camera);
 
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
@@ -767,7 +778,6 @@ void Renderer::render()
       .pSwapchains = &swapchain,
       .pImageIndices = &swapchain_image_index,
   };
-
   VK_CHECK(vkQueuePresentKHR(graphics_queue_, &present_info));
 
   ++frame_number_;
@@ -801,12 +811,12 @@ void Renderer::render()
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
   std::vector<tinyobj::material_t> materials;
-
   std::string err;
-
-  const bool ret =
-      tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filename);
-  if (!ret) { beyond::panic(fmt::format("Mesh loading error: {}", err)); }
+  if (const bool ret =
+          tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filename);
+      !ret) {
+    beyond::panic(fmt::format("Mesh loading error: {}", err));
+  }
 
   std::vector<Vertex> vertices;
   std::vector<std::uint32_t> indices;
@@ -832,7 +842,6 @@ void Renderer::render()
 
         vertices.push_back(Vertex{.position = {vx, vy, vz},
                                   .normal = {nx, ny, nz},
-                                  .color = {vx, vy, vz},
                                   .uv = {ux, 1 - uy}});
       }
       index_offset += fv;
@@ -929,7 +938,8 @@ auto Renderer::upload_buffer(std::size_t size, const void* data,
 }
 
 void Renderer::draw_objects(VkCommandBuffer cmd,
-                            std::span<RenderObject> objects)
+                            std::span<RenderObject> objects,
+                            const charlie::Camera& camera)
 {
   // Copy to object buffer
   void* object_data = nullptr;
@@ -941,23 +951,20 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   std::size_t object_count = objects.size();
   BEYOND_ENSURE(object_count <= max_object_count);
   for (std::size_t i = 0; i < objects.size(); ++i) {
-    const RenderObject& object = objects[i];
-    object_data_typed[i].model = object.model_matrix;
+    object_data_typed[i].model = objects[i].model_matrix;
   }
 
   vmaUnmapMemory(context_.allocator(),
                  current_frame().object_buffer.allocation);
 
   // Camera
-  const beyond::Mat4 view =
-      look_at(beyond::Vec3{0.f, 6.f, 100.f}, beyond::Vec3{0.0f, 0.0f, 0.0f},
-              beyond::Vec3{0.0f, 1.0f, 0.0f});
-  const auto res = window_->resolution();
-  const float aspect =
-      static_cast<float>(res.width) / static_cast<float>(res.height);
 
-  using beyond::literals::operator""_deg;
-  const beyond::Mat4 projection = perspective(70._deg, aspect, 0.1f, 200.0f);
+  //  const auto res = window_->resolution();
+  //  const float aspect =
+  //      static_cast<float>(res.width) / static_cast<float>(res.height);
+
+  const beyond::Mat4 view = camera.view_matrix();
+  const beyond::Mat4 projection = camera.proj_matrix();
 
   const GPUCameraData cam_data = {
       .view = view,

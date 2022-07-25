@@ -131,16 +131,13 @@ DescriptorLayoutCache::~DescriptorLayoutCache()
   }
 }
 
-VkDescriptorSetLayout DescriptorLayoutCache::create_descriptor_layout(
-    const VkDescriptorSetLayoutCreateInfo* info)
+auto DescriptorLayoutCache::create_descriptor_layout(
+    const VkDescriptorSetLayoutCreateInfo& info) -> VkDescriptorSetLayout
 {
   DescriptorLayoutInfo layoutinfo;
-  layoutinfo.bindings.reserve(info->bindingCount);
-
-  // copy from the direct info struct into our own one
-  for (uint32_t i = 0; i < info->bindingCount; i++) {
-    layoutinfo.bindings.push_back(info->pBindings[i]);
-  }
+  layoutinfo.bindings.resize(info.bindingCount);
+  std::copy(info.pBindings, info.pBindings + info.bindingCount,
+            layoutinfo.bindings.begin());
 
   // sort the bindings if they aren't in order
   if (const bool is_sorted = std::ranges::is_sorted(
@@ -157,7 +154,7 @@ VkDescriptorSetLayout DescriptorLayoutCache::create_descriptor_layout(
 
   // create a new one (not found)
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-  VK_CHECK(vkCreateDescriptorSetLayout(device_, info, nullptr, &layout));
+  VK_CHECK(vkCreateDescriptorSetLayout(device_, &info, nullptr, &layout));
 
   // add to cache
   layout_cache_[layoutinfo] = layout;
@@ -203,61 +200,55 @@ DescriptorBuilder::DescriptorBuilder(DescriptorLayoutCache& layout_cache,
 {}
 
 auto DescriptorBuilder::bind_buffer(uint32_t binding,
-                                    VkDescriptorBufferInfo* buffer_info,
+                                    const VkDescriptorBufferInfo& buffer_info,
                                     VkDescriptorType type,
                                     VkShaderStageFlags stage_flags)
     -> DescriptorBuilder&
 {
-  VkDescriptorSetLayoutBinding new_binding{
+  bindings_.push_back(VkDescriptorSetLayoutBinding{
       .binding = binding,
       .descriptorType = type,
       .descriptorCount = 1,
       .stageFlags = stage_flags,
       .pImmutableSamplers = nullptr,
-  };
-  bindings_.push_back(new_binding);
+  });
 
-  const VkWriteDescriptorSet new_write{
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstBinding = binding,
-      .descriptorCount = 1,
-      .descriptorType = type,
-      .pBufferInfo = buffer_info};
-
-  writes_.push_back(new_write);
+  writes_.push_back(
+      VkWriteDescriptorSet{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                           .dstBinding = binding,
+                           .descriptorCount = 1,
+                           .descriptorType = type,
+                           .pBufferInfo = &buffer_info});
 
   return *this;
 }
 
 auto DescriptorBuilder::bind_image(uint32_t binding,
-                                   VkDescriptorImageInfo* image_info,
+                                   const VkDescriptorImageInfo& image_info,
                                    VkDescriptorType type,
                                    VkShaderStageFlags stage_flags)
     -> DescriptorBuilder&
 {
-  VkDescriptorSetLayoutBinding new_binding{
+  bindings_.push_back(VkDescriptorSetLayoutBinding{
       .binding = binding,
       .descriptorType = type,
       .descriptorCount = 1,
       .stageFlags = stage_flags,
       .pImmutableSamplers = nullptr,
-  };
-  bindings_.push_back(new_binding);
+  });
 
-  const VkWriteDescriptorSet new_write{
+  writes_.push_back(VkWriteDescriptorSet{
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
       .dstBinding = binding,
       .descriptorCount = 1,
       .descriptorType = type,
-      .pImageInfo = image_info,
-  };
-  writes_.push_back(new_write);
+      .pImageInfo = &image_info,
+  });
 
   return *this;
 }
 
-auto DescriptorBuilder::build(VkDescriptorSet& set)
-    -> beyond::optional<VkDescriptorSetLayout>
+auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
 {
   // build layout first
   const VkDescriptorSetLayoutCreateInfo layout_info{
@@ -266,21 +257,20 @@ auto DescriptorBuilder::build(VkDescriptorSet& set)
       .pBindings = bindings_.data(),
   };
 
-  VkDescriptorSetLayout layout = cache_->create_descriptor_layout(&layout_info);
+  VkDescriptorSetLayout layout = cache_->create_descriptor_layout(layout_info);
 
-  // allocate descriptor
-  const auto maybe_set = alloc_->allocate(layout);
-  if (!maybe_set) { return beyond::nullopt; }
-  set = maybe_set.value();
+  return alloc_
+      ->allocate(layout) //
+      .map([&](VkDescriptorSet set) {
+        // write descriptor
+        for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
 
-  // write descriptor
-  for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
+        vkUpdateDescriptorSets(alloc_->context()->device(),
+                               static_cast<std::uint32_t>(writes_.size()),
+                               writes_.data(), 0, nullptr);
 
-  vkUpdateDescriptorSets(alloc_->context()->device(),
-                         static_cast<std::uint32_t>(writes_.size()),
-                         writes_.data(), 0, nullptr);
-
-  return layout;
+        return DescriptorBuilderResult{layout, set};
+      });
 }
 
 } // namespace vkh

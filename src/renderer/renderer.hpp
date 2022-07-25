@@ -63,20 +63,12 @@ struct FrameData {
   VkDescriptorSet object_descriptor_set{};
 };
 
-struct GPUObjectData {
-  beyond::Mat4 model;
-};
-
-struct GPUCameraData {
-  beyond::Mat4 view;
-  beyond::Mat4 proj;
-  beyond::Mat4 view_proj;
-};
-
 struct UploadContext {
   VkFence fence = {};
   VkCommandPool command_pool = {};
 };
+
+class Camera;
 
 class Renderer {
 public:
@@ -87,7 +79,7 @@ public:
   Renderer(Renderer&&) noexcept = delete;
   auto operator=(Renderer&&) & noexcept -> Renderer& = delete;
 
-  void render();
+  void render(const charlie::Camera& camera);
 
   auto create_material(VkPipeline pipeline, VkPipelineLayout layout,
                        std::string name) -> Material&;
@@ -100,7 +92,8 @@ public:
   void add_object(RenderObject object);
 
   // our draw function
-  void draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects);
+  void draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects,
+                    const charlie::Camera& camera);
 
   [[nodiscard]] auto frame_number() const -> std::size_t
   {

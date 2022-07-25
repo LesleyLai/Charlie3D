@@ -21,7 +21,7 @@ auto Window::should_close() const noexcept -> bool
 
 [[nodiscard]] auto Window::resolution() const noexcept -> Resolution
 {
-  int width, height;
+  int width = 0, height = 0;
   glfwGetWindowSize(window_, &width, &height);
   return Resolution{static_cast<std::uint32_t>(width),
                     static_cast<std::uint32_t>(height)};

@@ -19,7 +19,6 @@ namespace charlie {
 struct Vertex {
   beyond::Vec3 position;
   beyond::Vec3 normal;
-  beyond::Vec3 color;
   beyond::Vec2 uv;
 
   [[nodiscard]] static constexpr auto binding_description()
@@ -43,10 +42,6 @@ struct Vertex {
           .format = VK_FORMAT_R32G32B32_SFLOAT,
           .offset = offsetof(Vertex, normal)},
          {.location = 2,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, color)},
-         {.location = 3,
           .binding = 0,
           .format = VK_FORMAT_R32G32_SFLOAT,
           .offset = offsetof(Vertex, uv)}});
