@@ -18,11 +18,6 @@ layout(std140, set = 1, binding = 0) readonly buffer ObjectBuffer {
     ObjectData objects[];
 } objectBuffer;
 
-
-layout(push_constant) uniform constants {
-    mat4 model;
-} PushConstants;
-
 layout (location = 0) out vec2 outTexCoord;
 
 void main()

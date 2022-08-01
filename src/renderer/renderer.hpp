@@ -61,6 +61,8 @@ struct FrameData {
 
   vkh::Buffer object_buffer{};
   VkDescriptorSet object_descriptor_set{};
+
+  vkh::Buffer indirect_buffer{};
 };
 
 struct UploadContext {

@@ -2,6 +2,7 @@
 #define CHARLIE3D_MESH_HPP
 
 #include <beyond/math/vector.hpp>
+#include <beyond/utils/conversion.hpp>
 
 #include <array>
 #include <span>
@@ -36,15 +37,15 @@ struct Vertex {
         {{.location = 0,
           .binding = 0,
           .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, position)},
+          .offset = beyond::to_u32(offsetof(Vertex, position))},
          {.location = 1,
           .binding = 0,
           .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, normal)},
+          .offset = beyond::to_u32(offsetof(Vertex, normal))},
          {.location = 2,
           .binding = 0,
           .format = VK_FORMAT_R32G32_SFLOAT,
-          .offset = offsetof(Vertex, uv)}});
+          .offset = beyond::to_u32(offsetof(Vertex, uv))}});
   }
 };
 

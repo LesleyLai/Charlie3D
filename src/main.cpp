@@ -28,10 +28,10 @@ void init_load_empire_scene(charlie::Renderer& renderer)
   BEYOND_ENSURE(lost_empire_mesh != nullptr);
   charlie::Material* default_mat = renderer.get_material("default");
   BEYOND_ENSURE(default_mat != nullptr);
-  renderer.add_object(
-      charlie::RenderObject{.mesh = lost_empire_mesh,
-                            .material = default_mat,
-                            .model_matrix = beyond::translate(5.f, 10.f, 0.f)});
+  renderer.add_object(charlie::RenderObject{
+      .mesh = lost_empire_mesh,
+      .material = default_mat,
+      .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
 }
 
 void show_gui(charlie::Camera& camera)
@@ -46,7 +46,7 @@ void show_gui(charlie::Camera& camera)
   ImGui::Begin("Control Panel", &show_gui);
 
   ImGui::Text("Scenes:");
-  const char* items[] = {"Lost Empire", "PBR Demo: Sphere"};
+  const char* items[] = {"Lost Empire", "Sponza"};
   static int item_current_idx = 0;
   if (ImGui::BeginListBox(
           "##Scenes listbox",

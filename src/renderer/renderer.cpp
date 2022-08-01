@@ -9,12 +9,13 @@
 
 #include "tiny_obj_loader.h"
 
-#include <beyond/math/transform.hpp>
 #include <cstddef>
 
 #include <stb_image.h>
 
+#include <beyond/math/transform.hpp>
 #include <beyond/types/optional.hpp>
+#include <beyond/utils/defer.hpp>
 
 #include "camera.hpp"
 #include "mesh.hpp"
@@ -23,10 +24,6 @@
 #include <imgui_impl_vulkan.h>
 
 namespace {
-
-struct ObjectPushConstants {
-  beyond::Mat4 transformation;
-};
 
 struct GPUObjectData {
   beyond::Mat4 model;
@@ -208,6 +205,8 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                                 .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
                                 .debug_name = "Image Staging Buffer"})
           .value();
+  BEYOND_DEFER(vmaDestroyBuffer(context.allocator(), staging_buffer.buffer,
+                                staging_buffer.allocation));
 
   // copy data to buffer
   void* data = context.map(staging_buffer).value();
@@ -260,7 +259,6 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
         .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .image = image.image,
         .subresourceRange = range,
-
     };
 
     // barrier the image into the transfer-receive layout
@@ -300,8 +298,6 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                          0, nullptr, 1, &image_barrier_to_readable);
   });
 
-  vmaDestroyBuffer(context.allocator(), staging_buffer.buffer,
-                   staging_buffer.allocation);
   fmt::print("Texture loaded successfully {}\n", filename);
   return image;
 }
@@ -527,6 +523,19 @@ void Renderer::init_descriptors()
             })
             .value();
 
+    frame.indirect_buffer =
+        vkh::create_buffer(
+            context_,
+            vkh::BufferCreateInfo{
+                .size = sizeof(VkDrawIndirectCommand) * max_object_count,
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                .debug_name = fmt::format("Indirect Buffer {}", i).c_str(),
+            })
+            .value();
+
     frame.global_descriptor_set =
         descriptor_allocator_->allocate(global_descriptor_set_layout_).value();
     frame.object_descriptor_set =
@@ -567,11 +576,6 @@ void Renderer::init_descriptors()
 
 void Renderer::init_pipelines()
 {
-  static constexpr VkPushConstantRange push_constant_range{
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      .offset = 0,
-      .size = sizeof(ObjectPushConstants)};
-
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
                                                object_descriptor_set_layout_,
                                                single_texture_set_layout_};
@@ -580,8 +584,6 @@ void Renderer::init_pipelines()
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = beyond::size(set_layouts),
       .pSetLayouts = set_layouts,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &push_constant_range,
   };
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info,
                                   nullptr, &mesh_pipeline_layout_));
@@ -590,10 +592,15 @@ void Renderer::init_pipelines()
       vkh::load_shader_module_from_file(context_, "shaders/triangle.vert.spv",
                                         {.debug_name = "Mesh Vertex Shader"})
           .value();
+
   auto triangle_frag_shader =
       vkh::load_shader_module_from_file(context_, "shaders/triangle.frag.spv",
                                         {.debug_name = "Mesh Fragment Shader"})
           .value();
+  BEYOND_DEFER({
+    vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
+    vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
+  });
 
   const VkPipelineShaderStageCreateInfo triangle_shader_stages[] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -620,9 +627,6 @@ void Renderer::init_pipelines()
            .shader_stages = triangle_shader_stages,
            .cull_mode = vkh::CullMode::none})
           .value();
-
-  vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
-  vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
 
   create_material(default_pipeline_, mesh_pipeline_layout_, "default");
 }
@@ -692,8 +696,6 @@ void Renderer::init_imgui()
   // execute a gpu command to upload imgui font textures
   immediate_submit(
       [&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
-
-  // clear font textures from cpu data
   ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
@@ -923,6 +925,8 @@ auto Renderer::upload_buffer(std::size_t size, const void* data,
                  .debug_name = "Mesh Vertex Staging Buffer"},
                 data)
                 .value();
+        BEYOND_DEFER(vkh::destroy_buffer(context_, vertex_staging_buffer));
+
         immediate_submit([=](VkCommandBuffer cmd) {
           const VkBufferCopy copy = {
               .srcOffset = 0,
@@ -932,20 +936,55 @@ auto Renderer::upload_buffer(std::size_t size, const void* data,
           vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, gpu_buffer.buffer,
                           1, &copy);
         });
-        vkh::destroy_buffer(context_, vertex_staging_buffer);
         return vkh::Expected<vkh::Buffer>(gpu_buffer);
       });
 }
+
+namespace {
+
+struct IndirectBatch {
+  Mesh* mesh = nullptr;
+  Material* material = nullptr;
+  std::uint32_t first = 0;
+  std::uint32_t count = 0;
+};
+
+[[nodiscard]] auto compact_draws(std::span<RenderObject> objects)
+    -> std::vector<IndirectBatch>
+{
+  std::vector<IndirectBatch> draws;
+  if (objects.empty()) return draws;
+
+  const Mesh* last_mesh = nullptr;
+  const Material* last_material = nullptr;
+
+  for (std::uint32_t i = 0; i < objects.size(); ++i) {
+    const auto& object = objects[i];
+    const bool same_mesh = object.mesh == last_mesh;
+    const bool same_material = object.material == last_material;
+    if (same_mesh && same_material) {
+      BEYOND_ASSERT(!draws.empty());
+      ++draws.back().count;
+    } else {
+      draws.push_back(IndirectBatch{.mesh = object.mesh,
+                                    .material = object.material,
+                                    .first = i,
+                                    .count = 1});
+      last_material = object.material;
+      last_mesh = object.mesh;
+    }
+  }
+  return draws;
+}
+
+} // anonymous namespace
 
 void Renderer::draw_objects(VkCommandBuffer cmd,
                             std::span<RenderObject> objects,
                             const charlie::Camera& camera)
 {
   // Copy to object buffer
-  void* object_data = nullptr;
-  vmaMapMemory(context_.allocator(), current_frame().object_buffer.allocation,
-               &object_data);
-
+  void* object_data = context_.map(current_frame().object_buffer).value();
   auto* object_data_typed = static_cast<GPUObjectData*>(object_data);
 
   std::size_t object_count = objects.size();
@@ -954,8 +993,7 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
     object_data_typed[i].model = objects[i].model_matrix;
   }
 
-  vmaUnmapMemory(context_.allocator(),
-                 current_frame().object_buffer.allocation);
+  context_.unmap(current_frame().object_buffer);
 
   // Camera
 
@@ -984,47 +1022,54 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   const Material* last_material = nullptr;
   const Mesh* last_mesh = nullptr;
 
-  for (std::size_t i = 0; i < object_count; ++i) {
-    RenderObject& object = objects[i];
-    if (object.material != last_material) {
+  const auto draws = compact_draws(objects);
+
+  {
+    auto* draw_commands =
+        context_.map<VkDrawIndirectCommand>(current_frame().indirect_buffer)
+            .value();
+    BEYOND_ENSURE(draw_commands != nullptr);
+
+    for (std::uint32_t i = 0; i < objects.size(); ++i) {
+      draw_commands[i].vertexCount = objects[i].mesh->vertices_count;
+      draw_commands[i].instanceCount = 1;
+      draw_commands[i].firstVertex = 0;
+      draw_commands[i].firstInstance = i;
+    }
+    context_.unmap(current_frame().indirect_buffer);
+  }
+
+  for (const IndirectBatch& draw : draws) {
+    if (draw.material != last_material) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        object.material->pipeline);
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              object.material->pipeline_layout, 0, 1,
-                              &current_frame().global_descriptor_set, 0,
-                              nullptr);
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              object.material->pipeline_layout, 1, 1,
-                              &current_frame().object_descriptor_set, 0,
-                              nullptr);
-      if (object.material->texture_set != VK_NULL_HANDLE) {
+                        draw.material->pipeline);
+      vkCmdBindDescriptorSets(
+          cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline_layout,
+          0, 1, &current_frame().global_descriptor_set, 0, nullptr);
+      vkCmdBindDescriptorSets(
+          cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline_layout,
+          1, 1, &current_frame().object_descriptor_set, 0, nullptr);
+      if (draw.material->texture_set != VK_NULL_HANDLE) {
         // texture descriptor
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                object.material->pipeline_layout, 2, 1,
-                                &object.material->texture_set, 0, nullptr);
+                                draw.material->pipeline_layout, 2, 1,
+                                &draw.material->texture_set, 0, nullptr);
       }
     }
 
-    if (object.mesh != last_mesh) {
+    if (draw.mesh != last_mesh) {
       VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertex_buffer.buffer,
+      vkCmdBindVertexBuffers(cmd, 0, 1, &draw.mesh->vertex_buffer.buffer,
                              &offset);
-      //    vkCmdBindIndexBuffer(cmd, object.mesh->index_buffer.buffer, 0,
-      //                         VK_INDEX_TYPE_UINT32);
     }
 
-    const ObjectPushConstants constants = {.transformation =
-                                               object.model_matrix};
-    vkCmdPushConstants(cmd, object.material->pipeline_layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(ObjectPushConstants), &constants);
-    vkCmdDraw(cmd, object.mesh->vertices_count, 1, 0, 0);
+    VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndirectCommand);
+    uint32_t draw_stride = sizeof(VkDrawIndirectCommand);
+    vkCmdDrawIndirect(cmd, current_frame().indirect_buffer, indirect_offset,
+                      draw.count, draw_stride);
 
-    last_material = object.material;
-    last_mesh = object.mesh;
-
-    //    vkCmdDrawIndexed(cmd, object.mesh->index_count, 1, 0, 0,
-    //                     static_cast<std::uint32_t>(i));
+    last_material = draw.material;
+    last_mesh = draw.mesh;
   }
 }
 
@@ -1063,6 +1108,7 @@ Renderer::~Renderer()
   descriptor_layout_cache_ = nullptr;
 
   for (auto& frame : frames_) {
+    vkh::destroy_buffer(context_, frame.indirect_buffer);
     vkh::destroy_buffer(context_, frame.object_buffer);
     vkh::destroy_buffer(context_, frame.camera_buffer);
 
@@ -1077,6 +1123,7 @@ Renderer::~Renderer()
   }
   vkDestroyRenderPass(context_, render_pass_, nullptr);
 }
+
 void Renderer::add_object(RenderObject object)
 {
   render_objects_.push_back(object);
