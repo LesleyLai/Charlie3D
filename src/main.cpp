@@ -62,6 +62,7 @@ void show_gui(charlie::Camera& camera)
     ImGui::EndListBox();
   }
 
+  ImGui::Text("Camera:");
   ImGui::InputFloat3("position", reinterpret_cast<float*>(&camera.position));
 
   ImGui::End();
