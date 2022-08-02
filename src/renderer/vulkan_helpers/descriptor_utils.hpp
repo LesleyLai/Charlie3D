@@ -60,7 +60,7 @@ private:
 
 class DescriptorLayoutCache {
 public:
-  explicit DescriptorLayoutCache(VkDevice newDevice);
+  explicit DescriptorLayoutCache(VkDevice new_device);
   ~DescriptorLayoutCache();
 
   DescriptorLayoutCache(const DescriptorLayoutCache&) = delete;

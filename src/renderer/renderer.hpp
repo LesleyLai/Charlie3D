@@ -43,8 +43,8 @@ struct Material {
 };
 
 struct RenderObject {
-  Mesh* mesh = nullptr;
-  Material* material = nullptr;
+  const Mesh* mesh = nullptr;
+  const Material* material = nullptr;
   beyond::Mat4 model_matrix;
 };
 
@@ -114,6 +114,8 @@ public:
     return context_;
   }
 
+  auto upload_mesh(const char* mesh_name, const char* filename) -> Mesh&;
+
 private:
   Window* window_ = nullptr;
   vkh::Context context_;
@@ -159,9 +161,6 @@ private:
   void init_pipelines();
   void init_upload_context();
   void init_imgui();
-
-  [[nodiscard]] auto load_mesh(vkh::Context& context, const char* filename)
-      -> Mesh;
 
   [[nodiscard]] auto upload_mesh_data(vkh::Context& context,
                                       std::span<const Vertex> vertices,

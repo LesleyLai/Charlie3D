@@ -325,9 +325,9 @@ Renderer::Renderer(Window& window)
 
   init_imgui();
 
-  texture_.image =
-      load_image_from_file(*this, "assets/lost_empire/lost_empire-RGBA.png")
-          .value();
+  texture_.image = load_image_from_file(
+                       *this, "../../assets/lost_empire/lost_empire-RGBA.png")
+                       .value();
   const VkImageViewCreateInfo image_view_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .image = texture_.image.image,
@@ -342,9 +342,6 @@ Renderer::Renderer(Window& window)
       }};
   VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr,
                              &texture_.image_view));
-
-  meshes_["lost_empire"] =
-      load_mesh(context_, "assets/lost_empire/lost_empire.obj");
 
   // Create sampler
   const VkSamplerCreateInfo sampler_info =
@@ -807,8 +804,7 @@ void Renderer::render(const charlie::Camera& camera)
   return it == meshes_.end() ? nullptr : &it->second;
 }
 
-[[nodiscard]] auto Renderer::load_mesh(vkh::Context& context,
-                                       const char* filename) -> Mesh
+auto Renderer::upload_mesh(const char* mesh_name, const char* filename) -> Mesh&
 {
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
@@ -850,7 +846,12 @@ void Renderer::render(const charlie::Camera& camera)
     }
   }
 
-  return upload_mesh_data(context, vertices, indices);
+  Mesh mesh = upload_mesh_data(context_, vertices, indices);
+  const auto [it, succeed] = meshes_.insert({mesh_name, mesh});
+  if (!succeed) {
+    beyond::panic(fmt::format("A mesh named {} is already exist!"));
+  }
+  return it->second;
 }
 
 [[nodiscard]] auto
@@ -943,8 +944,8 @@ auto Renderer::upload_buffer(std::size_t size, const void* data,
 namespace {
 
 struct IndirectBatch {
-  Mesh* mesh = nullptr;
-  Material* material = nullptr;
+  const Mesh* mesh = nullptr;
+  const Material* material = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
 };

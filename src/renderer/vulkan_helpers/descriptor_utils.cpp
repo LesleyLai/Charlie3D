@@ -120,7 +120,8 @@ auto DescriptorAllocator::grab_pool() -> VkDescriptorPool
   }
 }
 
-DescriptorLayoutCache::DescriptorLayoutCache(VkDevice device) : device_{device}
+DescriptorLayoutCache::DescriptorLayoutCache(VkDevice new_device)
+    : device_{new_device}
 {}
 
 DescriptorLayoutCache::~DescriptorLayoutCache()
