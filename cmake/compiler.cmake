@@ -11,7 +11,9 @@ add_library(charlie3d::compiler_options ALIAS charlie3d_compiler_options)
 
 option(CHARLIE3D_WARNING_AS_ERROR "Treats compiler warnings as errors" ON)
 if (MSVC)
-    target_compile_options(charlie3d_compiler_options INTERFACE /W4 "/permissive-")
+    target_compile_options(charlie3d_compiler_options INTERFACE /W4 "/permissive-"
+            /wd4819 # Disable "The file contains a character that cannot be represented in the current code page"
+            )
     if (CHARLIE3D_WARNING_AS_ERROR)
         target_compile_options(charlie3d_compiler_options INTERFACE /WX)
     endif ()

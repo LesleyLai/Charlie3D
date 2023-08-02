@@ -1,6 +1,7 @@
 CMakeLists.txt.user
 .idea
 cmake-build-*
+CMakeUserPresets.json
 
 # Copied by conan
 third-party/imgui/bindings

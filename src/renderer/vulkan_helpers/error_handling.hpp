@@ -6,10 +6,11 @@
 
 #include <fmt/format.h>
 
+// TODO: fix this
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
     VkResult err = x;                                                          \
-    if (err) { fmt::format("Vulkan error: {}\n", err); }                       \
+    if (err) { fmt::print(stderr, "Vulkan error: {}\n", static_cast<int>(err)); }     \
   } while (0)
 
 #define VKH_TRY(expr)                                                          \

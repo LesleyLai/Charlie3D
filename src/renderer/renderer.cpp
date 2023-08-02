@@ -809,9 +809,10 @@ auto Renderer::upload_mesh(const char* mesh_name, const char* filename) -> Mesh&
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
   std::vector<tinyobj::material_t> materials;
+  std::string warn;
   std::string err;
   if (const bool ret =
-          tinyobj::LoadObj(&attrib, &shapes, &materials, &err, filename);
+          tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename);
       !ret) {
     beyond::panic(fmt::format("Mesh loading error: {}", err));
   }
@@ -849,7 +850,7 @@ auto Renderer::upload_mesh(const char* mesh_name, const char* filename) -> Mesh&
   Mesh mesh = upload_mesh_data(context_, vertices, indices);
   const auto [it, succeed] = meshes_.insert({mesh_name, mesh});
   if (!succeed) {
-    beyond::panic(fmt::format("A mesh named {} is already exist!"));
+    beyond::panic(fmt::format("A mesh named {} is already exist!", mesh_name));
   }
   return it->second;
 }

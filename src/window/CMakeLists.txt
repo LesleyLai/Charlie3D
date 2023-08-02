@@ -11,6 +11,6 @@ target_link_libraries(charlie3d_window
         PUBLIC
         charlie3d::compiler_options
         fmt::fmt
-        glfw::glfw
+        glfw
         beyond::core
         )

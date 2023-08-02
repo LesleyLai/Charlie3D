@@ -12,7 +12,7 @@ add_library(imgui_bindings
 
 target_link_libraries(imgui_bindings
         PUBLIC
-        glfw::glfw
+        glfw
         imgui::imgui
         Vulkan::Vulkan)
 

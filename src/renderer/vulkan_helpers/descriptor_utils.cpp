@@ -4,6 +4,7 @@
 #include "descriptor_pool.hpp"
 
 #include <beyond/utils/assert.hpp>
+#include <algorithm>
 
 namespace {
 
