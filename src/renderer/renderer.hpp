@@ -114,7 +114,8 @@ public:
     return context_;
   }
 
-  auto upload_mesh(const char* mesh_name, const char* filename) -> Mesh&;
+  [[nodiscard]] auto upload_mesh_data(const char* mesh_name,
+                                      const CPUMesh& cpu_mesh) -> Mesh&;
 
 private:
   Window* window_ = nullptr;
@@ -161,11 +162,6 @@ private:
   void init_pipelines();
   void init_upload_context();
   void init_imgui();
-
-  [[nodiscard]] auto upload_mesh_data(vkh::Context& context,
-                                      std::span<const Vertex> vertices,
-                                      std::span<const std::uint32_t> indices)
-      -> Mesh;
 
   auto upload_buffer(std::size_t gpu_buffer, const void* data,
                      VkBufferUsageFlags usage) -> vkh::Expected<vkh::Buffer>;

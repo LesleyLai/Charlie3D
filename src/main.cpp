@@ -13,13 +13,9 @@
 
 #include <GLFW/glfw3.h>
 
+#include <any>
 #include <filesystem>
 #include <utility>
-
-[[nodiscard]] auto locate_asset_folder()
-{
-  // std::filesystem::
-}
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action,
                   int mods)
@@ -35,9 +31,11 @@ void init_lost_empire_scene(charlie::Renderer& renderer,
   using namespace beyond::literals;
   using beyond::Mat4;
 
-  const charlie::Mesh& lost_empire_mesh = renderer.upload_mesh(
-      "lost_empire",
+  const auto cpu_mesh = charlie::CPUMesh::load(
       (assets_path / "lost_empire/lost_empire.obj").string().c_str());
+
+  const charlie::Mesh& lost_empire_mesh =
+      renderer.upload_mesh_data("lost_empire", cpu_mesh);
 
   const charlie::Material* default_mat = renderer.get_material("default");
   BEYOND_ENSURE(default_mat != nullptr);
@@ -82,7 +80,7 @@ void show_gui(charlie::Camera& camera)
 }
 
 template <typename Fn>
-requires std::is_invocable_r_v<bool, Fn, std::filesystem::path>
+  requires std::is_invocable_r_v<bool, Fn, std::filesystem::path>
 auto upward_directory_find(const std::filesystem::path& from, Fn condition)
     -> beyond::optional<std::filesystem::path>
 {

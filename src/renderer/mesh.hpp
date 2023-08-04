@@ -49,6 +49,13 @@ struct Vertex {
   }
 };
 
+struct CPUMesh {
+  std::vector<Vertex> vertices;
+  std::vector<std::uint32_t> indices;
+
+  [[nodiscard]] static auto load(const char* filename) -> CPUMesh;
+};
+
 struct Mesh {
   vkh::Buffer vertex_buffer{};
   vkh::Buffer index_buffer{};

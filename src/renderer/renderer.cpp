@@ -7,8 +7,6 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
-#include "tiny_obj_loader.h"
-
 #include <cstddef>
 
 #include <stb_image.h>
@@ -804,67 +802,16 @@ void Renderer::render(const charlie::Camera& camera)
   return it == meshes_.end() ? nullptr : &it->second;
 }
 
-auto Renderer::upload_mesh(const char* mesh_name, const char* filename) -> Mesh&
-{
-  tinyobj::attrib_t attrib;
-  std::vector<tinyobj::shape_t> shapes;
-  std::vector<tinyobj::material_t> materials;
-  std::string warn;
-  std::string err;
-  if (const bool ret =
-          tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename);
-      !ret) {
-    beyond::panic(fmt::format("Mesh loading error: {}", err));
-  }
-
-  std::vector<Vertex> vertices;
-  std::vector<std::uint32_t> indices;
-
-  for (const auto& shape : shapes) {
-    std::size_t index_offset = 0;
-    for (std::size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
-      const auto fv = std::size_t(shape.mesh.num_face_vertices[f]);
-      for (std::size_t v = 0; v < fv; v++) {
-        const tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
-
-        const auto vx = attrib.vertices[3 * idx.vertex_index + 0];
-        const auto vy = attrib.vertices[3 * idx.vertex_index + 1];
-        const auto vz = attrib.vertices[3 * idx.vertex_index + 2];
-
-        const auto nx = attrib.normals[3 * idx.normal_index + 0];
-        const auto ny = attrib.normals[3 * idx.normal_index + 1];
-        const auto nz = attrib.normals[3 * idx.normal_index + 2];
-
-        // vertex uv
-        const auto ux = attrib.texcoords[2 * idx.texcoord_index + 0];
-        const auto uy = attrib.texcoords[2 * idx.texcoord_index + 1];
-
-        vertices.push_back(Vertex{.position = {vx, vy, vz},
-                                  .normal = {nx, ny, nz},
-                                  .uv = {ux, 1 - uy}});
-      }
-      index_offset += fv;
-    }
-  }
-
-  Mesh mesh = upload_mesh_data(context_, vertices, indices);
-  const auto [it, succeed] = meshes_.insert({mesh_name, mesh});
-  if (!succeed) {
-    beyond::panic(fmt::format("A mesh named {} is already exist!", mesh_name));
-  }
-  return it->second;
-}
-
-[[nodiscard]] auto
-Renderer::upload_mesh_data(vkh::Context& /*context*/,
-                           std::span<const Vertex> vertices,
-                           std::span<const std::uint32_t> indices) -> Mesh
+[[nodiscard]] auto Renderer::upload_mesh_data(const char* mesh_name,
+                                              const CPUMesh& cpu_mesh) -> Mesh&
 {
 
   // const auto index_buffer_size = indices.size() * sizeof(uint32_t);
+  std::span<const Vertex> vertices = cpu_mesh.vertices;
+  std::span<const std::uint32_t> indices = cpu_mesh.indices;
 
   vkh::Buffer vertex_buffer =
-      upload_buffer(vertices.size_bytes(), vertices.data(),
+      upload_buffer(vertices.size_bytes(), cpu_mesh.vertices.data(),
                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
           .value();
 
@@ -902,10 +849,16 @@ Renderer::upload_mesh_data(vkh::Context& /*context*/,
 
   // vkh::destroy_buffer(context, index_staging_buffer);
 
-  return Mesh{.vertex_buffer = vertex_buffer,
-              //.index_buffer = index_buffer,
-              .vertices_count = static_cast<std::uint32_t>(vertices.size()),
-              .index_count = static_cast<std::uint32_t>(indices.size())};
+  auto gpu_mesh =
+      Mesh{.vertex_buffer = vertex_buffer,
+           //.index_buffer = index_buffer,
+           .vertices_count = static_cast<std::uint32_t>(vertices.size()),
+           .index_count = static_cast<std::uint32_t>(indices.size())};
+  const auto [it, succeed] = meshes_.insert({mesh_name, gpu_mesh});
+  if (!succeed) {
+    beyond::panic(fmt::format("A mesh named {} is already exist!", mesh_name));
+  }
+  return it->second;
 }
 
 auto Renderer::upload_buffer(std::size_t size, const void* data,
@@ -998,10 +951,6 @@ void Renderer::draw_objects(VkCommandBuffer cmd,
   context_.unmap(current_frame().object_buffer);
 
   // Camera
-
-  //  const auto res = window_->resolution();
-  //  const float aspect =
-  //      static_cast<float>(res.width) / static_cast<float>(res.height);
 
   const beyond::Mat4 view = camera.view_matrix();
   const beyond::Mat4 projection = camera.proj_matrix();
