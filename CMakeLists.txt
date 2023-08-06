@@ -14,8 +14,8 @@ add_subdirectory(third-party)
 
 add_subdirectory(src)
 
-#option(CHARLIE3D_BUILD_TESTS "Build tests" ON)
-#if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND CHARLIE3D_BUILD_TESTS)
-#    enable_testing()
-#    add_subdirectory(test)
-#endif ()
+option(CHARLIE3D_BUILD_TESTS "Build tests" ON)
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND CHARLIE3D_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif ()

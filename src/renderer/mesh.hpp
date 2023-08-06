@@ -53,7 +53,7 @@ struct CPUMesh {
   std::vector<Vertex> vertices;
   std::vector<std::uint32_t> indices;
 
-  [[nodiscard]] static auto load(const char* filename) -> CPUMesh;
+  [[nodiscard]] static auto load(std::string_view filename) -> CPUMesh;
 };
 
 struct Mesh {

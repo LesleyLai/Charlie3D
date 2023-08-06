@@ -1,5 +1,6 @@
 find_package(fmt REQUIRED)
 
+add_subdirectory(utils)
 add_subdirectory(window)
 add_subdirectory(renderer)
 

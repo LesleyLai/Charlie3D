@@ -1,18 +1,30 @@
-#include "mesh.hpp"
+#include "../utils/configuration.hpp"
 
+#include <filesystem>
+
+#include "mesh.hpp"
 #include "tiny_obj_loader.h"
 
 namespace charlie {
 
-auto CPUMesh::load(const char* filename) -> CPUMesh
+auto CPUMesh::load(std::string_view filename) -> CPUMesh
 {
+  const auto& assets_path =
+      Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+  const auto file_path = assets_path / filename;
+
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
   std::vector<tinyobj::material_t> materials;
   std::string warn;
   std::string err;
-  if (const bool ret =
-          tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename);
+
+  auto file_directory = file_path;
+  file_directory.remove_filename();
+
+  if (const bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn,
+                                        &err, file_path.string().c_str(),
+                                        file_directory.string().c_str());
       !ret) {
     beyond::panic(fmt::format("Mesh loading error: {}", err));
   }
@@ -46,9 +58,6 @@ auto CPUMesh::load(const char* filename) -> CPUMesh
       index_offset += fv;
     }
   }
-
-  fmt::print("Materials count: {}\n", materials.size());
-  for (auto material : materials) { fmt::print("{}\n", material.name); }
 
   return CPUMesh{.vertices = std::move(vertices),
                  .indices = std::move(indices)};

@@ -12,6 +12,7 @@ target_link_libraries(charlie3d_renderer
         PUBLIC
         fmt::fmt
         charlie3d::vulkan_helper
+        charlie3d::util
         beyond::core
         third-party::imgui_bindings
         PRIVATE
