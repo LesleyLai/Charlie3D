@@ -80,99 +80,6 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   return swapchain;
 }
 
-[[nodiscard]] auto init_default_render_pass(vkh::Context& context,
-                                            const vkh::Swapchain& swapchain,
-                                            VkFormat depth_image_format)
-    -> VkRenderPass
-{
-  // the renderpass will use this color attachment.
-  const VkAttachmentDescription color_attachment = {
-      .format = swapchain.image_format(),
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
-
-  static constexpr VkAttachmentReference color_attachment_ref = {
-      .attachment = 0,
-      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-  };
-
-  const VkAttachmentDescription depth_attachment = {
-      .flags = 0,
-      .format = depth_image_format,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-  };
-
-  static constexpr VkAttachmentReference depth_attachment_ref = {
-      .attachment = 1,
-      .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-  };
-
-  static constexpr VkSubpassDescription subpass = {
-      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-      .colorAttachmentCount = 1,
-      .pColorAttachments = &color_attachment_ref,
-      .pDepthStencilAttachment = &depth_attachment_ref,
-  };
-
-  const VkAttachmentDescription attachments[] = {color_attachment,
-                                                 depth_attachment};
-
-  const VkRenderPassCreateInfo render_pass_create_info = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .attachmentCount = beyond::size(attachments),
-      .pAttachments = attachments,
-      .subpassCount = 1,
-      .pSubpasses = &subpass,
-  };
-
-  VkRenderPass render_pass{};
-  VK_CHECK(vkCreateRenderPass(context.device(), &render_pass_create_info,
-                              nullptr, &render_pass));
-  return render_pass;
-}
-
-[[nodiscard]] auto init_framebuffers(const Window& window,
-                                     vkh::Context& context,
-                                     const vkh::Swapchain& swapchain,
-                                     VkRenderPass render_pass,
-                                     VkImageView depth_image_view)
-{
-  Resolution res = window.resolution();
-  VkFramebufferCreateInfo framebuffers_create_info = {
-      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .pNext = nullptr,
-      .renderPass = render_pass,
-      .attachmentCount = 2,
-      .width = res.width,
-      .height = res.height,
-      .layers = 1,
-  };
-
-  const auto swapchain_imagecount = swapchain.images().size();
-
-  std::vector<VkFramebuffer> framebuffers(swapchain_imagecount);
-
-  for (std::size_t i = 0; i < swapchain_imagecount; ++i) {
-    VkImageView attachments[2] = {swapchain.image_views()[i], depth_image_view};
-
-    framebuffers_create_info.pAttachments = attachments;
-    VK_CHECK(vkCreateFramebuffer(context.device(), &framebuffers_create_info,
-                                 nullptr, &framebuffers[i]));
-  }
-  return framebuffers;
-}
-
 [[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer,
                                         const char* filename)
     -> beyond::optional<vkh::Image>
@@ -312,16 +219,12 @@ Renderer::Renderer(Window& window)
 {
   init_depth_image();
 
-  render_pass_ = init_default_render_pass(context_, swapchain_, depth_format_);
-  framebuffers_ = init_framebuffers(window, context_, swapchain_, render_pass_,
-                                    depth_image_view_),
-
   init_frame_data();
   init_descriptors();
   init_pipelines();
   init_upload_context();
 
-  init_imgui();
+  init_imgui(swapchain_.image_format());
 
   texture_.image = load_image_from_file(
                        *this, "../../assets/lost_empire/lost_empire-RGBA.png")
@@ -399,8 +302,6 @@ void Renderer::init_frame_data()
 
 void Renderer::init_depth_image()
 {
-  depth_format_ = VK_FORMAT_D32_SFLOAT;
-
   const VkImageCreateInfo image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
@@ -609,12 +510,18 @@ void Renderer::init_pipelines()
 
   VkVertexInputBindingDescription binding_descriptions[] = {
       Vertex::binding_description()};
+
+  const VkFormat color_attachment_formats[] = {swapchain_.image_format()};
   default_pipeline_ =
       vkh::create_graphics_pipeline(
           context_,
           {.layout = mesh_pipeline_layout_,
-           .render_pass = render_pass_,
            .window_extend = to_extent2d(window_->resolution()),
+           .pipeline_rendering_create_info =
+               vkh::PipelineRenderingCreateInfo{
+                   .color_attachment_formats = color_attachment_formats,
+                   .depth_attachment_format = depth_format_,
+               },
            .debug_name = "Mesh Graphics Pipeline",
            .vertex_input_state_create_info =
                {.binding_descriptions = binding_descriptions,
@@ -641,7 +548,7 @@ void Renderer::init_upload_context()
                                &upload_context_.command_pool));
 }
 
-void Renderer::init_imgui()
+void Renderer::init_imgui(VkFormat color_attachment_format)
 {
   // 1: create descriptor pool for IMGUI
   //  the size of the pool is very oversize, but it's copied from imgui demo
@@ -680,13 +587,20 @@ void Renderer::init_imgui()
       .Instance = context_.instance(),
       .PhysicalDevice = context_.physical_device(),
       .Device = context_.device(),
+      .QueueFamily = context_.graphics_queue_family_index(),
       .Queue = context_.graphics_queue(),
+      .PipelineCache = VK_NULL_HANDLE,
       .DescriptorPool = imgui_pool_,
       .MinImageCount = 3,
       .ImageCount = 3,
       .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+
+      .UseDynamicRendering = true,
+      .ColorAttachmentFormat = color_attachment_format,
+
+      .CheckVkResultFn = [](VkResult result) { VK_CHECK(result); },
   };
-  ImGui_ImplVulkan_Init(&init_info, render_pass_);
+  ImGui_ImplVulkan_Init(&init_info, VK_NULL_HANDLE);
 
   // execute a gpu command to upload imgui font textures
   immediate_submit(
@@ -717,16 +631,31 @@ void Renderer::render(const charlie::Camera& camera)
   };
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  static constexpr VkClearValue clear_values[] = {
-      {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
-      {.depthStencil = {.depth = 1.f}}};
-
   ImGui::Render();
-  const VkRenderPassBeginInfo rp_info = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .pNext = nullptr,
-      .renderPass = render_pass_,
-      .framebuffer = framebuffers_[swapchain_image_index],
+
+  const VkRenderingAttachmentInfo color_attachments_info{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = swapchain_.image_views()[swapchain_image_index],
+      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue =
+          VkClearValue{.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
+  };
+
+  const VkRenderingAttachmentInfo depth_attachments_info{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = depth_image_view_,
+      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = VkClearValue{.depthStencil = {.depth = 1.f}},
+  };
+
+  const VkRenderingInfo render_info{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+      .pNext = VK_NULL_HANDLE,
+      .flags = 0,
       .renderArea =
           {
               .offset =
@@ -736,17 +665,20 @@ void Renderer::render(const charlie::Camera& camera)
                   },
               .extent = to_extent2d(window_->resolution()),
           },
-      .clearValueCount = beyond::size(clear_values),
-      .pClearValues = clear_values,
+      .layerCount = 1,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &color_attachments_info,
+      .pDepthAttachment = &depth_attachments_info,
+      .pStencilAttachment = nullptr,
   };
 
-  vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBeginRendering(cmd, &render_info);
 
   draw_objects(cmd, render_objects_, camera);
 
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
-  vkCmdEndRenderPass(cmd);
+  vkCmdEndRendering(cmd);
   VK_CHECK(vkEndCommandBuffer(cmd));
 
   static constexpr VkPipelineStageFlags waitStage =
@@ -1068,11 +1000,6 @@ Renderer::~Renderer()
     vkDestroySemaphore(context_, frame.present_semaphore, nullptr);
     vkDestroyCommandPool(context_, frame.command_pool, nullptr);
   }
-
-  for (auto framebuffer : framebuffers_) {
-    vkDestroyFramebuffer(context_, framebuffer, nullptr);
-  }
-  vkDestroyRenderPass(context_, render_pass_, nullptr);
 }
 
 void Renderer::add_object(RenderObject object)

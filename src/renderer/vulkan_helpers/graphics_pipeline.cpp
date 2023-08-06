@@ -16,7 +16,6 @@ create_graphics_pipeline(Context& context,
     -> beyond::expected<VkPipeline, VkResult>
 {
   BEYOND_ENSURE(create_info.layout.value != VK_NULL_HANDLE);
-  BEYOND_ENSURE(create_info.render_pass.value != VK_NULL_HANDLE);
 
   using beyond::to_u32;
 
@@ -105,8 +104,25 @@ create_graphics_pipeline(Context& context,
       .maxDepthBounds = 1.0f,
   };
 
+  const auto pipeline_rendering_create_info =
+      create_info.pipeline_rendering_create_info.value;
+  const VkPipelineRenderingCreateInfo vk_pipeline_rendering_create_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+      .pNext = VK_NULL_HANDLE,
+      .viewMask = pipeline_rendering_create_info.view_mask,
+      .colorAttachmentCount = to_u32(
+          pipeline_rendering_create_info.color_attachment_formats.size()),
+      .pColorAttachmentFormats =
+          pipeline_rendering_create_info.color_attachment_formats.data(),
+      .depthAttachmentFormat =
+          pipeline_rendering_create_info.depth_attachment_format,
+      .stencilAttachmentFormat =
+          pipeline_rendering_create_info.stencil_attachment_format,
+  };
+
   const VkGraphicsPipelineCreateInfo pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .pNext = &vk_pipeline_rendering_create_info,
       .stageCount = to_u32(create_info.shader_stages.size()),
       .pStages = create_info.shader_stages.data(),
       .pVertexInputState = &vertex_input_info,
@@ -117,7 +133,6 @@ create_graphics_pipeline(Context& context,
       .pDepthStencilState = &depth_stencil_state,
       .pColorBlendState = &color_blending,
       .layout = create_info.layout.value,
-      .renderPass = create_info.render_pass.value,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
   };

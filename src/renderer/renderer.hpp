@@ -127,12 +127,9 @@ private:
 
   UploadContext upload_context_;
 
-  VkFormat depth_format_{};
+  VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
   vkh::Image depth_image_;
   VkImageView depth_image_view_ = {};
-
-  VkRenderPass render_pass_{};
-  std::vector<VkFramebuffer> framebuffers_{};
 
   std::size_t frame_number_ = 0;
   FrameData frames_[frame_overlap];
@@ -161,7 +158,7 @@ private:
   void init_descriptors();
   void init_pipelines();
   void init_upload_context();
-  void init_imgui();
+  void init_imgui(VkFormat color_attachment_format);
 
   auto upload_buffer(std::size_t gpu_buffer, const void* data,
                      VkBufferUsageFlags usage) -> vkh::Expected<vkh::Buffer>;

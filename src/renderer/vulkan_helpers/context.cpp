@@ -37,7 +37,7 @@ namespace vkh {
 Context::Context(Window& window)
 {
   auto instance_ret = vkb::InstanceBuilder{}
-                          .require_api_version(1, 2, 0)
+                          .require_api_version(1, 3, 0)
                           .use_default_debug_messenger()
                           .request_validation_layers()
                           .add_validation_feature_enable(
@@ -53,21 +53,28 @@ Context::Context(Window& window)
   surface_ = create_surface_glfw(instance_, window.glfw_window());
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
-  auto phys_device_ret = phys_device_selector.set_surface(surface_)
-                             .add_required_extension(
-                                 VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
-                             .set_required_features({
-                                 .fillModeNonSolid = true,
-                             }).set_required_features_11({
-                                 .shaderDrawParameters = true
-                             })
-                             .select();
+
+  auto phys_device_ret =
+      phys_device_selector.set_surface(surface_)
+          .allow_any_gpu_device_type(false)
+          .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+          .add_required_extension(
+              VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
+          .set_required_features({
+              .fillModeNonSolid = true,
+          })
+          .set_required_features_11({.shaderDrawParameters = true})
+          .set_required_features_13({.dynamicRendering = true})
+          .select();
   if (!phys_device_ret) {
     fmt::print("{}\n", phys_device_ret.error().message());
     std::exit(-1);
   }
+
   vkb::PhysicalDevice vkb_physical_device = phys_device_ret.value();
   physical_device_ = vkb_physical_device.physical_device;
+
+  fmt::print("Physical device name: {}\n", vkb_physical_device.name);
 
   vkb::DeviceBuilder device_builder{vkb_physical_device};
   auto device_ret = device_builder.build();
@@ -84,9 +91,9 @@ Context::Context(Window& window)
   compute_queue_ = vkb_device.get_queue(vkb::QueueType::compute).value();
   compute_queue_family_index_ =
       vkb_device.get_queue_index(vkb::QueueType::compute).value();
-  transfer_queue_ = vkb_device.get_queue(vkb::QueueType::transfer).value();
-  transfer_queue_family_index_ =
-      vkb_device.get_queue_index(vkb::QueueType::transfer).value();
+  //  transfer_queue_ = vkb_device.get_queue(vkb::QueueType::transfer).value();
+  //  transfer_queue_family_index_ =
+  //      vkb_device.get_queue_index(vkb::QueueType::transfer).value();
 
   present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
 
