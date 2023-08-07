@@ -12,8 +12,7 @@
 
 namespace {
 
-[[nodiscard]] auto read_file(const std::string_view filename)
-    -> std::vector<char>
+[[nodiscard]] auto read_file(const std::string_view filename) -> std::vector<char>
 {
   std::ifstream file(filename.data(), std::ios::ate | std::ios::binary);
 
@@ -36,9 +35,8 @@ namespace {
 
 namespace vkh {
 
-[[nodiscard]] auto
-load_shader_module_from_file(Context& context, std::string_view filename,
-                             const ShaderModuleCreateInfo& create_info)
+[[nodiscard]] auto load_shader_module_from_file(Context& context, std::string_view filename,
+                                                const ShaderModuleCreateInfo& create_info)
     -> beyond::expected<VkShaderModule, VkResult>
 {
   const auto buffer = read_file(filename);
@@ -52,11 +50,10 @@ load_shader_module_from_file(Context& context, std::string_view filename,
   };
 
   VkShaderModule module{};
-  VKH_TRY(vkCreateShaderModule(context.device(), &vk_create_info, nullptr,
-                               &module));
+  VKH_TRY(vkCreateShaderModule(context.device(), &vk_create_info, nullptr, &module));
 
-  if (set_debug_name(context, beyond::bit_cast<uint64_t>(module),
-                     VK_OBJECT_TYPE_SHADER_MODULE, create_info.debug_name)) {
+  if (set_debug_name(context, beyond::bit_cast<uint64_t>(module), VK_OBJECT_TYPE_SHADER_MODULE,
+                     create_info.debug_name)) {
     fmt::print("Cannot create debug name for {}\n", create_info.debug_name);
   }
   return module;

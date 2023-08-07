@@ -10,9 +10,8 @@
 
 namespace vkh {
 
-[[nodiscard]] auto
-create_graphics_pipeline(Context& context,
-                         const GraphicsPipelineCreateInfo& create_info)
+[[nodiscard]] auto create_graphics_pipeline(Context& context,
+                                            const GraphicsPipelineCreateInfo& create_info)
     -> beyond::expected<VkPipeline, VkResult>
 {
   BEYOND_ENSURE(create_info.layout.value != VK_NULL_HANDLE);
@@ -26,11 +25,9 @@ create_graphics_pipeline(Context& context,
 
   const VkPipelineVertexInputStateCreateInfo vertex_input_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount =
-          to_u32(vertex_binding_descriptions.size()),
+      .vertexBindingDescriptionCount = to_u32(vertex_binding_descriptions.size()),
       .pVertexBindingDescriptions = vertex_binding_descriptions.data(),
-      .vertexAttributeDescriptionCount =
-          to_u32(vertex_attribute_descriptions.size()),
+      .vertexAttributeDescriptionCount = to_u32(vertex_attribute_descriptions.size()),
       .pVertexAttributeDescriptions = vertex_attribute_descriptions.data()};
 
   static constexpr VkPipelineInputAssemblyStateCreateInfo input_assembly{
@@ -104,20 +101,16 @@ create_graphics_pipeline(Context& context,
       .maxDepthBounds = 1.0f,
   };
 
-  const auto pipeline_rendering_create_info =
-      create_info.pipeline_rendering_create_info.value;
+  const auto pipeline_rendering_create_info = create_info.pipeline_rendering_create_info.value;
   const VkPipelineRenderingCreateInfo vk_pipeline_rendering_create_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
       .pNext = VK_NULL_HANDLE,
       .viewMask = pipeline_rendering_create_info.view_mask,
-      .colorAttachmentCount = to_u32(
-          pipeline_rendering_create_info.color_attachment_formats.size()),
-      .pColorAttachmentFormats =
-          pipeline_rendering_create_info.color_attachment_formats.data(),
-      .depthAttachmentFormat =
-          pipeline_rendering_create_info.depth_attachment_format,
-      .stencilAttachmentFormat =
-          pipeline_rendering_create_info.stencil_attachment_format,
+      .colorAttachmentCount =
+          to_u32(pipeline_rendering_create_info.color_attachment_formats.size()),
+      .pColorAttachmentFormats = pipeline_rendering_create_info.color_attachment_formats.data(),
+      .depthAttachmentFormat = pipeline_rendering_create_info.depth_attachment_format,
+      .stencilAttachmentFormat = pipeline_rendering_create_info.stencil_attachment_format,
   };
 
   const VkGraphicsPipelineCreateInfo pipeline_create_info{
@@ -138,27 +131,25 @@ create_graphics_pipeline(Context& context,
   };
 
   VkPipeline pipeline{};
-  VKH_TRY(vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1,
-                                    &pipeline_create_info, nullptr, &pipeline));
+  VKH_TRY(vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1, &pipeline_create_info,
+                                    nullptr, &pipeline));
 
   if (create_info.debug_name != nullptr &&
-      set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline),
-                     VK_OBJECT_TYPE_PIPELINE, create_info.debug_name)) {
+      set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline), VK_OBJECT_TYPE_PIPELINE,
+                     create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }
 
   return pipeline;
 }
 
-[[nodiscard]] auto
-create_unique_graphics_pipeline(Context& context,
-                                const GraphicsPipelineCreateInfo& create_info)
+[[nodiscard]] auto create_unique_graphics_pipeline(Context& context,
+                                                   const GraphicsPipelineCreateInfo& create_info)
     -> Expected<UniquePipeline>
 {
-  return create_graphics_pipeline(context, create_info)
-      .map([&](VkPipeline pipeline) {
-        return UniquePipeline{context.device(), pipeline};
-      });
+  return create_graphics_pipeline(context, create_info).map([&](VkPipeline pipeline) {
+    return UniquePipeline{context.device(), pipeline};
+  });
 }
 
 } // namespace vkh

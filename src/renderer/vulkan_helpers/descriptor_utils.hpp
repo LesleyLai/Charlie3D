@@ -42,12 +42,10 @@ public:
   DescriptorAllocator(const DescriptorAllocator&) = delete;
   auto operator=(const DescriptorAllocator&) & -> DescriptorAllocator& = delete;
   DescriptorAllocator(DescriptorAllocator&&) noexcept = delete;
-  auto operator=(DescriptorAllocator&&) & noexcept
-      -> DescriptorAllocator& = delete;
+  auto operator=(DescriptorAllocator&&) & noexcept -> DescriptorAllocator& = delete;
 
   void reset_pools();
-  [[nodiscard]] auto allocate(VkDescriptorSetLayout layout)
-      -> Expected<VkDescriptorSet>;
+  [[nodiscard]] auto allocate(VkDescriptorSetLayout layout) -> Expected<VkDescriptorSet>;
 
   [[nodiscard]] auto context() -> Context*
   {
@@ -73,23 +71,20 @@ public:
     // good idea to turn this into a inlined array
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 
-    [[nodiscard]] auto operator==(const DescriptorLayoutInfo& other) const
-        -> bool;
+    [[nodiscard]] auto operator==(const DescriptorLayoutInfo& other) const -> bool;
 
     [[nodiscard]] auto hash() const -> std::size_t;
   };
 
 private:
   struct DescriptorLayoutHash {
-    [[nodiscard]] auto operator()(const DescriptorLayoutInfo& k) const
-        -> std::size_t
+    [[nodiscard]] auto operator()(const DescriptorLayoutInfo& k) const -> std::size_t
     {
       return k.hash();
     }
   };
 
-  std::unordered_map<DescriptorLayoutInfo, VkDescriptorSetLayout,
-                     DescriptorLayoutHash>
+  std::unordered_map<DescriptorLayoutInfo, VkDescriptorSetLayout, DescriptorLayoutHash>
       layout_cache_;
   VkDevice device_;
 };
@@ -107,16 +102,13 @@ class DescriptorBuilder {
   DescriptorAllocator* alloc_ = nullptr;
 
 public:
-  DescriptorBuilder(DescriptorLayoutCache& layout_cache,
-                    DescriptorAllocator& allocator);
+  DescriptorBuilder(DescriptorLayoutCache& layout_cache, DescriptorAllocator& allocator);
 
   auto bind_buffer(uint32_t binding, const VkDescriptorBufferInfo& buffer_info,
-                   VkDescriptorType type, VkShaderStageFlags stage_flags)
-      -> DescriptorBuilder&;
+                   VkDescriptorType type, VkShaderStageFlags stage_flags) -> DescriptorBuilder&;
 
-  auto bind_image(uint32_t binding, const VkDescriptorImageInfo& image_info,
-                  VkDescriptorType type, VkShaderStageFlags stage_flags)
-      -> DescriptorBuilder&;
+  auto bind_image(uint32_t binding, const VkDescriptorImageInfo& image_info, VkDescriptorType type,
+                  VkShaderStageFlags stage_flags) -> DescriptorBuilder&;
 
   auto build() -> Expected<DescriptorBuilderResult>;
 };

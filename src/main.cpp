@@ -17,11 +17,9 @@
 #include <GLFW/glfw3.h>
 #include <utility>
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action,
-                  int mods)
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-  auto* camera =
-      static_cast<charlie::Camera*>(glfwGetWindowUserPointer(window));
+  auto* camera = static_cast<charlie::Camera*>(glfwGetWindowUserPointer(window));
   camera->process_key_input(key, scancode, action, mods);
 }
 
@@ -31,15 +29,13 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
 
   const auto cpu_mesh = charlie::CPUMesh::load("lost_empire/lost_empire.obj");
 
-  const charlie::Mesh& lost_empire_mesh =
-      renderer.upload_mesh_data("lost_empire", cpu_mesh);
+  const charlie::Mesh& lost_empire_mesh = renderer.upload_mesh_data("lost_empire", cpu_mesh);
 
   const charlie::Material* default_material = renderer.get_material("default");
   BEYOND_ENSURE(default_material != nullptr);
-  renderer.add_object(charlie::RenderObject{
-      .mesh = &lost_empire_mesh,
-      .material = default_material,
-      .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
+  renderer.add_object(charlie::RenderObject{.mesh = &lost_empire_mesh,
+                                            .material = default_material,
+                                            .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
 }
 
 void show_gui(charlie::Camera& camera)
@@ -56,9 +52,8 @@ void show_gui(charlie::Camera& camera)
   ImGui::Text("Scenes:");
   const char* items[] = {"Lost Empire", "Sponza"};
   static int item_current_idx = 0;
-  if (ImGui::BeginListBox(
-          "##Scenes listbox",
-          ImVec2(-FLT_MIN, 5 * ImGui::GetTextLineHeightWithSpacing()))) {
+  if (ImGui::BeginListBox("##Scenes listbox",
+                          ImVec2(-FLT_MIN, 5 * ImGui::GetTextLineHeightWithSpacing()))) {
     for (int n = 0; n < IM_ARRAYSIZE(items); n++) {
       const bool is_selected = (item_current_idx == n);
       if (ImGui::Selectable(items[n], is_selected)) item_current_idx = n;
@@ -79,8 +74,7 @@ void show_gui(charlie::Camera& camera)
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
-  auto asset_path = charlie::locate_asset_path(current_path)
-                        .expect("Cannot find assets folder!");
+  auto asset_path = charlie::locate_asset_path(current_path).expect("Cannot find assets folder!");
 
   Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
 }

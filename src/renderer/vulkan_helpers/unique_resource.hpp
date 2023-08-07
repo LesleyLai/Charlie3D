@@ -5,14 +5,11 @@
 
 namespace vkh {
 
-template <typename T,
-          void (*deleter)(VkDevice, T, const VkAllocationCallbacks*)>
+template <typename T, void (*deleter)(VkDevice, T, const VkAllocationCallbacks*)>
 class UniqueResource {
 public:
   UniqueResource() noexcept = default;
-  UniqueResource(VkDevice device, T resource) noexcept
-      : device_{device}, resource_{resource}
-  {}
+  UniqueResource(VkDevice device, T resource) noexcept : device_{device}, resource_{resource} {}
 
   ~UniqueResource() noexcept
   {
@@ -20,14 +17,13 @@ public:
   }
 
   UniqueResource(const UniqueResource& other) noexcept = delete;
-  auto operator=(const UniqueResource& other) & noexcept
-      -> UniqueResource& = delete;
+  auto operator=(const UniqueResource& other) & noexcept -> UniqueResource& = delete;
 
   UniqueResource(UniqueResource&& other) noexcept
-      : device_{std::exchange(other.device_, nullptr)}, resource_{std::exchange(
-                                                            other.resource_,
-                                                            nullptr)}
-  {}
+      : device_{std::exchange(other.device_, nullptr)},
+        resource_{std::exchange(other.resource_, nullptr)}
+  {
+  }
 
   auto operator=(UniqueResource&& other) & noexcept -> UniqueResource&
   {

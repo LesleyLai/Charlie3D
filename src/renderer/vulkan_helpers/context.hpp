@@ -56,8 +56,7 @@ public:
     return instance_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto debug_messenger() noexcept
-      -> VkDebugUtilsMessengerEXT
+  [[nodiscard]] BEYOND_FORCE_INLINE auto debug_messenger() noexcept -> VkDebugUtilsMessengerEXT
   {
     return debug_messenger_;
   }
@@ -67,8 +66,7 @@ public:
     return surface_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto physical_device() noexcept
-      -> VkPhysicalDevice
+  [[nodiscard]] BEYOND_FORCE_INLINE auto physical_device() noexcept -> VkPhysicalDevice
   {
     return physical_device_;
   }
@@ -98,20 +96,20 @@ public:
     return transfer_queue_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto
-  graphics_queue_family_index() const noexcept -> std::uint32_t
+  [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue_family_index() const noexcept
+      -> std::uint32_t
   {
     return graphics_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto
-  compute_queue_family_index() const noexcept -> std::uint32_t
+  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue_family_index() const noexcept
+      -> std::uint32_t
   {
     return compute_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto
-  transfer_queue_family_index() const noexcept -> std::uint32_t
+  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue_family_index() const noexcept
+      -> std::uint32_t
   {
     return transfer_queue_family_index_;
   }
@@ -121,8 +119,7 @@ public:
     return allocator_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto functions() const noexcept
-      -> VulkanFunctions
+  [[nodiscard]] BEYOND_FORCE_INLINE auto functions() const noexcept -> VulkanFunctions
   {
     return functions_;
   }

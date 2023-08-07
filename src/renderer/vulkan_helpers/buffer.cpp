@@ -8,8 +8,7 @@
 
 namespace vkh {
 
-auto create_buffer(vkh::Context& context,
-                   const BufferCreateInfo& buffer_create_info)
+auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)
     -> Expected<Buffer>
 {
   const VkBufferCreateInfo vk_buffer_create_info = {
@@ -18,17 +17,14 @@ auto create_buffer(vkh::Context& context,
       .usage = buffer_create_info.usage,
   };
 
-  const VmaAllocationCreateInfo vma_alloc_info{
-      .usage = buffer_create_info.memory_usage};
+  const VmaAllocationCreateInfo vma_alloc_info{.usage = buffer_create_info.memory_usage};
 
   Buffer allocated_buffer;
-  VKH_TRY(vmaCreateBuffer(context.allocator(), &vk_buffer_create_info,
-                          &vma_alloc_info, &allocated_buffer.buffer,
-                          &allocated_buffer.allocation, nullptr));
+  VKH_TRY(vmaCreateBuffer(context.allocator(), &vk_buffer_create_info, &vma_alloc_info,
+                          &allocated_buffer.buffer, &allocated_buffer.allocation, nullptr));
 
   if (buffer_create_info.debug_name != nullptr &&
-      set_debug_name(context,
-                     beyond::bit_cast<uint64_t>(allocated_buffer.buffer),
+      set_debug_name(context, beyond::bit_cast<uint64_t>(allocated_buffer.buffer),
                      VK_OBJECT_TYPE_BUFFER, buffer_create_info.debug_name)) {
     report_fail_to_set_debug_name(buffer_create_info.debug_name);
   }
@@ -36,8 +32,7 @@ auto create_buffer(vkh::Context& context,
   return allocated_buffer;
 }
 
-auto create_buffer_from_data(vkh::Context& context,
-                             const BufferCreateInfo& buffer_create_info,
+auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
                              const void* data) -> Expected<Buffer>
 {
   return create_buffer(context, buffer_create_info)

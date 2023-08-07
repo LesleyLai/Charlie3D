@@ -29,13 +29,10 @@ public:
   template <class T> void set(std::string_view key, T value)
   {
     auto [_itr, inserted] = configs_.try_emplace(key, value);
-    if (!inserted)
-      beyond::panic(
-          fmt::format("Configuration with key {} already exist", key));
+    if (!inserted) beyond::panic(fmt::format("Configuration with key {} already exist", key));
   }
 
-  template <class T>
-  [[nodiscard]] auto try_get(std::string_view key) const -> const T*
+  template <class T> [[nodiscard]] auto try_get(std::string_view key) const -> const T*
   {
     if (auto itr = configs_.find(key); itr != configs_.end()) {
       return std::any_cast<T>(&itr->second);
@@ -44,12 +41,10 @@ public:
     }
   }
 
-  template <class T>
-  [[nodiscard]] auto get(std::string_view key) const -> const T&
+  template <class T> [[nodiscard]] auto get(std::string_view key) const -> const T&
   {
     const auto* result = try_get<T>(key);
-    BEYOND_ENSURE_MSG(result != nullptr,
-                      fmt::format("Cannot extract configuration \"{}\"", key));
+    BEYOND_ENSURE_MSG(result != nullptr, fmt::format("Cannot extract configuration \"{}\"", key));
     return *result;
   }
 

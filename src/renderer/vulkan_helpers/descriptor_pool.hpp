@@ -17,8 +17,7 @@ struct DescriptorPoolCreateInfo {
   const char* debug_name = nullptr;
 };
 
-auto create_descriptor_pool(Context& context,
-                            const DescriptorPoolCreateInfo& create_info)
+auto create_descriptor_pool(Context& context, const DescriptorPoolCreateInfo& create_info)
     -> Expected<VkDescriptorPool>;
 
 } // namespace vkh

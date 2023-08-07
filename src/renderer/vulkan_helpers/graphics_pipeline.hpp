@@ -55,18 +55,16 @@ struct GraphicsPipelineCreateInfo {
   CullMode cull_mode = CullMode::none;
 };
 
-[[nodiscard]] auto
-create_graphics_pipeline(Context& context,
-                         const GraphicsPipelineCreateInfo& create_info)
+[[nodiscard]] auto create_graphics_pipeline(Context& context,
+                                            const GraphicsPipelineCreateInfo& create_info)
     -> Expected<VkPipeline>;
 
 struct UniquePipeline : UniqueResource<VkPipeline, vkDestroyPipeline> {
   using UniqueResource<VkPipeline, vkDestroyPipeline>::UniqueResource;
 };
 
-[[nodiscard]] auto
-create_unique_graphics_pipeline(Context& context,
-                                const GraphicsPipelineCreateInfo& create_info)
+[[nodiscard]] auto create_unique_graphics_pipeline(Context& context,
+                                                   const GraphicsPipelineCreateInfo& create_info)
     -> Expected<UniquePipeline>;
 
 } // namespace vkh

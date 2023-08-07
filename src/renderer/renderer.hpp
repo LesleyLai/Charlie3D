@@ -83,8 +83,7 @@ public:
 
   void render(const charlie::Camera& camera);
 
-  auto create_material(VkPipeline pipeline, VkPipelineLayout layout,
-                       std::string name) -> Material&;
+  auto create_material(VkPipeline pipeline, VkPipelineLayout layout, std::string name) -> Material&;
 
   // returns nullptr if it can't be found
   [[nodiscard]] auto get_material(const std::string& name) -> Material*;
@@ -114,8 +113,7 @@ public:
     return context_;
   }
 
-  [[nodiscard]] auto upload_mesh_data(const char* mesh_name,
-                                      const CPUMesh& cpu_mesh) -> Mesh&;
+  [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> Mesh&;
 
 private:
   Window* window_ = nullptr;
@@ -135,8 +133,7 @@ private:
   FrameData frames_[frame_overlap];
 
   std::unique_ptr<vkh::DescriptorAllocator> descriptor_allocator_ = nullptr;
-  std::unique_ptr<vkh::DescriptorLayoutCache> descriptor_layout_cache_ =
-      nullptr;
+  std::unique_ptr<vkh::DescriptorLayoutCache> descriptor_layout_cache_ = nullptr;
   VkDescriptorSetLayout global_descriptor_set_layout_ = {};
   VkDescriptorSetLayout object_descriptor_set_layout_ = {};
   VkDescriptorSetLayout single_texture_set_layout_ = {};
@@ -160,8 +157,8 @@ private:
   void init_upload_context();
   void init_imgui(VkFormat color_attachment_format);
 
-  auto upload_buffer(std::size_t gpu_buffer, const void* data,
-                     VkBufferUsageFlags usage) -> vkh::Expected<vkh::Buffer>;
+  auto upload_buffer(std::size_t gpu_buffer, const void* data, VkBufferUsageFlags usage)
+      -> vkh::Expected<vkh::Buffer>;
 };
 
 } // namespace charlie

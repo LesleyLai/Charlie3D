@@ -22,9 +22,9 @@ auto CPUMesh::load(std::string_view filename) -> CPUMesh
   auto file_directory = file_path;
   file_directory.remove_filename();
 
-  if (const bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn,
-                                        &err, file_path.string().c_str(),
-                                        file_directory.string().c_str());
+  if (const bool ret =
+          tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path.string().c_str(),
+                           file_directory.string().c_str());
       !ret) {
     beyond::panic(fmt::format("Mesh loading error: {}", err));
   }
@@ -51,16 +51,14 @@ auto CPUMesh::load(std::string_view filename) -> CPUMesh
         const auto ux = attrib.texcoords[2 * idx.texcoord_index + 0];
         const auto uy = attrib.texcoords[2 * idx.texcoord_index + 1];
 
-        vertices.push_back(Vertex{.position = {vx, vy, vz},
-                                  .normal = {nx, ny, nz},
-                                  .uv = {ux, 1 - uy}});
+        vertices.push_back(
+            Vertex{.position = {vx, vy, vz}, .normal = {nx, ny, nz}, .uv = {ux, 1 - uy}});
       }
       index_offset += fv;
     }
   }
 
-  return CPUMesh{.vertices = std::move(vertices),
-                 .indices = std::move(indices)};
+  return CPUMesh{.vertices = std::move(vertices), .indices = std::move(indices)};
 }
 
 } // namespace charlie

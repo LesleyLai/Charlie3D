@@ -8,14 +8,13 @@ namespace vkh {
 Swapchain::Swapchain(Context& context, const SwapchainCreateInfo& create_info)
     : device_{context.device()}
 {
-  vkb::SwapchainBuilder swapchain_builder{context.physical_device(),
-                                          context.device(), context.surface()};
+  vkb::SwapchainBuilder swapchain_builder{context.physical_device(), context.device(),
+                                          context.surface()};
 
   vkb::Swapchain vkb_swapchain =
       swapchain_builder.use_default_format_selection()
           .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-          .set_desired_extent(create_info.extent.width,
-                              create_info.extent.height)
+          .set_desired_extent(create_info.extent.width, create_info.extent.height)
           .build()
           .value();
 
@@ -36,9 +35,8 @@ Swapchain::~Swapchain()
 }
 
 Swapchain::Swapchain(Swapchain&& other) noexcept
-    : device_{std::exchange(other.device_, {})},
-      swapchain_{std::exchange(other.swapchain_, {})}, images_{std::exchange(
-                                                           other.images_, {})},
+    : device_{std::exchange(other.device_, {})}, swapchain_{std::exchange(other.swapchain_, {})},
+      images_{std::exchange(other.images_, {})},
       image_views_{std::exchange(other.image_views_, {})},
       image_format_{std::exchange(other.image_format_, {})}
 {

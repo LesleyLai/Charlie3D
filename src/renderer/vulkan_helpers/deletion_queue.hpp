@@ -26,9 +26,9 @@ public:
   DeletionQueue(const DeletionQueue&) = delete;
   auto operator=(const DeletionQueue&) & -> DeletionQueue& = delete;
   DeletionQueue(DeletionQueue&& other) noexcept
-      : deleters_(std::exchange(other.deleters_, {})),
-        context_(std::exchange(other.context_, {}))
-  {}
+      : deleters_(std::exchange(other.deleters_, {})), context_(std::exchange(other.context_, {}))
+  {
+  }
   auto operator=(DeletionQueue&& other) & noexcept -> DeletionQueue&
   {
     if (this != &other) {
@@ -45,9 +45,7 @@ public:
 
   void flush()
   {
-    for (auto& deleter : std::ranges::reverse_view(deleters_)) {
-      deleter(*context_);
-    }
+    for (auto& deleter : std::ranges::reverse_view(deleters_)) { deleter(*context_); }
 
     deleters_.clear();
   }

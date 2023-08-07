@@ -9,9 +9,9 @@ namespace charlie {
 
 [[nodiscard]] auto Camera::view_matrix() const -> beyond::Mat4
 {
-  auto camera_mat = beyond::translate(position) *
-                    beyond::look_at(beyond::Vec3{}, beyond::Vec3{0.0, 0.0, 1.0},
-                                    beyond::Vec3{0.0, 1.0, 0.0});
+  auto camera_mat =
+      beyond::translate(position) *
+      beyond::look_at(beyond::Vec3{}, beyond::Vec3{0.0, 0.0, 1.0}, beyond::Vec3{0.0, 1.0, 0.0});
 
   return camera_mat;
 }
@@ -21,8 +21,7 @@ namespace charlie {
   return beyond::perspective(fovy, aspect_ratio, z_near, z_far);
 }
 
-void Camera::process_key_input(int key, int /*scancode*/, int action,
-                               int /*mods*/)
+void Camera::process_key_input(int key, int /*scancode*/, int action, int /*mods*/)
 {
   switch (action) {
   case GLFW_PRESS:

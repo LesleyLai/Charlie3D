@@ -18,9 +18,7 @@ class Window {
 public:
   Window() = default;
   BEYOND_DELETE_COPY(Window)
-  Window(Window&& other) noexcept
-      : window_{std::exchange(other.window_, nullptr)}
-  {}
+  Window(Window&& other) noexcept : window_{std::exchange(other.window_, nullptr)} {}
   auto operator=(Window&& other) & noexcept -> Window&
   {
     if (this != &other) { window_ = std::exchange(other.window_, nullptr); }

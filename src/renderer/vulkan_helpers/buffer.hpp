@@ -28,22 +28,18 @@ struct [[nodiscard]] Buffer {
   }
 };
 
-auto create_buffer(vkh::Context& context,
-                   const BufferCreateInfo& buffer_create_info)
+auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)
     -> Expected<Buffer>;
 
-auto create_buffer_from_data(vkh::Context& context,
-                             const BufferCreateInfo& buffer_create_info,
+auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
                              const void* data) -> Expected<Buffer>;
 
 template <typename T>
-auto create_buffer_from_data(vkh::Context& context,
-                             const BufferCreateInfo& buffer_create_info,
+auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
                              const T* data) -> Expected<Buffer>
 {
   BEYOND_ENSURE(sizeof(T) <= buffer_create_info.size);
-  return create_buffer_from_data(context, buffer_create_info,
-                                 static_cast<const void*>(data));
+  return create_buffer_from_data(context, buffer_create_info, static_cast<const void*>(data));
 }
 
 // TODO: this is currently broken

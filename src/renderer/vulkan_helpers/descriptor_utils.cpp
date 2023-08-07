@@ -3,15 +3,14 @@
 #include "context.hpp"
 #include "descriptor_pool.hpp"
 
-#include <beyond/utils/assert.hpp>
 #include <algorithm>
+#include <beyond/utils/assert.hpp>
 
 namespace {
 
-[[nodiscard]] auto
-create_pool(vkh::Context& context,
-            const vkh::DescriptorAllocator::PoolSizes& pool_sizes,
-            std::uint32_t count, VkDescriptorPoolCreateFlags flags)
+[[nodiscard]] auto create_pool(vkh::Context& context,
+                               const vkh::DescriptorAllocator::PoolSizes& pool_sizes,
+                               std::uint32_t count, VkDescriptorPoolCreateFlags flags)
     -> vkh::Expected<VkDescriptorPool>
 {
   std::vector<VkDescriptorPoolSize> sizes;
@@ -21,16 +20,15 @@ create_pool(vkh::Context& context,
   }
 
   return vkh::create_descriptor_pool(
-      context, vkh::DescriptorPoolCreateInfo{
-                   .flags = flags, .max_sets = count, .pool_sizes = sizes});
+      context,
+      vkh::DescriptorPoolCreateInfo{.flags = flags, .max_sets = count, .pool_sizes = sizes});
 }
 
 } // anonymous namespace
 
 namespace vkh {
 
-DescriptorAllocator::DescriptorAllocator(Context& context) : context_{&context}
-{}
+DescriptorAllocator::DescriptorAllocator(Context& context) : context_{&context} {}
 
 DescriptorAllocator::~DescriptorAllocator()
 {
@@ -62,8 +60,7 @@ void DescriptorAllocator::reset_pools()
   current_pool_ = VK_NULL_HANDLE;
 }
 
-auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout)
-    -> Expected<VkDescriptorSet>
+auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout) -> Expected<VkDescriptorSet>
 {
   BEYOND_ENSURE(context_ != nullptr);
   auto& context = *context_;
@@ -82,8 +79,7 @@ auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout)
 
   // try to allocate the descriptor set
   VkDescriptorSet set{};
-  VkResult alloc_result =
-      vkAllocateDescriptorSets(context.device(), &alloc_info, &set);
+  VkResult alloc_result = vkAllocateDescriptorSets(context.device(), &alloc_info, &set);
 
   switch (alloc_result) {
   case VK_SUCCESS:
@@ -121,9 +117,7 @@ auto DescriptorAllocator::grab_pool() -> VkDescriptorPool
   }
 }
 
-DescriptorLayoutCache::DescriptorLayoutCache(VkDevice new_device)
-    : device_{new_device}
-{}
+DescriptorLayoutCache::DescriptorLayoutCache(VkDevice new_device) : device_{new_device} {}
 
 DescriptorLayoutCache::~DescriptorLayoutCache()
 {
@@ -133,48 +127,41 @@ DescriptorLayoutCache::~DescriptorLayoutCache()
   }
 }
 
-auto DescriptorLayoutCache::create_descriptor_layout(
-    const VkDescriptorSetLayoutCreateInfo& info) -> VkDescriptorSetLayout
+auto DescriptorLayoutCache::create_descriptor_layout(const VkDescriptorSetLayoutCreateInfo& info)
+    -> VkDescriptorSetLayout
 {
-  DescriptorLayoutInfo layoutinfo;
-  layoutinfo.bindings.resize(info.bindingCount);
-  std::copy(info.pBindings, info.pBindings + info.bindingCount,
-            layoutinfo.bindings.begin());
+  DescriptorLayoutInfo layout_info;
+  layout_info.bindings.resize(info.bindingCount);
+  std::copy(info.pBindings, info.pBindings + info.bindingCount, layout_info.bindings.begin());
 
   // sort the bindings if they aren't in order
-  if (const bool is_sorted = std::ranges::is_sorted(
-          layoutinfo.bindings, {}, &VkDescriptorSetLayoutBinding::binding);
+  if (const bool is_sorted =
+          std::ranges::is_sorted(layout_info.bindings, {}, &VkDescriptorSetLayoutBinding::binding);
       !is_sorted) {
-    std::ranges::sort(layoutinfo.bindings, {},
-                      &VkDescriptorSetLayoutBinding::binding);
+    std::ranges::sort(layout_info.bindings, {}, &VkDescriptorSetLayoutBinding::binding);
   }
 
   // try to grab from cache
-  if (auto it = layout_cache_.find(layoutinfo); it != layout_cache_.end()) {
-    return (*it).second;
-  }
+  if (auto it = layout_cache_.find(layout_info); it != layout_cache_.end()) { return (*it).second; }
 
   // create a new one (not found)
   VkDescriptorSetLayout layout = VK_NULL_HANDLE;
   VK_CHECK(vkCreateDescriptorSetLayout(device_, &info, nullptr, &layout));
 
   // add to cache
-  layout_cache_[layoutinfo] = layout;
+  layout_cache_[layout_info] = layout;
   return layout;
 }
 
 auto DescriptorLayoutCache::DescriptorLayoutInfo::operator==(
     const DescriptorLayoutInfo& other) const -> bool
 {
-  return std::ranges::equal(other.bindings, bindings,
-                            [](const VkDescriptorSetLayoutBinding& lhs,
-                               const VkDescriptorSetLayoutBinding& rhs) {
-                              return lhs.binding == rhs.binding &&
-                                     lhs.descriptorType != rhs.descriptorType &&
-                                     lhs.descriptorCount ==
-                                         rhs.descriptorCount &&
-                                     lhs.stageFlags == rhs.stageFlags;
-                            });
+  return std::ranges::equal(
+      other.bindings, bindings,
+      [](const VkDescriptorSetLayoutBinding& lhs, const VkDescriptorSetLayoutBinding& rhs) {
+        return lhs.binding == rhs.binding && lhs.descriptorType != rhs.descriptorType &&
+               lhs.descriptorCount == rhs.descriptorCount && lhs.stageFlags == rhs.stageFlags;
+      });
 }
 
 auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> std::size_t
@@ -186,8 +173,8 @@ auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> std::size_t
 
   for (const VkDescriptorSetLayoutBinding& b : bindings) {
     // pack the binding data into a single int64. Not fully correct but it's ok
-    const size_t binding_hash = b.binding | b.descriptorType << 8 |
-                                b.descriptorCount << 16 | b.stageFlags << 24;
+    const size_t binding_hash =
+        b.binding | b.descriptorType << 8 | b.descriptorCount << 16 | b.stageFlags << 24;
 
     // shuffle the packed binding data and xor it with the main hash
     result ^= hash<size_t>()(binding_hash);
@@ -199,12 +186,11 @@ auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> std::size_t
 DescriptorBuilder::DescriptorBuilder(DescriptorLayoutCache& layout_cache,
                                      DescriptorAllocator& allocator)
     : cache_{&layout_cache}, alloc_{&allocator}
-{}
+{
+}
 
-auto DescriptorBuilder::bind_buffer(uint32_t binding,
-                                    const VkDescriptorBufferInfo& buffer_info,
-                                    VkDescriptorType type,
-                                    VkShaderStageFlags stage_flags)
+auto DescriptorBuilder::bind_buffer(uint32_t binding, const VkDescriptorBufferInfo& buffer_info,
+                                    VkDescriptorType type, VkShaderStageFlags stage_flags)
     -> DescriptorBuilder&
 {
   bindings_.push_back(VkDescriptorSetLayoutBinding{
@@ -215,20 +201,17 @@ auto DescriptorBuilder::bind_buffer(uint32_t binding,
       .pImmutableSamplers = nullptr,
   });
 
-  writes_.push_back(
-      VkWriteDescriptorSet{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                           .dstBinding = binding,
-                           .descriptorCount = 1,
-                           .descriptorType = type,
-                           .pBufferInfo = &buffer_info});
+  writes_.push_back(VkWriteDescriptorSet{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                         .dstBinding = binding,
+                                         .descriptorCount = 1,
+                                         .descriptorType = type,
+                                         .pBufferInfo = &buffer_info});
 
   return *this;
 }
 
-auto DescriptorBuilder::bind_image(uint32_t binding,
-                                   const VkDescriptorImageInfo& image_info,
-                                   VkDescriptorType type,
-                                   VkShaderStageFlags stage_flags)
+auto DescriptorBuilder::bind_image(uint32_t binding, const VkDescriptorImageInfo& image_info,
+                                   VkDescriptorType type, VkShaderStageFlags stage_flags)
     -> DescriptorBuilder&
 {
   bindings_.push_back(VkDescriptorSetLayoutBinding{
@@ -268,8 +251,8 @@ auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
         for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
 
         vkUpdateDescriptorSets(alloc_->context()->device(),
-                               static_cast<std::uint32_t>(writes_.size()),
-                               writes_.data(), 0, nullptr);
+                               static_cast<std::uint32_t>(writes_.size()), writes_.data(), 0,
+                               nullptr);
 
         return DescriptorBuilderResult{layout, set};
       });

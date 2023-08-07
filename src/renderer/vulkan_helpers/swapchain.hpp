@@ -30,8 +30,7 @@ public:
   Swapchain(Swapchain&&) noexcept;
   auto operator=(Swapchain&&) & noexcept -> Swapchain&;
 
-  [[nodiscard]] BEYOND_FORCE_INLINE explicit(false)
-  operator VkSwapchainKHR() const noexcept
+  [[nodiscard]] BEYOND_FORCE_INLINE explicit(false) operator VkSwapchainKHR() const noexcept
   {
     return swapchain_;
   }
@@ -40,8 +39,7 @@ public:
   {
     return swapchain_;
   }
-  [[nodiscard]] BEYOND_FORCE_INLINE auto images() const noexcept
-      -> std::span<const VkImage>
+  [[nodiscard]] BEYOND_FORCE_INLINE auto images() const noexcept -> std::span<const VkImage>
   {
     return images_;
   }
@@ -50,8 +48,7 @@ public:
   {
     return image_views_;
   }
-  [[nodiscard]] BEYOND_FORCE_INLINE auto image_format() const noexcept
-      -> VkFormat
+  [[nodiscard]] BEYOND_FORCE_INLINE auto image_format() const noexcept -> VkFormat
   {
     return image_format_;
   }
