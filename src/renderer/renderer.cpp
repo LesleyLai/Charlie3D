@@ -190,7 +190,6 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                            &copy_region);
 
     VkImageMemoryBarrier image_barrier_to_readable = image_barrier_to_transfer;
-
     image_barrier_to_readable.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     image_barrier_to_readable.newLayout =
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -621,6 +620,10 @@ void Renderer::render(const charlie::Camera& camera)
   VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, one_second,
                                  frame.present_semaphore, nullptr,
                                  &swapchain_image_index));
+  const auto current_swapchain_image =
+      swapchain_.images()[swapchain_image_index];
+  const auto current_swapchain_image_view =
+      swapchain_.image_views()[swapchain_image_index];
 
   VK_CHECK(vkResetCommandBuffer(frame.main_command_buffer, 0));
 
@@ -629,13 +632,37 @@ void Renderer::render(const charlie::Camera& camera)
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };
-  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
   ImGui::Render();
 
+  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
+
+  // prepare current swapchain image for rendering
+  {
+    const VkImageMemoryBarrier image_memory_barrier_to_render{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .image = current_swapchain_image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }};
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0,
+                         nullptr, 0, nullptr, 1,
+                         &image_memory_barrier_to_render);
+  }
+
+  // Begin dynamic rendering
   const VkRenderingAttachmentInfo color_attachments_info{
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = swapchain_.image_views()[swapchain_image_index],
+      .imageView = current_swapchain_image_view,
       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -679,6 +706,28 @@ void Renderer::render(const charlie::Camera& camera)
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
   vkCmdEndRendering(cmd);
+
+  // prepare current swapchain image for presenting
+  {
+    const VkImageMemoryBarrier image_memory_barrier_to_present{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image = current_swapchain_image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        }};
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &image_memory_barrier_to_present);
+  }
+
   VK_CHECK(vkEndCommandBuffer(cmd));
 
   static constexpr VkPipelineStageFlags waitStage =
