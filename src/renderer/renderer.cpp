@@ -700,11 +700,36 @@ void Renderer::render(const charlie::Camera& camera)
   };
 
   vkCmdBeginRendering(cmd, &render_info);
-
   draw_objects(cmd, render_objects_, camera);
+  vkCmdEndRendering(cmd);
 
+  const VkRenderingAttachmentInfo gui_color_attachments_info{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = current_swapchain_image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+  };
+  const VkRenderingInfo gui_render_info{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+      .pNext = VK_NULL_HANDLE,
+      .flags = 0,
+      .renderArea =
+          {
+              .offset =
+                  {
+                      .x = 0,
+                      .y = 0,
+                  },
+              .extent = to_extent2d(window_->resolution()),
+          },
+      .layerCount = 1,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &gui_color_attachments_info,
+      .pStencilAttachment = nullptr,
+  };
+  vkCmdBeginRendering(cmd, &gui_render_info);
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-
   vkCmdEndRendering(cmd);
 
   // prepare current swapchain image for presenting
@@ -730,14 +755,14 @@ void Renderer::render(const charlie::Camera& camera)
 
   VK_CHECK(vkEndCommandBuffer(cmd));
 
-  static constexpr VkPipelineStageFlags waitStage =
+  static constexpr VkPipelineStageFlags wait_stage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   const VkSubmitInfo submit = {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
       .pWaitSemaphores = &frame.present_semaphore,
-      .pWaitDstStageMask = &waitStage,
+      .pWaitDstStageMask = &wait_stage,
       .commandBufferCount = 1,
       .pCommandBuffers = &cmd,
       .signalSemaphoreCount = 1,
@@ -747,7 +772,7 @@ void Renderer::render(const charlie::Camera& camera)
   VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, frame.render_fence));
 
   VkSwapchainKHR swapchain = swapchain_.get();
-  VkPresentInfoKHR present_info = {
+  const VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = nullptr,
       .waitSemaphoreCount = 1,
