@@ -84,7 +84,7 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
   set_asset_path();
 
   auto& window_manager = WindowManager::instance();
-  Window window = window_manager.create(1440, 900, "Charlie3D");
+  Window window = window_manager.create(1920, 1080, "Charlie3D");
   charlie::Renderer renderer{window};
 
   charlie::Camera camera;

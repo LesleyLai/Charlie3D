@@ -1,8 +1,12 @@
 add_subdirectory(vulkan_helpers)
 
 add_library(charlie3d_renderer
-        renderer.hpp
-        renderer.cpp mesh.hpp header_only_libs_impl.cpp camera.cpp camera.hpp mesh.cpp)
+        renderer.hpp renderer.cpp
+        mesh.hpp mesh.cpp
+        header_only_libs_impl.cpp
+        camera.cpp camera.hpp
+        render_pass.hpp
+        imgui_render_pass.cpp imgui_render_pass.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(tinyobjloader REQUIRED)

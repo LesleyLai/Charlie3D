@@ -18,6 +18,8 @@
 #include "camera.hpp"
 #include "mesh.hpp"
 
+#include "imgui_render_pass.hpp"
+
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
@@ -65,16 +67,10 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   };
 }
 
-[[nodiscard]] constexpr auto to_extent2d(Resolution res)
-{
-  return VkExtent2D{.width = res.width, .height = res.height};
-}
-
 [[nodiscard]] auto init_swapchain(vkh::Context& context, Window& window) -> vkh::Swapchain
 {
-  vkh::Swapchain swapchain;
-  swapchain = vkh::Swapchain(context, vkh::SwapchainCreateInfo{to_extent2d(window.resolution())});
-  return swapchain;
+  return vkh::Swapchain(context,
+                        vkh::SwapchainCreateInfo{charlie::to_extent2d(window.resolution())});
 }
 
 [[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer, const char* filename)
@@ -192,13 +188,56 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   return image;
 }
 
+void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
+                                                   VkImage current_swapchain_image)
+{
+  const VkImageMemoryBarrier image_memory_barrier_to_render{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .image = current_swapchain_image,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      }};
+
+  vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                       &image_memory_barrier_to_render);
+}
+
+void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
+                                                VkImage current_swapchain_image)
+{
+  const VkImageMemoryBarrier image_memory_barrier_to_present{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      .image = current_swapchain_image,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      }};
+
+  vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                       &image_memory_barrier_to_present);
+}
+
 } // anonymous namespace
 
 namespace charlie {
 
 Renderer::Renderer(Window& window)
     : window_{&window}, context_{window}, graphics_queue_{context_.graphics_queue()},
-      graphics_queue_family_index{context_.graphics_queue_family_index()},
       swapchain_{init_swapchain(context_, window)}
 {
   init_depth_image();
@@ -208,7 +247,7 @@ Renderer::Renderer(Window& window)
   init_pipelines();
   init_upload_context();
 
-  init_imgui(swapchain_.image_format());
+  imgui_render_pass_ = std::make_unique<ImguiRenderPass>(*this, swapchain_.image_format());
 
   texture_.image =
       load_image_from_file(*this, "../../assets/lost_empire/lost_empire-RGBA.png").value();
@@ -504,64 +543,6 @@ void Renderer::init_upload_context()
                                &upload_context_.command_pool));
 }
 
-void Renderer::init_imgui(VkFormat color_attachment_format)
-{
-  // 1: create descriptor pool for IMGUI
-  //  the size of the pool is very oversize, but it's copied from imgui demo
-  //  itself.
-  static constexpr VkDescriptorPoolSize pool_sizes[] = {
-      {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
-      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
-      {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
-
-  static constexpr VkDescriptorPoolCreateInfo pool_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-      .maxSets = 1000,
-      .poolSizeCount = beyond::size(pool_sizes),
-      .pPoolSizes = pool_sizes,
-  };
-
-  VK_CHECK(vkCreateDescriptorPool(context_.device(), &pool_info, nullptr, &imgui_pool_));
-
-  // 2: initialize imgui library
-
-  ImGui::CreateContext();
-
-  ImGui_ImplGlfw_InitForVulkan(window_->glfw_window(), true);
-
-  ImGui_ImplVulkan_InitInfo init_info = {
-      .Instance = context_.instance(),
-      .PhysicalDevice = context_.physical_device(),
-      .Device = context_.device(),
-      .QueueFamily = context_.graphics_queue_family_index(),
-      .Queue = context_.graphics_queue(),
-      .PipelineCache = VK_NULL_HANDLE,
-      .DescriptorPool = imgui_pool_,
-      .MinImageCount = 3,
-      .ImageCount = 3,
-      .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-
-      .UseDynamicRendering = true,
-      .ColorAttachmentFormat = color_attachment_format,
-
-      .CheckVkResultFn = [](VkResult result) { VK_CHECK(result); },
-  };
-  ImGui_ImplVulkan_Init(&init_info, VK_NULL_HANDLE);
-
-  // execute a gpu command to upload imgui font textures
-  immediate_submit([&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
-  ImGui_ImplVulkan_DestroyFontUploadObjects();
-}
-
 void Renderer::render(const charlie::Camera& camera)
 {
   const auto& frame = current_frame();
@@ -585,30 +566,11 @@ void Renderer::render(const charlie::Camera& camera)
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };
 
-  ImGui::Render();
+  imgui_render_pass_->pre_render();
 
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  // prepare current swapchain image for rendering
-  {
-    const VkImageMemoryBarrier image_memory_barrier_to_render{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .image = current_swapchain_image,
-        .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        }};
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr,
-                         1, &image_memory_barrier_to_render);
-  }
+  transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
 
   // Begin dynamic rendering
   const VkRenderingAttachmentInfo color_attachments_info{
@@ -651,44 +613,9 @@ void Renderer::render(const charlie::Camera& camera)
   draw_objects(cmd, render_objects_, camera);
   vkCmdEndRendering(cmd);
 
-  const VkRenderingAttachmentInfo gui_color_attachments_info{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = current_swapchain_image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-  };
-  const VkRenderingInfo gui_render_info{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-      .renderArea = render_area,
-      .layerCount = 1,
-      .colorAttachmentCount = 1,
-      .pColorAttachments = &gui_color_attachments_info,
-  };
-  vkCmdBeginRendering(cmd, &gui_render_info);
-  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-  vkCmdEndRendering(cmd);
+  imgui_render_pass_->render(cmd, current_swapchain_image_view);
 
-  // prepare current swapchain image for presenting
-  {
-    const VkImageMemoryBarrier image_memory_barrier_to_present{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .image = current_swapchain_image,
-        .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        }};
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                         &image_memory_barrier_to_present);
-  }
+  transit_current_swapchain_image_to_present(cmd, current_swapchain_image);
 
   VK_CHECK(vkEndCommandBuffer(cmd));
 
@@ -868,13 +795,13 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
                             const charlie::Camera& camera)
 {
   // Copy to object buffer
-  void* object_data = context_.map(current_frame().object_buffer).value();
-  auto* object_data_typed = static_cast<GPUObjectData*>(object_data);
+  auto* object_data =
+      static_cast<GPUObjectData*>(context_.map(current_frame().object_buffer).value());
 
   const std::size_t object_count = objects.size();
   BEYOND_ENSURE(object_count <= max_object_count);
   for (std::size_t i = 0; i < objects.size(); ++i) {
-    object_data_typed[i].model = objects[i].model_matrix;
+    object_data[i].model = objects[i].model_matrix;
   }
 
   context_.unmap(current_frame().object_buffer);
@@ -954,7 +881,7 @@ Renderer::~Renderer()
 {
   vkDeviceWaitIdle(context_);
 
-  vkDestroyDescriptorPool(context_, imgui_pool_, nullptr);
+  imgui_render_pass_ = nullptr;
 
   ImGui_ImplVulkan_Shutdown();
   ImGui_ImplGlfw_Shutdown();

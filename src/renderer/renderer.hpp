@@ -9,8 +9,7 @@
 #include <beyond/utils/function_ref.hpp>
 
 #include "mesh.hpp"
-
-#include <imgui.h>
+#include "render_pass.hpp"
 
 #include <span>
 #include <unordered_map>
@@ -70,6 +69,11 @@ struct UploadContext {
   VkCommandPool command_pool = {};
 };
 
+[[nodiscard]] constexpr auto to_extent2d(Resolution res)
+{
+  return VkExtent2D{.width = res.width, .height = res.height};
+}
+
 class Camera;
 
 class Renderer {
@@ -108,6 +112,11 @@ public:
 
   void immediate_submit(beyond::function_ref<void(VkCommandBuffer)> function);
 
+  [[nodiscard]] auto window() noexcept -> Window&
+  {
+    return *window_;
+  }
+
   [[nodiscard]] auto context() noexcept -> vkh::Context&
   {
     return context_;
@@ -119,7 +128,6 @@ private:
   Window* window_ = nullptr;
   vkh::Context context_;
   VkQueue graphics_queue_{};
-  std::uint32_t graphics_queue_family_index{};
 
   vkh::Swapchain swapchain_;
 
@@ -148,14 +156,13 @@ private:
   VkSampler blocky_sampler_;
   vkh::Texture texture_;
 
-  VkDescriptorPool imgui_pool_;
+  std::unique_ptr<FrameGraphRenderPass> imgui_render_pass_ = nullptr;
 
   void init_frame_data();
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
   void init_upload_context();
-  void init_imgui(VkFormat color_attachment_format);
 
   auto upload_buffer(std::size_t gpu_buffer, const void* data, VkBufferUsageFlags usage)
       -> vkh::Expected<vkh::Buffer>;

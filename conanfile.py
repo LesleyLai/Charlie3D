@@ -18,6 +18,7 @@ class CompressorRecipe(ConanFile):
         self.requires("stb/cci.20220909")
         self.requires("tinyobjloader/1.0.7")
         self.requires("imgui/1.89.8")
+        
         self.requires("catch2/3.4.0")
 
     def generate(self):
