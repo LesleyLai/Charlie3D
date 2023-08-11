@@ -87,6 +87,8 @@ public:
 
   void render(const charlie::Camera& camera);
 
+  void resize(Resolution res);
+
   auto create_material(VkPipeline pipeline, VkPipelineLayout layout, std::string name) -> Material&;
 
   // returns nullptr if it can't be found
@@ -105,17 +107,17 @@ public:
     return frame_number_;
   }
 
+  [[nodiscard]] auto resolution() const noexcept -> Resolution
+  {
+    return resolution_;
+  }
+
   [[nodiscard]] auto current_frame() noexcept -> FrameData&
   {
     return frames_[frame_number_ % frame_overlap];
   }
 
   void immediate_submit(beyond::function_ref<void(VkCommandBuffer)> function);
-
-  [[nodiscard]] auto window() noexcept -> Window&
-  {
-    return *window_;
-  }
 
   [[nodiscard]] auto context() noexcept -> vkh::Context&
   {
@@ -125,7 +127,7 @@ public:
   [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> Mesh&;
 
 private:
-  Window* window_ = nullptr;
+  Resolution resolution_;
   vkh::Context context_;
   VkQueue graphics_queue_{};
 

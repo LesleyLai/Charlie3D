@@ -15,6 +15,7 @@ Swapchain::Swapchain(Context& context, const SwapchainCreateInfo& create_info)
       swapchain_builder.use_default_format_selection()
           .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
           .set_desired_extent(create_info.extent.width, create_info.extent.height)
+          .set_old_swapchain(create_info.old_swapchain)
           .build()
           .value();
 

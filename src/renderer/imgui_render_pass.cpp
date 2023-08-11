@@ -10,7 +10,8 @@
 
 namespace charlie {
 
-ImguiRenderPass::ImguiRenderPass(Renderer& renderer, VkFormat color_attachment_format)
+ImguiRenderPass::ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
+                                 VkFormat color_attachment_format)
     : renderer_{&renderer}
 {
   auto& context = renderer_->context();
@@ -45,7 +46,7 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, VkFormat color_attachment_f
 
   ImGui::CreateContext();
 
-  ImGui_ImplGlfw_InitForVulkan(renderer_->window().glfw_window(), true);
+  ImGui_ImplGlfw_InitForVulkan(window, true);
 
   ImGui_ImplVulkan_InitInfo init_info = {
       .Instance = context.instance(),
@@ -98,7 +99,7 @@ void ImguiRenderPass::render(VkCommandBuffer cmd, VkImageView image_view)
               .x = 0,
               .y = 0,
           },
-      .extent = to_extent2d(renderer_->window().resolution()),
+      .extent = to_extent2d(renderer_->resolution()),
   };
   const VkRenderingInfo gui_render_info{
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,

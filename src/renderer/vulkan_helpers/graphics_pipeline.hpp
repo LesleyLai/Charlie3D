@@ -44,7 +44,6 @@ template <typename T> struct RequiredField {
 
 struct GraphicsPipelineCreateInfo {
   RequiredField<VkPipelineLayout> layout;
-  RequiredField<VkExtent2D> window_extend;
   RequiredField<PipelineRenderingCreateInfo> pipeline_rendering_create_info;
 
   // Optional

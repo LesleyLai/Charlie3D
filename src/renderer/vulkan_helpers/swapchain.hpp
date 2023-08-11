@@ -10,8 +10,11 @@ namespace vkh {
 
 class Context;
 
+class Swapchain;
+
 struct SwapchainCreateInfo {
   VkExtent2D extent;
+  VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
 };
 
 class Swapchain {

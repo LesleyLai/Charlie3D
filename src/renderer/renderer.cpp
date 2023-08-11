@@ -237,8 +237,8 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 namespace charlie {
 
 Renderer::Renderer(Window& window)
-    : window_{&window}, context_{window}, graphics_queue_{context_.graphics_queue()},
-      swapchain_{init_swapchain(context_, window)}
+    : resolution_{window.resolution()}, context_{window},
+      graphics_queue_{context_.graphics_queue()}, swapchain_{init_swapchain(context_, window)}
 {
   init_depth_image();
 
@@ -247,7 +247,8 @@ Renderer::Renderer(Window& window)
   init_pipelines();
   init_upload_context();
 
-  imgui_render_pass_ = std::make_unique<ImguiRenderPass>(*this, swapchain_.image_format());
+  imgui_render_pass_ =
+      std::make_unique<ImguiRenderPass>(*this, window.glfw_window(), swapchain_.image_format());
 
   texture_.image =
       load_image_from_file(*this, "../../assets/lost_empire/lost_empire-RGBA.png").value();
@@ -283,7 +284,7 @@ Renderer::Renderer(Window& window)
         .imageView = texture_.image_view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
-    VkWriteDescriptorSet texture1 = write_descriptor_image(
+    const VkWriteDescriptorSet texture1 = write_descriptor_image(
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, material->texture_set, &image_buffer_info, 0);
     vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
   }
@@ -322,7 +323,7 @@ void Renderer::init_depth_image()
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = depth_format_,
-      .extent = VkExtent3D{window_->resolution().width, window_->resolution().height, 1},
+      .extent = VkExtent3D{resolution_.width, resolution_.height, 1},
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -513,7 +514,6 @@ void Renderer::init_pipelines()
       vkh::create_graphics_pipeline(
           context_,
           {.layout = mesh_pipeline_layout_,
-           .window_extend = to_extent2d(window_->resolution()),
            .pipeline_rendering_create_info =
                vkh::PipelineRenderingCreateInfo{
                    .color_attachment_formats = color_attachment_formats,
@@ -597,7 +597,7 @@ void Renderer::render(const charlie::Camera& camera)
               .x = 0,
               .y = 0,
           },
-      .extent = to_extent2d(window_->resolution()),
+      .extent = to_extent2d(resolution_),
   };
 
   const VkRenderingInfo render_info{
@@ -610,6 +610,19 @@ void Renderer::render(const charlie::Camera& camera)
   };
 
   vkCmdBeginRendering(cmd, &render_info);
+
+  const VkViewport viewport{
+      .x = 0.0f,
+      .y = static_cast<float>(resolution_.height),
+      .width = static_cast<float>(resolution_.width),
+      .height = -static_cast<float>(resolution_.height),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  };
+  vkCmdSetViewport(cmd, 0, 1, &viewport);
+  const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution_)};
+  vkCmdSetScissor(cmd, 0, 1, &scissor);
+
   draw_objects(cmd, render_objects_, camera);
   vkCmdEndRendering(cmd);
 
@@ -950,6 +963,23 @@ void Renderer::immediate_submit(beyond::function_ref<void(VkCommandBuffer)> func
   VK_CHECK(vkWaitForFences(context_, 1, &upload_context_.fence, true, 9999999999));
   VK_CHECK(vkResetFences(context_, 1, &upload_context_.fence));
   VK_CHECK(vkResetCommandPool(context_, upload_context_.command_pool, 0));
+}
+
+void Renderer::resize(Resolution res)
+{
+  context_.wait_idle();
+
+  resolution_ = res;
+
+  // recreate swapchain
+  swapchain_ =
+      vkh::Swapchain(context_, vkh::SwapchainCreateInfo{.extent = charlie::to_extent2d(resolution_),
+                                                        .old_swapchain = swapchain_.get()});
+
+  // recreate depth image
+  vkDestroyImageView(context_, depth_image_view_, nullptr);
+  vmaDestroyImage(context_.allocator(), depth_image_.image, depth_image_.allocation);
+  init_depth_image();
 }
 
 } // namespace charlie

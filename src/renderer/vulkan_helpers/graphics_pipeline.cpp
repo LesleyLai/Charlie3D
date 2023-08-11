@@ -36,25 +36,10 @@ namespace vkh {
       .primitiveRestartEnable = VK_FALSE,
   };
 
-  const VkExtent2D window_extend = create_info.window_extend.value;
-
-  const VkViewport viewport{
-      .x = 0.0f,
-      .y = static_cast<float>(window_extend.height),
-      .width = static_cast<float>(window_extend.width),
-      .height = -static_cast<float>(window_extend.height),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  };
-
-  const VkRect2D scissor{.offset = {0, 0}, .extent = window_extend};
-
   const VkPipelineViewportStateCreateInfo viewport_state{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
       .viewportCount = 1,
-      .pViewports = &viewport,
       .scissorCount = 1,
-      .pScissors = &scissor,
   };
 
   const VkPipelineRasterizationStateCreateInfo rasterizer{
@@ -113,6 +98,14 @@ namespace vkh {
       .stencilAttachmentFormat = pipeline_rendering_create_info.stencil_attachment_format,
   };
 
+  static constexpr VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT,
+                                                      VK_DYNAMIC_STATE_SCISSOR};
+
+  static constexpr VkPipelineDynamicStateCreateInfo dynamic_state_create_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = beyond::size(dynamic_states),
+      .pDynamicStates = dynamic_states};
+
   const VkGraphicsPipelineCreateInfo pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .pNext = &vk_pipeline_rendering_create_info,
@@ -125,6 +118,7 @@ namespace vkh {
       .pMultisampleState = &multisampling,
       .pDepthStencilState = &depth_stencil_state,
       .pColorBlendState = &color_blending,
+      .pDynamicState = &dynamic_state_create_info,
       .layout = create_info.layout.value,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,

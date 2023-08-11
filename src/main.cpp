@@ -73,10 +73,12 @@ struct App {
   App()
       : window{charlie::WindowManager::instance().create(1920, 1080, "Charlie3D",
                                                          {
-                                                             .resizable = false,
+                                                             .resizable = true,
                                                          })},
-        renderer{window}, camera{}
+        renderer{window}
   {
+    const auto [width, height] = window.resolution();
+    camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
   }
 
   void run()
@@ -100,10 +102,15 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
   camera.process_key_input(key, scancode, action, mods);
 }
 
-void resize_callback(GLFWwindow* /*window*/, int width, int height)
+void resize_callback(GLFWwindow* window, int width, int height)
 {
   fmt::print("Window resizes to {}x{}!\n", width, height);
   std::fflush(stdout);
+
+  auto& app = *static_cast<App*>(glfwGetWindowUserPointer(window));
+  app.renderer.resize({.width = beyond::to_u32(width), .height = beyond::to_u32(height)});
+
+  app.camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
 }
 
 void set_asset_path()
