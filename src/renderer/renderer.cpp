@@ -108,7 +108,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   context.unmap(staging_buffer);
   stbi_image_free(pixels);
 
-  VkExtent3D image_extent = {
+  const VkExtent3D image_extent = {
       .width = static_cast<uint32_t>(tex_width),
       .height = static_cast<uint32_t>(tex_height),
       .depth = 1,
@@ -128,7 +128,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                                                      VK_IMAGE_USAGE_TRANSFER_DST_BIT};
 
   vkh::Image image;
-  VmaAllocationCreateInfo image_allocation_create_info = {.usage = VMA_MEMORY_USAGE_GPU_ONLY};
+  const VmaAllocationCreateInfo image_allocation_create_info = {.usage = VMA_MEMORY_USAGE_GPU_ONLY};
 
   // allocate and create the image
   VK_CHECK(vmaCreateImage(context.allocator(), &image_create_info, &image_allocation_create_info,
