@@ -38,7 +38,7 @@ class Context {
 
 public:
   Context() = default;
-  explicit Context(Window& window);
+  explicit Context(charlie::Window& window);
   ~Context();
 
   Context(const Context&) = delete;

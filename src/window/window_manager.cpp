@@ -5,6 +5,8 @@
 
 #include <beyond/utils/panic.hpp>
 
+namespace charlie {
+
 auto WindowManager::instance() -> WindowManager&
 {
   static WindowManager s;
@@ -28,11 +30,14 @@ void WindowManager::pull_events()
 }
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-auto WindowManager::create(int width, int height, const char* title) -> Window
+auto WindowManager::create(int width, int height, const char* title, const WindowOptions& options)
+    -> Window
 {
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_RESIZABLE, options.resizable);
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   GLFWwindow* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
   if (!window) { beyond::panic("Cannot create a glfw window"); }
   return Window{window};
 }
+
+} // namespace charlie

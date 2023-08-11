@@ -17,12 +17,6 @@
 #include <GLFW/glfw3.h>
 #include <utility>
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-  auto* camera = static_cast<charlie::Camera*>(glfwGetWindowUserPointer(window));
-  camera->process_key_input(key, scancode, action, mods);
-}
-
 void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
@@ -71,6 +65,47 @@ void show_gui(charlie::Camera& camera)
   ImGui::End();
 }
 
+struct App {
+  charlie::Window window;
+  charlie::Renderer renderer;
+  charlie::Camera camera;
+
+  App()
+      : window{charlie::WindowManager::instance().create(1920, 1080, "Charlie3D",
+                                                         {
+                                                             .resizable = false,
+                                                         })},
+        renderer{window}, camera{}
+  {
+  }
+
+  void run()
+  {
+    while (!window.should_close()) {
+      charlie::WindowManager::instance().pull_events();
+      window.swap_buffers();
+
+      camera.update();
+
+      show_gui(camera);
+
+      renderer.render(camera);
+    }
+  }
+};
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+  auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
+  camera.process_key_input(key, scancode, action, mods);
+}
+
+void resize_callback(GLFWwindow* /*window*/, int width, int height)
+{
+  fmt::print("Window resizes to {}x{}!\n", width, height);
+  std::fflush(stdout);
+}
+
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
@@ -83,24 +118,12 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
 {
   set_asset_path();
 
-  auto& window_manager = WindowManager::instance();
-  Window window = window_manager.create(1920, 1080, "Charlie3D");
-  charlie::Renderer renderer{window};
+  App app;
+  glfwSetWindowUserPointer(app.window.glfw_window(), &app);
+  glfwSetWindowSizeCallback(app.window.glfw_window(), resize_callback);
+  glfwSetKeyCallback(app.window.glfw_window(), key_callback);
 
-  charlie::Camera camera;
-  glfwSetWindowUserPointer(window.glfw_window(), &camera);
-  glfwSetKeyCallback(window.glfw_window(), key_callback);
+  init_lost_empire_scene(app.renderer);
 
-  init_lost_empire_scene(renderer);
-
-  while (!window.should_close()) {
-    window_manager.pull_events();
-    window.swap_buffers();
-
-    camera.update();
-
-    show_gui(camera);
-
-    renderer.render(camera);
-  }
+  app.run();
 }

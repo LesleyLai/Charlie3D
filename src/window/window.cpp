@@ -1,8 +1,8 @@
 #include "window.hpp"
 
-#include <beyond/utils/panic.hpp>
-
 #include <GLFW/glfw3.h>
+
+namespace charlie {
 
 Window::~Window()
 {
@@ -25,3 +25,5 @@ auto Window::should_close() const noexcept -> bool
   glfwGetWindowSize(window_, &width, &height);
   return Resolution{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
 }
+
+} // namespace charlie

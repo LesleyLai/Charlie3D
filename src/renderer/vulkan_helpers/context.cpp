@@ -33,7 +33,7 @@ auto create_surface_glfw(VkInstance instance, GLFWwindow* window) -> VkSurfaceKH
 
 namespace vkh {
 
-Context::Context(Window& window)
+Context::Context(charlie::Window& window)
 {
   auto instance_ret =
       vkb::InstanceBuilder{}

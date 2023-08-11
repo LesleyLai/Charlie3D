@@ -5,6 +5,9 @@
 #include <utility>
 
 struct GLFWwindow;
+
+namespace charlie {
+
 class WindowManager;
 
 struct Resolution {
@@ -41,3 +44,5 @@ private:
   friend WindowManager;
   explicit Window(GLFWwindow* glfw_window) : window_{glfw_window} {}
 };
+
+} // namespace charlie

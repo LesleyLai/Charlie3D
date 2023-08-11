@@ -67,7 +67,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   };
 }
 
-[[nodiscard]] auto init_swapchain(vkh::Context& context, Window& window) -> vkh::Swapchain
+[[nodiscard]] auto init_swapchain(vkh::Context& context, charlie::Window& window) -> vkh::Swapchain
 {
   return vkh::Swapchain(context,
                         vkh::SwapchainCreateInfo{charlie::to_extent2d(window.resolution())});
