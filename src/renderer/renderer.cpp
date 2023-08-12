@@ -67,12 +67,6 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   };
 }
 
-[[nodiscard]] auto init_swapchain(vkh::Context& context, charlie::Window& window) -> vkh::Swapchain
-{
-  return vkh::Swapchain(context,
-                        vkh::SwapchainCreateInfo{charlie::to_extent2d(window.resolution())});
-}
-
 [[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer, const char* filename)
     -> beyond::optional<vkh::Image>
 {
@@ -88,7 +82,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   }
 
   void* pixel_ptr = static_cast<void*>(pixels);
-  const auto image_size = static_cast<VkDeviceSize>(tex_width * tex_height * 4);
+  const auto image_size = static_cast<VkDeviceSize>(tex_width) * tex_height * 4;
 
   constexpr VkFormat image_format = VK_FORMAT_R8G8B8A8_SRGB;
 
@@ -114,25 +108,14 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
       .depth = 1,
   };
 
-  const VkImageCreateInfo image_create_info{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                                            .pNext = nullptr,
-                                            .flags = 0,
-                                            .imageType = VK_IMAGE_TYPE_2D,
-                                            .format = image_format,
-                                            .extent = image_extent,
-                                            .mipLevels = 1,
-                                            .arrayLayers = 1,
-                                            .samples = VK_SAMPLE_COUNT_1_BIT,
-                                            .tiling = VK_IMAGE_TILING_OPTIMAL,
-                                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT |
-                                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT};
-
-  vkh::Image image;
-  const VmaAllocationCreateInfo image_allocation_create_info = {.usage = VMA_MEMORY_USAGE_GPU_ONLY};
-
-  // allocate and create the image
-  VK_CHECK(vmaCreateImage(context.allocator(), &image_create_info, &image_allocation_create_info,
-                          &image.image, &image.allocation, nullptr));
+  vkh::Image image =
+      vkh::create_image(context,
+                        vkh::ImageCreateInfo{
+                            .format = image_format,
+                            .extent = image_extent,
+                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                        })
+          .expect("Failed to create image");
 
   renderer.immediate_submit([&](VkCommandBuffer cmd) {
     static constexpr VkImageSubresourceRange range = {
@@ -238,7 +221,8 @@ namespace charlie {
 
 Renderer::Renderer(Window& window)
     : resolution_{window.resolution()}, context_{window},
-      graphics_queue_{context_.graphics_queue()}, swapchain_{init_swapchain(context_, window)}
+      graphics_queue_{context_.graphics_queue()},
+      swapchain_{context_, {.extent = to_extent2d(resolution_)}}
 {
   init_depth_image();
 
@@ -250,45 +234,8 @@ Renderer::Renderer(Window& window)
   imgui_render_pass_ =
       std::make_unique<ImguiRenderPass>(*this, window.glfw_window(), swapchain_.image_format());
 
-  texture_.image =
-      load_image_from_file(*this, "../../assets/lost_empire/lost_empire-RGBA.png").value();
-  const VkImageViewCreateInfo image_view_create_info{.sType =
-                                                         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                                     .image = texture_.image.image,
-                                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                                                     .format = VK_FORMAT_R8G8B8A8_SRGB,
-                                                     .subresourceRange = {
-                                                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                         .baseMipLevel = 0,
-                                                         .levelCount = 1,
-                                                         .baseArrayLayer = 0,
-                                                         .layerCount = 1,
-                                                     }};
-  VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr, &texture_.image_view));
-
-  // Create sampler
-  const VkSamplerCreateInfo sampler_info =
-      sampler_create_info(VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-  vkCreateSampler(context_, &sampler_info, nullptr, &blocky_sampler_);
-
-  // alloc descriptor set for material
-  auto* material = get_material("default");
-  BEYOND_ENSURE(material != nullptr);
-  {
-    material->texture_set = descriptor_allocator_->allocate(single_texture_set_layout_).value();
-
-    // write to the descriptor set so that it points to our empire_diffuse
-    // texture
-    VkDescriptorImageInfo image_buffer_info = {
-        .sampler = blocky_sampler_,
-        .imageView = texture_.image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    const VkWriteDescriptorSet texture1 = write_descriptor_image(
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, material->texture_set, &image_buffer_info, 0);
-    vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
-  }
-} // namespace charlie
+  init_texture();
+}
 
 void Renderer::init_frame_data()
 {
@@ -319,24 +266,15 @@ void Renderer::init_frame_data()
 
 void Renderer::init_depth_image()
 {
-  const VkImageCreateInfo image_create_info{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = depth_format_,
-      .extent = VkExtent3D{resolution_.width, resolution_.height, 1},
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
-
-  static constexpr VmaAllocationCreateInfo depth_image_alloc_info = {
-      .usage = VMA_MEMORY_USAGE_GPU_ONLY,
-      .requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-  };
-
-  VK_CHECK(vmaCreateImage(context_.allocator(), &image_create_info, &depth_image_alloc_info,
-                          &depth_image_.image, &depth_image_.allocation, nullptr));
+  depth_image_ =
+      vkh::create_image(context_,
+                        vkh::ImageCreateInfo{
+                            .format = depth_format_,
+                            .extent = VkExtent3D{resolution_.width, resolution_.height, 1},
+                            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                            .debug_name = "Depth Image",
+                        })
+          .expect("Fail to create depth image");
 
   const VkImageViewCreateInfo image_view_create_info{.sType =
                                                          VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -541,6 +479,48 @@ void Renderer::init_upload_context()
 
   VK_CHECK(vkCreateCommandPool(context_, &command_pool_create_info, nullptr,
                                &upload_context_.command_pool));
+}
+
+void Renderer::init_texture()
+{
+  texture_.image =
+      load_image_from_file(*this, "../../assets/lost_empire/lost_empire-RGBA.png").value();
+  const VkImageViewCreateInfo image_view_create_info{.sType =
+                                                         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                                     .image = texture_.image.image,
+                                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                                     .format = VK_FORMAT_R8G8B8A8_SRGB,
+                                                     .subresourceRange = {
+                                                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                         .baseMipLevel = 0,
+                                                         .levelCount = 1,
+                                                         .baseArrayLayer = 0,
+                                                         .layerCount = 1,
+                                                     }};
+  VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr, &texture_.image_view));
+
+  // Create sampler
+  const VkSamplerCreateInfo sampler_info =
+      sampler_create_info(VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+  vkCreateSampler(context_, &sampler_info, nullptr, &blocky_sampler_);
+
+  // alloc descriptor set for material
+  auto* material = get_material("default");
+  BEYOND_ENSURE(material != nullptr);
+  {
+    material->texture_set = descriptor_allocator_->allocate(single_texture_set_layout_).value();
+
+    // write to the descriptor set so that it points to our empire_diffuse
+    // texture
+    VkDescriptorImageInfo image_buffer_info = {
+        .sampler = blocky_sampler_,
+        .imageView = texture_.image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    const VkWriteDescriptorSet texture1 = write_descriptor_image(
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, material->texture_set, &image_buffer_info, 0);
+    vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
+  }
 }
 
 void Renderer::render(const charlie::Camera& camera)
@@ -896,12 +876,9 @@ Renderer::~Renderer()
 
   imgui_render_pass_ = nullptr;
 
-  ImGui_ImplVulkan_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
-  ImGui::DestroyContext();
-
   vkDestroyImageView(context_, texture_.image_view, nullptr);
-  vmaDestroyImage(context_.allocator(), texture_.image.image, texture_.image.allocation);
+  vkh::destroy_image(context_, texture_.image);
+  vkDestroySampler(context_, blocky_sampler_, nullptr);
 
   for (const auto& [_, mesh] : meshes_) {
     vkh::destroy_buffer(context_, mesh.vertex_buffer);
@@ -915,9 +892,7 @@ Renderer::~Renderer()
   vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
 
   vkDestroyImageView(context_, depth_image_view_, nullptr);
-  vmaDestroyImage(context_.allocator(), depth_image_.image, depth_image_.allocation);
-
-  vkDestroySampler(context_, blocky_sampler_, nullptr);
+  vkh::destroy_image(context_, depth_image_);
 
   descriptor_allocator_ = nullptr;
   descriptor_layout_cache_ = nullptr;
@@ -978,7 +953,7 @@ void Renderer::resize(Resolution res)
 
   // recreate depth image
   vkDestroyImageView(context_, depth_image_view_, nullptr);
-  vmaDestroyImage(context_.allocator(), depth_image_.image, depth_image_.allocation);
+  vkh::destroy_image(context_, depth_image_);
   init_depth_image();
 }
 

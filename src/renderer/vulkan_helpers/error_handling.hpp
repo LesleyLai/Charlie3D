@@ -8,7 +8,7 @@
 
 #define VK_CHECK(x)                                                                                \
   do {                                                                                             \
-    VkResult err = x;                                                                              \
+    const VkResult err = x;                                                                        \
     if (err) {                                                                                     \
       fmt::print(stderr, "Vulkan error: {}\n",                                                     \
                  static_cast<std::underlying_type_t<VkResult>>(err));                              \
@@ -16,7 +16,9 @@
   } while (0)
 
 #define VKH_TRY(expr)                                                                              \
-  if (VkResult result = (expr); result != VK_SUCCESS) { return beyond::make_unexpected(result); }
+  if (const VkResult result = (expr); result != VK_SUCCESS) {                                      \
+    return beyond::make_unexpected(result);                                                        \
+  }
 
 namespace vkh {
 

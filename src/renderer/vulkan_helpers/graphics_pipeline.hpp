@@ -6,6 +6,7 @@
 #include <string>
 
 #include "error_handling.hpp"
+#include "required_field.hpp"
 #include "unique_resource.hpp"
 
 namespace vkh {
@@ -35,11 +36,6 @@ struct PipelineRenderingCreateInfo {
   std::span<const VkFormat> color_attachment_formats;
   VkFormat depth_attachment_format = VK_FORMAT_UNDEFINED;
   VkFormat stencil_attachment_format = VK_FORMAT_UNDEFINED;
-};
-
-template <typename T> struct RequiredField {
-  T value;
-  explicit(false) RequiredField(T v) : value{v} {}
 };
 
 struct GraphicsPipelineCreateInfo {

@@ -3,6 +3,7 @@
 #include "../window/window.hpp"
 #include "vulkan_helpers/buffer.hpp"
 #include "vulkan_helpers/context.hpp"
+#include "vulkan_helpers/image.hpp"
 #include "vulkan_helpers/swapchain.hpp"
 
 #include <beyond/math/matrix.hpp>
@@ -16,11 +17,6 @@
 #include <vector>
 
 namespace vkh {
-
-struct Image {
-  VkImage image = {};
-  VmaAllocation allocation = {};
-};
 
 struct Texture {
   Image image;
@@ -129,6 +125,7 @@ public:
 private:
   Resolution resolution_;
   vkh::Context context_;
+  VkQueue transfer_queue_{};
   VkQueue graphics_queue_{};
 
   vkh::Swapchain swapchain_;
@@ -155,7 +152,7 @@ private:
   std::unordered_map<std::string, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
-  VkSampler blocky_sampler_;
+  VkSampler blocky_sampler_ = VK_NULL_HANDLE;
   vkh::Texture texture_;
 
   std::unique_ptr<FrameGraphRenderPass> imgui_render_pass_ = nullptr;
@@ -165,6 +162,7 @@ private:
   void init_descriptors();
   void init_pipelines();
   void init_upload_context();
+  void init_texture();
 
   auto upload_buffer(std::size_t gpu_buffer, const void* data, VkBufferUsageFlags usage)
       -> vkh::Expected<vkh::Buffer>;

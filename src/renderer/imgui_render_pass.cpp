@@ -76,6 +76,10 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
 ImguiRenderPass::~ImguiRenderPass()
 {
   vkDestroyDescriptorPool(renderer_->context(), descriptor_pool_, nullptr);
+
+  ImGui_ImplVulkan_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
 }
 
 void ImguiRenderPass::pre_render()
