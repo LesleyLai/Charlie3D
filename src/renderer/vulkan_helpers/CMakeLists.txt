@@ -25,7 +25,7 @@ add_library(vulkan_helper
         sync.hpp
         sync.cpp
         unique_resource.hpp
-        vma_impl.cpp image.cpp image.hpp required_field.hpp)
+        vma_impl.cpp image.cpp image.hpp required_field.hpp image_view.cpp image_view.hpp)
 target_link_libraries(vulkan_helper
         PUBLIC
         charlie3d::compiler_options

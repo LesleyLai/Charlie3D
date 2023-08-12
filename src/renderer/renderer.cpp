@@ -4,6 +4,7 @@
 #include "vulkan_helpers/descriptor_pool.hpp"
 #include "vulkan_helpers/descriptor_utils.hpp"
 #include "vulkan_helpers/graphics_pipeline.hpp"
+#include "vulkan_helpers/image_view.hpp"
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
@@ -54,7 +55,7 @@ sampler_create_info(VkFilter filters,
 }
 
 auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
-                            VkDescriptorImageInfo* image_info, uint32_t binding)
+                            const VkDescriptorImageInfo* image_info, uint32_t binding)
     -> VkWriteDescriptorSet
 {
   return VkWriteDescriptorSet{
@@ -275,23 +276,16 @@ void Renderer::init_depth_image()
                             .debug_name = "Depth Image",
                         })
           .expect("Fail to create depth image");
-
-  const VkImageViewCreateInfo image_view_create_info{.sType =
-                                                         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                                     .pNext = nullptr,
-                                                     .flags = 0,
-                                                     .image = depth_image_.image,
-                                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                                                     .format = depth_format_,
-                                                     .subresourceRange = {
-                                                         .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                                         .baseMipLevel = 0,
-                                                         .levelCount = 1,
-                                                         .baseArrayLayer = 0,
-                                                         .layerCount = 1,
-                                                     }};
-
-  VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr, &depth_image_view_));
+  depth_image_view_ =
+      vkh::create_image_view(
+          context_, vkh::ImageViewCreateInfo{.image = depth_image_.image,
+                                             .format = depth_format_,
+                                             .subresource_range =
+                                                 vkh::SubresourceRange{
+                                                     .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                                 },
+                                             .debug_name = "Depth Image View"})
+          .expect("Fail to create depth image view");
 }
 
 void Renderer::init_descriptors()
@@ -485,19 +479,13 @@ void Renderer::init_texture()
 {
   texture_.image =
       load_image_from_file(*this, "../../assets/lost_empire/lost_empire-RGBA.png").value();
-  const VkImageViewCreateInfo image_view_create_info{.sType =
-                                                         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                                     .image = texture_.image.image,
-                                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                                                     .format = VK_FORMAT_R8G8B8A8_SRGB,
-                                                     .subresourceRange = {
-                                                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                         .baseMipLevel = 0,
-                                                         .levelCount = 1,
-                                                         .baseArrayLayer = 0,
-                                                         .layerCount = 1,
-                                                     }};
-  VK_CHECK(vkCreateImageView(context_, &image_view_create_info, nullptr, &texture_.image_view));
+  texture_.image_view =
+      vkh::create_image_view(
+          context_,
+          {.image = texture_.image.image,
+           .format = VK_FORMAT_R8G8B8A8_SRGB,
+           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT}})
+          .expect("Failed to create image view");
 
   // Create sampler
   const VkSamplerCreateInfo sampler_info =
@@ -512,7 +500,7 @@ void Renderer::init_texture()
 
     // write to the descriptor set so that it points to our empire_diffuse
     // texture
-    VkDescriptorImageInfo image_buffer_info = {
+    const VkDescriptorImageInfo image_buffer_info = {
         .sampler = blocky_sampler_,
         .imageView = texture_.image_view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -571,18 +559,17 @@ void Renderer::render(const charlie::Camera& camera)
       .clearValue = VkClearValue{.depthStencil = {.depth = 1.f}},
   };
 
-  const VkRect2D render_area{
-      .offset =
-          {
-              .x = 0,
-              .y = 0,
-          },
-      .extent = to_extent2d(resolution_),
-  };
-
   const VkRenderingInfo render_info{
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-      .renderArea = render_area,
+      .renderArea =
+          {
+              .offset =
+                  {
+                      .x = 0,
+                      .y = 0,
+                  },
+              .extent = to_extent2d(resolution_),
+          },
       .layerCount = 1,
       .colorAttachmentCount = 1,
       .pColorAttachments = &color_attachments_info,
