@@ -11,6 +11,7 @@
 
 #include "mesh.hpp"
 #include "render_pass.hpp"
+#include "uploader.hpp"
 
 #include <span>
 #include <unordered_map>
@@ -58,11 +59,6 @@ struct FrameData {
   VkDescriptorSet object_descriptor_set{};
 
   vkh::Buffer indirect_buffer{};
-};
-
-struct UploadContext {
-  VkFence fence = {};
-  VkCommandPool command_pool = {};
 };
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
@@ -113,11 +109,14 @@ public:
     return frames_[frame_number_ % frame_overlap];
   }
 
-  void immediate_submit(beyond::function_ref<void(VkCommandBuffer)> function);
-
   [[nodiscard]] auto context() noexcept -> vkh::Context&
   {
     return context_;
+  }
+
+  [[nodiscard]] auto upload_context() noexcept -> UploadContext&
+  {
+    return upload_context_;
   }
 
   [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> Mesh&;
@@ -161,7 +160,6 @@ private:
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
-  void init_upload_context();
   void init_texture();
 
   auto upload_buffer(std::size_t gpu_buffer, const void* data, VkBufferUsageFlags usage)

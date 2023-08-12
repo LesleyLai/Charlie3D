@@ -118,7 +118,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                         })
           .expect("Failed to create image");
 
-  renderer.immediate_submit([&](VkCommandBuffer cmd) {
+  immediate_submit(context, renderer.upload_context(), [&](VkCommandBuffer cmd) {
     static constexpr VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .baseMipLevel = 0,
@@ -230,7 +230,7 @@ Renderer::Renderer(Window& window)
   init_frame_data();
   init_descriptors();
   init_pipelines();
-  init_upload_context();
+  upload_context_ = init_upload_context(context_).expect("Successfully create upload context");
 
   imgui_render_pass_ =
       std::make_unique<ImguiRenderPass>(*this, window.glfw_window(), swapchain_.image_format());
@@ -460,19 +460,6 @@ void Renderer::init_pipelines()
           .value();
 
   create_material(default_pipeline_, mesh_pipeline_layout_, "default");
-}
-
-void Renderer::init_upload_context()
-{
-  upload_context_.fence =
-      vkh::create_fence(context_, vkh::FenceCreateInfo{.debug_name = "Upload Fence"}).value();
-  const VkCommandPoolCreateInfo command_pool_create_info{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = context_.graphics_queue_family_index()};
-
-  VK_CHECK(vkCreateCommandPool(context_, &command_pool_create_info, nullptr,
-                               &upload_context_.command_pool));
 }
 
 void Renderer::init_texture()
@@ -723,7 +710,7 @@ auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFl
                 .value();
         BEYOND_DEFER(vkh::destroy_buffer(context_, vertex_staging_buffer));
 
-        immediate_submit([=](VkCommandBuffer cmd) {
+        immediate_submit(context_, upload_context_, [=](VkCommandBuffer cmd) {
           const VkBufferCopy copy = {
               .srcOffset = 0,
               .dstOffset = 0,
@@ -899,32 +886,6 @@ Renderer::~Renderer()
 void Renderer::add_object(RenderObject object)
 {
   render_objects_.push_back(object);
-}
-
-void Renderer::immediate_submit(beyond::function_ref<void(VkCommandBuffer)> function)
-{
-  VkCommandBuffer cmd =
-      vkh::allocate_command_buffer(context_, {.command_pool = upload_context_.command_pool,
-                                              .debug_name = "Uploading Command Buffer"})
-          .value();
-
-  static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
-
-  function(cmd);
-
-  VK_CHECK(vkEndCommandBuffer(cmd));
-
-  const VkSubmitInfo submit = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd};
-
-  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, upload_context_.fence));
-  VK_CHECK(vkWaitForFences(context_, 1, &upload_context_.fence, true, 9999999999));
-  VK_CHECK(vkResetFences(context_, 1, &upload_context_.fence));
-  VK_CHECK(vkResetCommandPool(context_, upload_context_.command_pool, 0));
 }
 
 void Renderer::resize(Resolution res)

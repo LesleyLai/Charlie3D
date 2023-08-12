@@ -43,22 +43,6 @@ void show_gui(charlie::Camera& camera)
   bool show_gui = true;
   ImGui::Begin("Control Panel", &show_gui);
 
-  ImGui::Text("Scenes:");
-  const char* items[] = {"Lost Empire", "Sponza"};
-  static int item_current_idx = 0;
-  if (ImGui::BeginListBox("##Scenes listbox",
-                          ImVec2(-FLT_MIN, 5 * ImGui::GetTextLineHeightWithSpacing()))) {
-    for (int n = 0; n < IM_ARRAYSIZE(items); n++) {
-      const bool is_selected = (item_current_idx == n);
-      if (ImGui::Selectable(items[n], is_selected)) item_current_idx = n;
-
-      // Set the initial focus when opening the combo (scrolling + keyboard
-      // navigation focus)
-      if (is_selected) ImGui::SetItemDefaultFocus();
-    }
-    ImGui::EndListBox();
-  }
-
   ImGui::Text("Camera:");
   ImGui::InputFloat3("position", camera.position.elem);
 
@@ -105,7 +89,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 void resize_callback(GLFWwindow* window, int width, int height)
 {
   fmt::print("Window resizes to {}x{}!\n", width, height);
-  std::fflush(stdout);
 
   auto& app = *static_cast<App*>(glfwGetWindowUserPointer(window));
   app.renderer.resize({.width = beyond::to_u32(width), .height = beyond::to_u32(height)});

@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 
 #include "renderer.hpp"
+#include "uploader.hpp"
 
 namespace charlie {
 
@@ -68,8 +69,8 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
   ImGui_ImplVulkan_Init(&init_info, VK_NULL_HANDLE);
 
   // execute a gpu command to upload imgui font textures
-  renderer_->immediate_submit(
-      [&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
+  immediate_submit(renderer.context(), renderer.upload_context(),
+                   [&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
   ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 

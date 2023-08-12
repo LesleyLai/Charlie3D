@@ -6,7 +6,9 @@ add_library(charlie3d_renderer
         header_only_libs_impl.cpp
         camera.cpp camera.hpp
         render_pass.hpp
-        imgui_render_pass.cpp imgui_render_pass.hpp)
+        imgui_render_pass.cpp
+        imgui_render_pass.hpp
+        uploader.cpp uploader.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(tinyobjloader REQUIRED)
