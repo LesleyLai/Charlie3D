@@ -432,12 +432,12 @@ void Renderer::init_pipelines()
                                   &mesh_pipeline_layout_));
 
   auto triangle_vert_shader =
-      vkh::load_shader_module_from_file(context_, "shaders/triangle.vert.spv",
+      vkh::load_shader_module_from_file(context_, "shaders/mesh.vert.spv",
                                         {.debug_name = "Mesh Vertex Shader"})
           .value();
 
   auto triangle_frag_shader =
-      vkh::load_shader_module_from_file(context_, "shaders/triangle.frag.spv",
+      vkh::load_shader_module_from_file(context_, "shaders/mesh.frag.spv",
                                         {.debug_name = "Mesh Fragment Shader"})
           .value();
   BEYOND_DEFER({
