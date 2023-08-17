@@ -17,6 +17,8 @@
 #include <GLFW/glfw3.h>
 #include <utility>
 
+#include <tracy/Tracy.hpp>
+
 void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
@@ -76,6 +78,8 @@ struct App {
       show_gui(camera);
 
       renderer.render(camera);
+
+      FrameMark;
     }
   }
 };
@@ -109,6 +113,9 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
   set_asset_path();
 
   App app;
+
+  // OPTICK_START_CAPTURE();
+
   glfwSetWindowUserPointer(app.window.glfw_window(), &app);
   glfwSetWindowSizeCallback(app.window.glfw_window(), resize_callback);
   glfwSetKeyCallback(app.window.glfw_window(), key_callback);
@@ -116,4 +123,8 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
   init_lost_empire_scene(app.renderer);
 
   app.run();
+
+  //  OPTICK_STOP_CAPTURE();
+  //  OPTICK_SAVE_CAPTURE("profiler_dump");
+  //  OPTICK_SHUTDOWN();
 }

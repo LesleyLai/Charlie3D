@@ -24,6 +24,9 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyVulkan.hpp>
+
 namespace {
 
 struct GPUObjectData {
@@ -175,6 +178,8 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
 {
+  ZoneScoped;
+
   const VkImageMemoryBarrier image_memory_barrier_to_render{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -197,6 +202,8 @@ void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
 void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
                                                 VkImage current_swapchain_image)
 {
+  ZoneScoped;
+
   const VkImageMemoryBarrier image_memory_barrier_to_present{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -226,7 +233,6 @@ Renderer::Renderer(Window& window)
       swapchain_{context_, {.extent = to_extent2d(resolution_)}}
 {
   init_depth_image();
-
   init_frame_data();
   init_descriptors();
   init_pipelines();
@@ -245,23 +251,33 @@ void Renderer::init_frame_data()
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
       .queueFamilyIndex = context_.graphics_queue_family_index()};
 
-  for (auto& frame : frames_) {
+  for (unsigned int i = 0; i < frame_overlap; ++i) {
+    FrameData& frame = frames_[i];
     VK_CHECK(
         vkCreateCommandPool(context_, &command_pool_create_info, nullptr, &frame.command_pool));
     frame.main_command_buffer =
-        vkh::allocate_command_buffer(context_,
-                                     {
-                                         .command_pool = frame.command_pool,
-                                         .debug_name = "Main Command Buffer",
-                                     })
+        vkh::allocate_command_buffer(
+            context_,
+            {
+                .command_pool = frame.command_pool,
+                .debug_name = fmt::format("Main Command Buffer {}", i).c_str(),
+            })
             .value();
     frame.present_semaphore =
-        vkh::create_semaphore(context_, {.debug_name = "Present Semaphore"}).value();
+        vkh::create_semaphore(context_,
+                              {.debug_name = fmt::format("Present Semaphore {}", i).c_str()})
+            .value();
     frame.render_semaphore =
-        vkh::create_semaphore(context_, {.debug_name = "Render Semaphore"}).value();
-    frame.render_fence = vkh::create_fence(context_, {.flags = VK_FENCE_CREATE_SIGNALED_BIT,
-                                                      .debug_name = "Render Fence"})
-                             .value();
+        vkh::create_semaphore(context_,
+                              {.debug_name = fmt::format("Render Semaphore {}", i).c_str()})
+            .value();
+    frame.render_fence =
+        vkh::create_fence(context_, {.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+                                     .debug_name = fmt::format("Render Fence {}", i).c_str()})
+            .value();
+
+    frame.tracy_vk_ctx = TracyVkContext(context_.physical_device(), context_.device(),
+                                        context_.graphics_queue(), frame.main_command_buffer);
   }
 }
 
@@ -485,8 +501,7 @@ void Renderer::init_texture()
   {
     material->texture_set = descriptor_allocator_->allocate(single_texture_set_layout_).value();
 
-    // write to the descriptor set so that it points to our empire_diffuse
-    // texture
+    // write to the descriptor set so that it points to our empire_diffuse texture
     const VkDescriptorImageInfo image_buffer_info = {
         .sampler = blocky_sampler_,
         .imageView = texture_.image_view,
@@ -500,22 +515,33 @@ void Renderer::init_texture()
 
 void Renderer::render(const charlie::Camera& camera)
 {
+  ZoneScopedN("Render");
+
   const auto& frame = current_frame();
   constexpr std::uint64_t one_second = 1'000'000'000;
 
   // wait until the GPU has finished rendering the last frame.
-  VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, one_second));
+
+  {
+    ZoneScopedN("wait for render fence");
+    VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, one_second));
+  }
+
   VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
 
   std::uint32_t swapchain_image_index = 0;
-  VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, one_second, frame.present_semaphore, nullptr,
-                                 &swapchain_image_index));
+  {
+    ZoneScopedN("vkAcquireNextImageKHR");
+    VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, one_second, frame.present_semaphore,
+                                   nullptr, &swapchain_image_index));
+  }
   const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
   const auto current_swapchain_image_view = swapchain_.image_views()[swapchain_image_index];
 
   VK_CHECK(vkResetCommandBuffer(frame.main_command_buffer, 0));
 
   VkCommandBuffer cmd = frame.main_command_buffer;
+
   static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -523,83 +549,112 @@ void Renderer::render(const charlie::Camera& camera)
 
   imgui_render_pass_->pre_render();
 
-  VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
+  {
+    VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
-  transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
+    {
+      TracyVkCollect(frame.tracy_vk_ctx, cmd);
+      TracyVkZone(frame.tracy_vk_ctx, cmd, "Render");
 
-  // Begin dynamic rendering
-  const VkRenderingAttachmentInfo color_attachments_info{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = current_swapchain_image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = VkClearValue{.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
-  };
+      transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
 
-  const VkRenderingAttachmentInfo depth_attachments_info{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = depth_image_view_,
-      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = VkClearValue{.depthStencil = {.depth = 1.f}},
-  };
+      {
+        ZoneScopedN("Mesh Render Pass");
+        TracyVkZone(frame.tracy_vk_ctx, cmd, "Mesh Render Pass");
 
-  const VkRenderingInfo render_info{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-      .renderArea =
-          {
-              .offset =
-                  {
-                      .x = 0,
-                      .y = 0,
-                  },
-              .extent = to_extent2d(resolution_),
-          },
-      .layerCount = 1,
-      .colorAttachmentCount = 1,
-      .pColorAttachments = &color_attachments_info,
-      .pDepthAttachment = &depth_attachments_info,
-  };
+        const VkRenderingAttachmentInfo color_attachments_info{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = current_swapchain_image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = VkClearValue{.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}},
+        };
 
-  vkCmdBeginRendering(cmd, &render_info);
+        const VkRenderingAttachmentInfo depth_attachments_info{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = depth_image_view_,
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = VkClearValue{.depthStencil = {.depth = 1.f}},
+        };
 
-  const VkViewport viewport{
-      .x = 0.0f,
-      .y = static_cast<float>(resolution_.height),
-      .width = static_cast<float>(resolution_.width),
-      .height = -static_cast<float>(resolution_.height),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  };
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
-  const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution_)};
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
+        const VkRenderingInfo render_info{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea =
+                {
+                    .offset =
+                        {
+                            .x = 0,
+                            .y = 0,
+                        },
+                    .extent = to_extent2d(resolution_),
+                },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &color_attachments_info,
+            .pDepthAttachment = &depth_attachments_info,
+        };
 
-  draw_objects(cmd, render_objects_, camera);
-  vkCmdEndRendering(cmd);
+        vkCmdBeginRendering(cmd, &render_info);
 
-  imgui_render_pass_->render(cmd, current_swapchain_image_view);
+        const VkViewport viewport{
+            .x = 0.0f,
+            .y = static_cast<float>(resolution_.height),
+            .width = static_cast<float>(resolution_.width),
+            .height = -static_cast<float>(resolution_.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution_)};
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-  transit_current_swapchain_image_to_present(cmd, current_swapchain_image);
+        draw_objects(cmd, render_objects_, camera);
+        vkCmdEndRendering(cmd);
+      }
 
-  VK_CHECK(vkEndCommandBuffer(cmd));
+      {
+        ZoneScopedN("ImGUI Render Pass");
+        TracyVkZone(frame.tracy_vk_ctx, cmd, "ImGUI Render Pass");
+        imgui_render_pass_->render(cmd, current_swapchain_image_view);
+      }
 
-  static constexpr VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  const VkSubmitInfo submit = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .pNext = nullptr,
-      .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &frame.present_semaphore,
-      .pWaitDstStageMask = &wait_stage,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &cmd,
-      .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &frame.render_semaphore,
-  };
+      transit_current_swapchain_image_to_present(cmd, current_swapchain_image);
+    }
 
-  VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, frame.render_fence));
+    VK_CHECK(vkEndCommandBuffer(cmd));
+  }
+
+  {
+    ZoneScopedN("vkQueueSubmit");
+    static constexpr VkPipelineStageFlags wait_stage =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    const VkSubmitInfo submit = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &frame.present_semaphore,
+        .pWaitDstStageMask = &wait_stage,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &frame.render_semaphore,
+    };
+
+    VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, frame.render_fence));
+  }
+
+  present(swapchain_image_index);
+
+  ++frame_number_;
+}
+void Renderer::present(uint32_t& swapchain_image_index)
+{
+  ZoneScopedN("vkQueuePresentKHR");
+
+  const auto& frame = current_frame();
 
   VkSwapchainKHR swapchain = swapchain_.get();
   const VkPresentInfoKHR present_info = {
@@ -611,9 +666,8 @@ void Renderer::render(const charlie::Camera& camera)
       .pSwapchains = &swapchain,
       .pImageIndices = &swapchain_image_index,
   };
-  VK_CHECK(vkQueuePresentKHR(graphics_queue_, &present_info));
 
-  ++frame_number_;
+  VK_CHECK(vkQueuePresentKHR(graphics_queue_, &present_info));
 }
 
 [[nodiscard]] auto Renderer::create_material(VkPipeline pipeline, VkPipelineLayout layout,
@@ -872,6 +926,8 @@ Renderer::~Renderer()
   descriptor_layout_cache_ = nullptr;
 
   for (auto& frame : frames_) {
+    TracyVkDestroy(frame.tracy_vk_ctx);
+
     vkh::destroy_buffer(context_, frame.indirect_buffer);
     vkh::destroy_buffer(context_, frame.object_buffer);
     vkh::destroy_buffer(context_, frame.camera_buffer);

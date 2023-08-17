@@ -101,3 +101,8 @@ if (CHARLIE3D_USE_UBSAN)
     target_link_libraries(charlie3d_compiler_options INTERFACE
             -fsanitize=undefined)
 endif ()
+
+option(CHARLIE3D_USE_PROFILER "Enable Instrumentation Profiling Support" ON)
+if (CHARLIE3D_USE_PROFILER)
+    target_compile_definitions(charlie3d_compiler_options INTERFACE TRACY_ENABLE)
+endif ()

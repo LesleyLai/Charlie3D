@@ -13,6 +13,7 @@ add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(tinyobjloader REQUIRED)
 find_package(stb REQUIRED)
+find_package(tracy REQUIRED)
 
 target_link_libraries(charlie3d_renderer
         PUBLIC
@@ -21,6 +22,7 @@ target_link_libraries(charlie3d_renderer
         charlie3d::util
         beyond::core
         third-party::imgui_bindings
+        Tracy::TracyClient
         PRIVATE
         tinyobjloader::tinyobjloader
         stb::stb

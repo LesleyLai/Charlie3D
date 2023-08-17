@@ -30,6 +30,12 @@ class DescriptorBuilder;
 
 } // namespace vkh
 
+namespace tracy {
+
+class VkCtx;
+
+}
+
 namespace charlie {
 
 struct Material {
@@ -59,6 +65,8 @@ struct FrameData {
   VkDescriptorSet object_descriptor_set{};
 
   vkh::Buffer indirect_buffer{};
+
+  tracy::VkCtx* tracy_vk_ctx = nullptr;
 };
 
 [[nodiscard]] constexpr auto to_extent2d(Resolution res)
@@ -164,6 +172,7 @@ private:
 
   auto upload_buffer(std::size_t gpu_buffer, const void* data, VkBufferUsageFlags usage)
       -> vkh::Expected<vkh::Buffer>;
+  void present(uint32_t& swapchain_image_index);
 };
 
 } // namespace charlie

@@ -9,8 +9,6 @@ namespace vkh {
 auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_view_create_info)
     -> Expected<VkImageView>
 {
-  const SubresourceRange& subresource_range = image_view_create_info.subresource_range.value;
-
   const VkImageViewCreateInfo create_info{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                           .pNext = nullptr,
                                           .flags = image_view_create_info.flags,
@@ -18,13 +16,8 @@ auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_v
                                           .viewType = image_view_create_info.view_type,
                                           .format = image_view_create_info.format.value,
                                           .components = image_view_create_info.components,
-                                          .subresourceRange = {
-                                              .aspectMask = subresource_range.aspect_mask.value,
-                                              .baseMipLevel = subresource_range.base_mip_level,
-                                              .levelCount = subresource_range.level_count,
-                                              .baseArrayLayer = subresource_range.base_array_layer,
-                                              .layerCount = subresource_range.layer_count,
-                                          }};
+                                          .subresourceRange =
+                                              image_view_create_info.subresource_range.value};
 
   VkImageView image_view = VK_NULL_HANDLE;
   VKH_TRY(vkCreateImageView(context, &create_info, nullptr, &image_view));

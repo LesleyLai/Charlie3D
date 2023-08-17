@@ -21,6 +21,18 @@ struct SubresourceRange {
   uint32_t level_count = 1;
   uint32_t base_array_layer = 0;
   uint32_t layer_count = 1;
+
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  explicit(false) operator VkImageSubresourceRange() const
+  {
+    return VkImageSubresourceRange{
+        .aspectMask = this->aspect_mask.value,
+        .baseMipLevel = base_mip_level,
+        .levelCount = level_count,
+        .baseArrayLayer = base_array_layer,
+        .layerCount = layer_count,
+    };
+  }
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
