@@ -37,6 +37,8 @@ struct Mesh {
   std::uint32_t index_count{};
 };
 
+void destroy_mesh(vkh::Context& context, const Mesh& mesh);
+
 } // namespace charlie
 
 #endif // CHARLIE3D_MESH_HPP

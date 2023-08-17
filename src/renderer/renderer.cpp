@@ -942,12 +942,7 @@ Renderer::~Renderer()
   vkh::destroy_image(context_, texture_.image);
   vkDestroySampler(context_, blocky_sampler_, nullptr);
 
-  for (const auto& [_, mesh] : meshes_) {
-    vkh::destroy_buffer(context_, mesh.position_buffer);
-    vkh::destroy_buffer(context_, mesh.normal_buffer);
-    vkh::destroy_buffer(context_, mesh.uv_buffer);
-    vkh::destroy_buffer(context_, mesh.index_buffer);
-  }
+  for (const auto& [_, mesh] : meshes_) { destroy_mesh(context_, mesh); }
 
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);
