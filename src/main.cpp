@@ -34,7 +34,7 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
                                             .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
 }
 
-void show_gui(charlie::Camera& camera)
+void show_gui(charlie::Camera& /*camera*/)
 {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -45,8 +45,8 @@ void show_gui(charlie::Camera& camera)
   bool show_gui = true;
   ImGui::Begin("Control Panel", &show_gui);
 
-  ImGui::Text("Camera:");
-  ImGui::InputFloat3("position", camera.position.elem);
+  // ImGui::Text("Camera:");
+  // ImGui::InputFloat3("position", camera.position.elem);
 
   ImGui::End();
 }
@@ -54,6 +54,7 @@ void show_gui(charlie::Camera& camera)
 struct App {
   charlie::Window window;
   charlie::Renderer renderer;
+  charlie::FirstPersonCameraController first_person_controller;
   charlie::Camera camera;
 
   App()
@@ -61,8 +62,9 @@ struct App {
                                                          {
                                                              .resizable = true,
                                                          })},
-        renderer{window}
+        renderer{window}, camera{first_person_controller}
   {
+
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
   }
@@ -114,8 +116,6 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
 
   App app;
 
-  // OPTICK_START_CAPTURE();
-
   glfwSetWindowUserPointer(app.window.glfw_window(), &app);
   glfwSetWindowSizeCallback(app.window.glfw_window(), resize_callback);
   glfwSetKeyCallback(app.window.glfw_window(), key_callback);
@@ -123,8 +123,4 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
   init_lost_empire_scene(app.renderer);
 
   app.run();
-
-  //  OPTICK_STOP_CAPTURE();
-  //  OPTICK_SAVE_CAPTURE("profiler_dump");
-  //  OPTICK_SHUTDOWN();
 }
