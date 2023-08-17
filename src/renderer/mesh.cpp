@@ -29,8 +29,7 @@ auto CPUMesh::load(std::string_view filename) -> CPUMesh
     beyond::panic(fmt::format("Mesh loading error: {}", err));
   }
 
-  std::vector<Vertex> vertices;
-  std::vector<std::uint32_t> indices;
+  CPUMesh mesh;
 
   for (const auto& shape : shapes) {
     std::size_t index_offset = 0;
@@ -51,14 +50,15 @@ auto CPUMesh::load(std::string_view filename) -> CPUMesh
         const auto ux = attrib.texcoords[2 * idx.texcoord_index + 0];
         const auto uy = attrib.texcoords[2 * idx.texcoord_index + 1];
 
-        vertices.push_back(
-            Vertex{.position = {vx, vy, vz}, .normal = {nx, ny, nz}, .uv = {ux, 1 - uy}});
+        mesh.positions.emplace_back(vx, vy, vz);
+        mesh.normals.emplace_back(nx, ny, nz);
+        mesh.uv.emplace_back(ux, 1 - uy);
       }
       index_offset += fv;
     }
   }
 
-  return CPUMesh{.vertices = std::move(vertices), .indices = std::move(indices)};
+  return mesh;
 }
 
 } // namespace charlie

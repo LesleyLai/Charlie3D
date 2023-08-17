@@ -17,47 +17,21 @@ class Context;
 
 namespace charlie {
 
-struct Vertex {
-  beyond::Vec3 position;
-  beyond::Vec3 normal;
-  beyond::Vec2 uv;
-
-  [[nodiscard]] static constexpr auto binding_description()
-  {
-    return VkVertexInputBindingDescription{
-        .binding = 0,
-        .stride = sizeof(Vertex),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    };
-  }
-
-  [[nodiscard]] static constexpr auto attributes_descriptions()
-  {
-    return std::to_array<VkVertexInputAttributeDescription>(
-        {{.location = 0,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = beyond::to_u32(offsetof(Vertex, position))},
-         {.location = 1,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = beyond::to_u32(offsetof(Vertex, normal))},
-         {.location = 2,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32_SFLOAT,
-          .offset = beyond::to_u32(offsetof(Vertex, uv))}});
-  }
-};
-
 struct CPUMesh {
-  std::vector<Vertex> vertices;
+  std::vector<beyond::Vec3> positions;
+  std::vector<beyond::Vec3> normals;
+  std::vector<beyond::Vec2> uv;
+
   std::vector<std::uint32_t> indices;
 
   [[nodiscard]] static auto load(std::string_view filename) -> CPUMesh;
 };
 
 struct Mesh {
-  vkh::Buffer vertex_buffer{};
+  vkh::Buffer position_buffer{};
+  vkh::Buffer normal_buffer{};
+  vkh::Buffer uv_buffer{};
+
   vkh::Buffer index_buffer{};
   std::uint32_t vertices_count{};
   std::uint32_t index_count{};

@@ -455,10 +455,30 @@ void Renderer::init_pipelines()
        .module = triangle_frag_shader,
        .pName = "main"}};
 
-  const VkVertexInputBindingDescription binding_descriptions[] = {Vertex::binding_description()};
+  static constexpr VkVertexInputBindingDescription binding_descriptions[] = {
+      {
+          .binding = 0,
+          .stride = sizeof(beyond::Vec3),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      },
+      {
+          .binding = 1,
+          .stride = sizeof(beyond::Vec3),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      },
+      {
+          .binding = 2,
+          .stride = sizeof(beyond::Vec2),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      }};
+
+  static constexpr VkVertexInputAttributeDescription attribute_descriptions[] = {
+      {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
+      {.location = 1, .binding = 1, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
+      {.location = 2, .binding = 2, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0}};
 
   const VkFormat color_attachment_formats[] = {swapchain_.image_format()};
-  default_pipeline_ =
+  mesh_pipeline_ =
       vkh::create_graphics_pipeline(
           context_,
           {.layout = mesh_pipeline_layout_,
@@ -469,13 +489,12 @@ void Renderer::init_pipelines()
                },
            .debug_name = "Mesh Graphics Pipeline",
            .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
-                                              .attribute_descriptions =
-                                                  Vertex::attributes_descriptions()},
+                                              .attribute_descriptions = attribute_descriptions},
            .shader_stages = triangle_shader_stages,
            .cull_mode = vkh::CullMode::back})
           .value();
 
-  create_material(default_pipeline_, mesh_pipeline_layout_, "default");
+  create_material(mesh_pipeline_, mesh_pipeline_layout_, "default");
 }
 
 void Renderer::init_texture()
@@ -696,12 +715,23 @@ void Renderer::present(uint32_t& swapchain_image_index)
 {
 
   // const auto index_buffer_size = indices.size() * sizeof(uint32_t);
-  const std::span<const Vertex> vertices = cpu_mesh.vertices;
+  const std::span<const beyond::Vec3> positions = cpu_mesh.positions;
+  const std::span<const beyond::Vec3> normals = cpu_mesh.normals;
+  const std::span<const beyond::Vec2> uv = cpu_mesh.uv;
+
   const std::span<const std::uint32_t> indices = cpu_mesh.indices;
 
-  const vkh::Buffer vertex_buffer = upload_buffer(vertices.size_bytes(), cpu_mesh.vertices.data(),
+  const vkh::Buffer position_buffer =
+      upload_buffer(positions.size_bytes(), cpu_mesh.positions.data(),
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
+          .value();
+
+  const vkh::Buffer normal_buffer = upload_buffer(normals.size_bytes(), cpu_mesh.normals.data(),
                                                   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
                                         .value();
+
+  const vkh::Buffer uv_buffer =
+      upload_buffer(uv.size_bytes(), cpu_mesh.uv.data(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
 
   //  auto index_staging_buffer =
   //      vkh::create_buffer_from_data(context,
@@ -737,9 +767,11 @@ void Renderer::present(uint32_t& swapchain_image_index)
 
   // vkh::destroy_buffer(context, index_staging_buffer);
 
-  auto gpu_mesh = Mesh{.vertex_buffer = vertex_buffer,
+  auto gpu_mesh = Mesh{.position_buffer = position_buffer,
+                       .normal_buffer = normal_buffer,
+                       .uv_buffer = uv_buffer,
                        //.index_buffer = index_buffer,
-                       .vertices_count = static_cast<std::uint32_t>(vertices.size()),
+                       .vertices_count = static_cast<std::uint32_t>(positions.size()),
                        .index_count = static_cast<std::uint32_t>(indices.size())};
   const auto [it, succeed] = meshes_.insert({mesh_name, gpu_mesh});
   if (!succeed) { beyond::panic(fmt::format("A mesh named {} is already exist!", mesh_name)); }
@@ -885,7 +917,9 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
 
     if (draw.mesh != last_mesh) {
       constexpr VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(cmd, 0, 1, &draw.mesh->vertex_buffer.buffer, &offset);
+      vkCmdBindVertexBuffers(cmd, 0, 1, &draw.mesh->position_buffer.buffer, &offset);
+      vkCmdBindVertexBuffers(cmd, 1, 1, &draw.mesh->normal_buffer.buffer, &offset);
+      vkCmdBindVertexBuffers(cmd, 2, 1, &draw.mesh->uv_buffer.buffer, &offset);
     }
 
     const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndirectCommand);
@@ -909,14 +943,16 @@ Renderer::~Renderer()
   vkDestroySampler(context_, blocky_sampler_, nullptr);
 
   for (const auto& [_, mesh] : meshes_) {
-    vkh::destroy_buffer(context_, mesh.vertex_buffer);
+    vkh::destroy_buffer(context_, mesh.position_buffer);
+    vkh::destroy_buffer(context_, mesh.normal_buffer);
+    vkh::destroy_buffer(context_, mesh.uv_buffer);
     vkh::destroy_buffer(context_, mesh.index_buffer);
   }
 
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);
 
-  vkDestroyPipeline(context_, default_pipeline_, nullptr);
+  vkDestroyPipeline(context_, mesh_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
 
   vkDestroyImageView(context_, depth_image_view_, nullptr);

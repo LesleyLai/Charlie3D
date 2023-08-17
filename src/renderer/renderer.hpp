@@ -153,7 +153,7 @@ private:
   VkDescriptorSetLayout single_texture_set_layout_ = {};
 
   VkPipelineLayout mesh_pipeline_layout_ = {};
-  VkPipeline default_pipeline_ = {};
+  VkPipeline mesh_pipeline_ = {};
 
   std::unordered_map<std::string, Material> materials_;
   std::unordered_map<std::string, Mesh> meshes_;
