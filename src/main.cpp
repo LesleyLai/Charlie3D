@@ -13,7 +13,6 @@
 #include <imgui_impl_vulkan.h>
 
 #include <GLFW/glfw3.h>
-#include <utility>
 
 #include <tracy/Tracy.hpp>
 
@@ -61,7 +60,7 @@ struct App {
 
     bool show_control_panel = true;
     const auto resolution = window.resolution();
-    const float control_panel_width = ImGui::GetFontSize() * 20.f;
+    const float control_panel_width = ImGui::GetFontSize() * 25.f;
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(resolution.width) - control_panel_width, 0));
     ImGui::SetNextWindowSize(ImVec2(control_panel_width, static_cast<float>(resolution.height)));
     ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
@@ -90,8 +89,13 @@ struct App {
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-  auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
-  camera.on_key_input(key, scancode, action, mods);
+  ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+
+  const ImGuiIO& io = ImGui::GetIO();
+  if (!io.WantCaptureKeyboard) {
+    auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
+    camera.on_key_input(key, scancode, action, mods);
+  }
 }
 
 void resize_callback(GLFWwindow* window, int width, int height)
@@ -115,10 +119,21 @@ void cursor_callback(GLFWwindow* window, double xpos, double ypos)
   }
 }
 
+void mouse_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+  ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+
+  const ImGuiIO& io = ImGui::GetIO();
+  if (!io.WantCaptureMouse) {
+    auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
+    camera.on_mouse_scroll(static_cast<float>(xoffset), static_cast<float>(yoffset));
+  }
+}
+
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
-  auto asset_path = charlie::locate_asset_path(current_path).expect("Cannot find assets folder!");
+  auto asset_path = charlie::locate_asset_path().expect("Cannot find assets folder!");
 
   Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
 }
@@ -132,6 +147,7 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
   glfwSetWindowUserPointer(app.window.glfw_window(), &app);
   glfwSetWindowSizeCallback(app.window.glfw_window(), resize_callback);
   glfwSetCursorPosCallback(app.window.glfw_window(), cursor_callback);
+  glfwSetScrollCallback(app.window.glfw_window(), mouse_scroll_callback);
   glfwSetKeyCallback(app.window.glfw_window(), key_callback);
 
   init_lost_empire_scene(app.renderer);
