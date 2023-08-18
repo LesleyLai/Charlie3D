@@ -7,9 +7,7 @@
 #include "utils/configuration.hpp"
 #include "utils/file.hpp"
 
-#include <beyond/math/angle.hpp>
 #include <beyond/math/transform.hpp>
-#include <beyond/types/optional.hpp>
 
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
@@ -34,27 +32,11 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
                                             .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
 }
 
-void show_gui(charlie::Camera& /*camera*/)
-{
-  ImGui_ImplVulkan_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
-  ImGui::NewFrame();
-
-  // ImGui::ShowDemoWindow();
-
-  bool show_gui = true;
-  ImGui::Begin("Control Panel", &show_gui);
-
-  // ImGui::Text("Camera:");
-  // ImGui::InputFloat3("position", camera.position.elem);
-
-  ImGui::End();
-}
-
 struct App {
   charlie::Window window;
   charlie::Renderer renderer;
   charlie::FirstPersonCameraController first_person_controller;
+  charlie::ArcballCameraController arcball_controller;
   charlie::Camera camera;
 
   App()
@@ -62,11 +44,31 @@ struct App {
                                                          {
                                                              .resizable = true,
                                                          })},
-        renderer{window}, camera{first_person_controller}
+        renderer{window}, camera{arcball_controller}
   {
 
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+  }
+
+  void draw_gui()
+  {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // ImGui::ShowDemoWindow();
+
+    bool show_control_panel = true;
+    const auto resolution = window.resolution();
+    const float control_panel_width = ImGui::GetFontSize() * 20.f;
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(resolution.width) - control_panel_width, 0));
+    ImGui::SetNextWindowSize(ImVec2(control_panel_width, static_cast<float>(resolution.height)));
+    ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
+
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
+
+    ImGui::End();
   }
 
   void run()
@@ -77,7 +79,7 @@ struct App {
 
       camera.update();
 
-      show_gui(camera);
+      draw_gui();
 
       renderer.render(camera);
 
@@ -89,7 +91,7 @@ struct App {
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
   auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
-  camera.process_key_input(key, scancode, action, mods);
+  camera.on_key_input(key, scancode, action, mods);
 }
 
 void resize_callback(GLFWwindow* window, int width, int height)
@@ -100,6 +102,17 @@ void resize_callback(GLFWwindow* window, int width, int height)
   app.renderer.resize({.width = beyond::to_u32(width), .height = beyond::to_u32(height)});
 
   app.camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+}
+
+void cursor_callback(GLFWwindow* window, double xpos, double ypos)
+{
+  ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+
+  const ImGuiIO& io = ImGui::GetIO();
+  if (!io.WantCaptureMouse) {
+    auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
+    camera.on_mouse_move(window, static_cast<int>(xpos), static_cast<int>(ypos));
+  }
 }
 
 void set_asset_path()
@@ -118,6 +131,7 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
 
   glfwSetWindowUserPointer(app.window.glfw_window(), &app);
   glfwSetWindowSizeCallback(app.window.glfw_window(), resize_callback);
+  glfwSetCursorPosCallback(app.window.glfw_window(), cursor_callback);
   glfwSetKeyCallback(app.window.glfw_window(), key_callback);
 
   init_lost_empire_scene(app.renderer);

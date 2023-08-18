@@ -16,7 +16,7 @@ namespace {
 auto create_surface_glfw(VkInstance instance, GLFWwindow* window) -> VkSurfaceKHR
 {
   VkSurfaceKHR surface = VK_NULL_HANDLE;
-  VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
+  const VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
   if (err) {
     const char* error_msg = nullptr;
     int ret = glfwGetError(&error_msg);

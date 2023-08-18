@@ -47,6 +47,16 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
 
   ImGui::CreateContext();
 
+  ImGuiIO& io = ImGui::GetIO();
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+  ImFontConfig default_config{};
+  default_config.SizePixels = 16;
+  io.Fonts->AddFontDefault(&default_config);
+  io.Fonts->Build();
+
   ImGui_ImplGlfw_InitForVulkan(window, true);
 
   ImGui_ImplVulkan_InitInfo init_info = {
