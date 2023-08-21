@@ -491,7 +491,7 @@ void Renderer::init_pipelines()
            .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
                                               .attribute_descriptions = attribute_descriptions},
            .shader_stages = triangle_shader_stages,
-           .cull_mode = vkh::CullMode::back})
+           .cull_mode = vkh::CullMode::none})
           .value();
 
   create_material(mesh_pipeline_, mesh_pipeline_layout_, "default");
@@ -713,55 +713,19 @@ void Renderer::present(uint32_t& swapchain_image_index)
 [[nodiscard]] auto Renderer::upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh)
     -> Mesh&
 {
+  static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-  const vkh::Buffer position_buffer =
-      upload_buffer(cpu_mesh.positions, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
+  const vkh::Buffer position_buffer = upload_buffer(cpu_mesh.positions, buffer_usage).value();
+  const vkh::Buffer normal_buffer = upload_buffer(cpu_mesh.normals, buffer_usage).value();
+  const vkh::Buffer uv_buffer = upload_buffer(cpu_mesh.uv, buffer_usage).value();
 
-  const vkh::Buffer normal_buffer =
-      upload_buffer(cpu_mesh.normals, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
-
-  const vkh::Buffer uv_buffer =
-      upload_buffer(cpu_mesh.uv, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
-
-  // const auto index_buffer_size = indices.size() * sizeof(uint32_t);
-  //  auto index_staging_buffer =
-  //      vkh::create_buffer_from_data(context,
-  //                                   {.size = index_buffer_size,
-  //                                    .usage =
-  //                                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-  //                                    .memory_usage =
-  //                                    VMA_MEMORY_USAGE_CPU_TO_GPU, .debug_name
-  //                                    = "Mesh Index Staging Buffer"},
-  //                                   indices.data())
-  //          .value();
-  //
-  //  auto index_buffer =
-  //      vkh::create_buffer(context, {.size = index_buffer_size,
-  //                                   .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-  //                                   |
-  //                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-  //                                   .memory_usage =
-  //                                   VMA_MEMORY_USAGE_GPU_ONLY, .debug_name =
-  //                                   "Mesh Index Buffer"})
-  //          .value();
-  //
-  //  immediate_submit([=](VkCommandBuffer cmd) {
-  //    const VkBufferCopy copy = {
-  //        .srcOffset = 0,
-  //        .dstOffset = 0,
-  //        .size = index_buffer_size,
-  //    };
-  //    vkCmdCopyBuffer(cmd, index_staging_buffer.buffer, index_buffer.buffer,
-  //    1,
-  //                    &copy);
-  //  });
-
-  // vkh::destroy_buffer(context, index_staging_buffer);
+  const vkh::Buffer index_buffer =
+      upload_buffer(cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT).value();
 
   auto gpu_mesh = Mesh{.position_buffer = position_buffer,
                        .normal_buffer = normal_buffer,
                        .uv_buffer = uv_buffer,
-                       //.index_buffer = index_buffer,
+                       .index_buffer = index_buffer,
                        .vertices_count = static_cast<std::uint32_t>(cpu_mesh.positions.size()),
                        .index_count = static_cast<std::uint32_t>(cpu_mesh.indices.size())};
   const auto [it, succeed] = meshes_.insert({mesh_name, gpu_mesh});
@@ -877,14 +841,15 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
 
   {
     auto* draw_commands =
-        context_.map<VkDrawIndirectCommand>(current_frame().indirect_buffer).value();
+        context_.map<VkDrawIndexedIndirectCommand>(current_frame().indirect_buffer).value();
     BEYOND_ENSURE(draw_commands != nullptr);
 
     for (std::uint32_t i = 0; i < objects.size(); ++i) {
-      draw_commands[i] = VkDrawIndirectCommand{
-          .vertexCount = objects[i].mesh->vertices_count,
+      draw_commands[i] = VkDrawIndexedIndirectCommand{
+          .indexCount = objects[i].mesh->index_count,
           .instanceCount = 1,
-          .firstVertex = 0,
+          .firstIndex = 0,
+          .vertexOffset = 0,
           .firstInstance = i,
       };
     }
@@ -911,12 +876,13 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
       vkCmdBindVertexBuffers(cmd, 0, 1, &draw.mesh->position_buffer.buffer, &offset);
       vkCmdBindVertexBuffers(cmd, 1, 1, &draw.mesh->normal_buffer.buffer, &offset);
       vkCmdBindVertexBuffers(cmd, 2, 1, &draw.mesh->uv_buffer.buffer, &offset);
+      vkCmdBindIndexBuffer(cmd, draw.mesh->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
     const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndirectCommand);
     constexpr uint32_t draw_stride = sizeof(VkDrawIndirectCommand);
-    vkCmdDrawIndirect(cmd, current_frame().indirect_buffer, indirect_offset, draw.count,
-                      draw_stride);
+    vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, indirect_offset, draw.count,
+                             draw_stride);
 
     last_material = draw.material;
     last_mesh = draw.mesh;

@@ -1,6 +1,7 @@
 #include "../utils/configuration.hpp"
 
 #include <filesystem>
+#include <numeric>
 
 #include "mesh.hpp"
 #include "tiny_obj_loader.h"
@@ -32,6 +33,7 @@ auto CPUMesh::load(std::string_view filename) -> CPUMesh
   CPUMesh mesh;
 
   for (const auto& shape : shapes) {
+
     std::size_t index_offset = 0;
     for (std::size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
       const auto fv = std::size_t(shape.mesh.num_face_vertices[f]);
@@ -57,6 +59,9 @@ auto CPUMesh::load(std::string_view filename) -> CPUMesh
       index_offset += fv;
     }
   }
+
+  mesh.indices.resize(mesh.positions.size());
+  std::iota(mesh.indices.begin(), mesh.indices.end(), 0);
 
   return mesh;
 }
