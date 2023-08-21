@@ -714,25 +714,16 @@ void Renderer::present(uint32_t& swapchain_image_index)
     -> Mesh&
 {
 
-  // const auto index_buffer_size = indices.size() * sizeof(uint32_t);
-  const std::span<const beyond::Vec3> positions = cpu_mesh.positions;
-  const std::span<const beyond::Vec3> normals = cpu_mesh.normals;
-  const std::span<const beyond::Vec2> uv = cpu_mesh.uv;
-
-  const std::span<const std::uint32_t> indices = cpu_mesh.indices;
-
   const vkh::Buffer position_buffer =
-      upload_buffer(positions.size_bytes(), cpu_mesh.positions.data(),
-                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
-          .value();
+      upload_buffer(cpu_mesh.positions, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
 
-  const vkh::Buffer normal_buffer = upload_buffer(normals.size_bytes(), cpu_mesh.normals.data(),
-                                                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
-                                        .value();
+  const vkh::Buffer normal_buffer =
+      upload_buffer(cpu_mesh.normals, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
 
   const vkh::Buffer uv_buffer =
-      upload_buffer(uv.size_bytes(), cpu_mesh.uv.data(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
+      upload_buffer(cpu_mesh.uv, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT).value();
 
+  // const auto index_buffer_size = indices.size() * sizeof(uint32_t);
   //  auto index_staging_buffer =
   //      vkh::create_buffer_from_data(context,
   //                                   {.size = index_buffer_size,
@@ -771,8 +762,8 @@ void Renderer::present(uint32_t& swapchain_image_index)
                        .normal_buffer = normal_buffer,
                        .uv_buffer = uv_buffer,
                        //.index_buffer = index_buffer,
-                       .vertices_count = static_cast<std::uint32_t>(positions.size()),
-                       .index_count = static_cast<std::uint32_t>(indices.size())};
+                       .vertices_count = static_cast<std::uint32_t>(cpu_mesh.positions.size()),
+                       .index_count = static_cast<std::uint32_t>(cpu_mesh.indices.size())};
   const auto [it, succeed] = meshes_.insert({mesh_name, gpu_mesh});
   if (!succeed) { beyond::panic(fmt::format("A mesh named {} is already exist!", mesh_name)); }
   return it->second;

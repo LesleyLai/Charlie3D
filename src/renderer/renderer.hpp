@@ -170,8 +170,18 @@ private:
   void init_pipelines();
   void init_texture();
 
-  auto upload_buffer(std::size_t gpu_buffer, const void* data, VkBufferUsageFlags usage)
+  auto upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage)
       -> vkh::Expected<vkh::Buffer>;
+
+  template <class Container>
+  auto upload_buffer(const Container& buffer, VkBufferUsageFlags usage)
+      -> vkh::Expected<vkh::Buffer>
+    requires(std::contiguous_iterator<typename Container::iterator>)
+  {
+    return upload_buffer(buffer.size() * sizeof(typename Container::value_type), buffer.data(),
+                         usage);
+  }
+
   void present(uint32_t& swapchain_image_index);
 };
 
