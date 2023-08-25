@@ -18,6 +18,10 @@
 
 #include <chrono>
 
+#ifdef _WIN32
+#include <ShellScalingAPI.h>
+#endif
+
 void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
@@ -63,6 +67,10 @@ void draw_gui(charlie::Window& window, charlie::Camera& camera)
 
 int main()
 {
+#ifdef _WIN32
+  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+#endif
+
   set_asset_path();
 
   auto& window_manager = charlie::WindowManager::instance();
@@ -101,7 +109,7 @@ int main()
 
           fmt::print("Window resizes to {}x{}!\n", width, height);
 
-          renderer.resize({.width = beyond::to_u32(width), .height = beyond::to_u32(height)});
+          renderer.resize(window.resolution());
           camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
         }
         break;

@@ -31,7 +31,7 @@ WindowManager::~WindowManager()
 auto WindowManager::create(int width, int height, const char* title, const WindowOptions& options)
     -> Window
 {
-  uint32_t window_flags = SDL_WINDOW_VULKAN;
+  uint32_t window_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI;
   if (options.resizable) { window_flags |= SDL_WINDOW_RESIZABLE; }
 
   auto* window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width,

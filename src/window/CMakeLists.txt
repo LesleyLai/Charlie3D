@@ -14,4 +14,8 @@ target_link_libraries(charlie3d_window
         SDL2::SDL2-static
         beyond::core
         )
+#if (WIN32)
+#    # High-dpi support
+#    target_link_libraries(charlie3d_window PRIVATE Shcore.lib)
+#endif ()
 target_compile_definitions(charlie3d_window PUBLIC SDL_MAIN_HANDLED)
