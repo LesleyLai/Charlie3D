@@ -704,50 +704,50 @@ void Renderer::present(uint32_t& swapchain_image_index)
   return it == materials_.end() ? nullptr : &it->second;
 }
 
-[[nodiscard]] auto Renderer::get_mesh(const std::string& name) -> Mesh*
-{
-  auto it = meshes_.find(name);
-  return it == meshes_.end() ? nullptr : &it->second;
-}
-
 [[nodiscard]] auto Renderer::upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh)
-    -> Mesh&
+    -> MeshHandle
 {
   static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-  const vkh::Buffer position_buffer = upload_buffer(cpu_mesh.positions, buffer_usage).value();
-  const vkh::Buffer normal_buffer = upload_buffer(cpu_mesh.normals, buffer_usage).value();
-  const vkh::Buffer uv_buffer = upload_buffer(cpu_mesh.uv, buffer_usage).value();
+  const vkh::Buffer position_buffer =
+      upload_buffer(cpu_mesh.positions, buffer_usage, fmt::format("{} Position", mesh_name).c_str())
+          .value();
+  const vkh::Buffer normal_buffer =
+      upload_buffer(cpu_mesh.normals, buffer_usage, fmt::format("{} Normal", mesh_name).c_str())
+          .value();
+  const vkh::Buffer uv_buffer =
+      upload_buffer(cpu_mesh.uv, buffer_usage, fmt::format("{} Texcoord", mesh_name).c_str())
+          .value();
 
-  const vkh::Buffer index_buffer =
-      upload_buffer(cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT).value();
+  const vkh::Buffer index_buffer = upload_buffer(cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                                                 fmt::format("{} Index", mesh_name).c_str())
+                                       .value();
 
-  auto gpu_mesh = Mesh{.position_buffer = position_buffer,
-                       .normal_buffer = normal_buffer,
-                       .uv_buffer = uv_buffer,
-                       .index_buffer = index_buffer,
-                       .vertices_count = static_cast<std::uint32_t>(cpu_mesh.positions.size()),
-                       .index_count = static_cast<std::uint32_t>(cpu_mesh.indices.size())};
-  const auto [it, succeed] = meshes_.insert({mesh_name, gpu_mesh});
-  if (!succeed) { beyond::panic(fmt::format("A mesh named {} is already exist!", mesh_name)); }
-  return it->second;
+  return meshes_.insert(
+      Mesh{.position_buffer = position_buffer,
+           .normal_buffer = normal_buffer,
+           .uv_buffer = uv_buffer,
+           .index_buffer = index_buffer,
+           .vertices_count = static_cast<std::uint32_t>(cpu_mesh.positions.size()),
+           .index_count = static_cast<std::uint32_t>(cpu_mesh.indices.size())});
 }
 
-auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage)
-    -> vkh::Expected<vkh::Buffer>
+auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage,
+                             const char* debug_name) -> vkh::Expected<vkh::Buffer>
 {
   return vkh::create_buffer(context_, {.size = size,
                                        .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                        .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                       .debug_name = "Mesh Vertex Buffer"})
+                                       .debug_name = fmt::format("{} Buffer", debug_name).c_str()})
       .and_then([=, this](vkh::Buffer gpu_buffer) {
         auto vertex_staging_buffer =
-            vkh::create_buffer_from_data(context_,
-                                         {.size = size,
-                                          .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                          .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                          .debug_name = "Mesh Vertex Staging Buffer"},
-                                         data)
+            vkh::create_buffer_from_data(
+                context_,
+                {.size = size,
+                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                 .debug_name = fmt::format("{} Staging Buffer", debug_name).c_str()},
+                data)
                 .value();
         BEYOND_DEFER(vkh::destroy_buffer(context_, vertex_staging_buffer));
 
@@ -766,7 +766,7 @@ auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFl
 namespace {
 
 struct IndirectBatch {
-  const Mesh* mesh = nullptr;
+  MeshHandle mesh;
   const Material* material = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
@@ -777,7 +777,7 @@ struct IndirectBatch {
   std::vector<IndirectBatch> draws;
   if (objects.empty()) return draws;
 
-  const Mesh* last_mesh = nullptr;
+  MeshHandle last_mesh;
   const Material* last_material = nullptr;
 
   for (std::uint32_t i = 0; i < objects.size(); ++i) {
@@ -835,7 +835,7 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
   // Render objects
 
   const Material* last_material = nullptr;
-  const Mesh* last_mesh = nullptr;
+  beyond::optional<MeshHandle> last_mesh;
 
   const auto draws = compact_draws(objects);
 
@@ -845,8 +845,10 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
     BEYOND_ENSURE(draw_commands != nullptr);
 
     for (std::uint32_t i = 0; i < objects.size(); ++i) {
+      const auto& mesh = meshes_.try_get(objects[i].mesh).expect("Cannot find mesh by handle");
+
       draw_commands[i] = VkDrawIndexedIndirectCommand{
-          .indexCount = objects[i].mesh->index_count,
+          .indexCount = mesh.index_count,
           .instanceCount = 1,
           .firstIndex = 0,
           .vertexOffset = 0,
@@ -872,11 +874,13 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
     }
 
     if (draw.mesh != last_mesh) {
+      const auto& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
+
       constexpr VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(cmd, 0, 1, &draw.mesh->position_buffer.buffer, &offset);
-      vkCmdBindVertexBuffers(cmd, 1, 1, &draw.mesh->normal_buffer.buffer, &offset);
-      vkCmdBindVertexBuffers(cmd, 2, 1, &draw.mesh->uv_buffer.buffer, &offset);
-      vkCmdBindIndexBuffer(cmd, draw.mesh->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+      vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
+      vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);
+      vkCmdBindVertexBuffers(cmd, 2, 1, &mesh.uv_buffer.buffer, &offset);
+      vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
     const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndirectCommand);
@@ -899,7 +903,7 @@ Renderer::~Renderer()
   vkh::destroy_image(context_, texture_.image);
   vkDestroySampler(context_, blocky_sampler_, nullptr);
 
-  for (const auto& [_, mesh] : meshes_) { destroy_mesh(context_, mesh); }
+  for (const auto& mesh : meshes_.values()) { destroy_mesh(context_, mesh); }
 
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);

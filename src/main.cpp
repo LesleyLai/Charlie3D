@@ -22,11 +22,11 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
 
   const auto cpu_mesh = charlie::CPUMesh::load("lost_empire/lost_empire.obj");
 
-  const charlie::Mesh& lost_empire_mesh = renderer.upload_mesh_data("lost_empire", cpu_mesh);
+  const charlie::MeshHandle lost_empire_mesh = renderer.upload_mesh_data("lost_empire", cpu_mesh);
 
   const charlie::Material* default_material = renderer.get_material("default");
   BEYOND_ENSURE(default_material != nullptr);
-  renderer.add_object(charlie::RenderObject{.mesh = &lost_empire_mesh,
+  renderer.add_object(charlie::RenderObject{.mesh = lost_empire_mesh,
                                             .material = default_material,
                                             .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
 }

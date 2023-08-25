@@ -6,6 +6,7 @@
 #include "vulkan_helpers/image.hpp"
 #include "vulkan_helpers/swapchain.hpp"
 
+#include <beyond/container/slot_map.hpp>
 #include <beyond/math/matrix.hpp>
 #include <beyond/utils/function_ref.hpp>
 
@@ -38,6 +39,10 @@ class VkCtx;
 
 namespace charlie {
 
+struct MeshHandle : beyond::GenerationalHandle<MeshHandle, uint32_t, 16> {
+  using GenerationalHandle::GenerationalHandle;
+};
+
 struct Material {
   VkPipeline pipeline = {};
   VkPipelineLayout pipeline_layout = {};
@@ -45,7 +50,7 @@ struct Material {
 };
 
 struct RenderObject {
-  const Mesh* mesh = nullptr;
+  MeshHandle mesh;
   const Material* material = nullptr;
   beyond::Mat4 model_matrix;
 };
@@ -94,8 +99,6 @@ public:
   // returns nullptr if it can't be found
   [[nodiscard]] auto get_material(const std::string& name) -> Material*;
 
-  // returns nullptr if it can't be found
-  [[nodiscard]] auto get_mesh(const std::string& name) -> Mesh*;
   void add_object(RenderObject object);
 
   // our draw function
@@ -127,7 +130,7 @@ public:
     return upload_context_;
   }
 
-  [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> Mesh&;
+  [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> MeshHandle;
 
 private:
   Resolution resolution_;
@@ -156,7 +159,7 @@ private:
   VkPipeline mesh_pipeline_ = {};
 
   std::unordered_map<std::string, Material> materials_;
-  std::unordered_map<std::string, Mesh> meshes_;
+  beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
   VkSampler blocky_sampler_ = VK_NULL_HANDLE;
@@ -170,16 +173,16 @@ private:
   void init_pipelines();
   void init_texture();
 
-  auto upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage)
-      -> vkh::Expected<vkh::Buffer>;
+  auto upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage,
+                     const char* debug_name = "") -> vkh::Expected<vkh::Buffer>;
 
   template <class Container>
-  auto upload_buffer(const Container& buffer, VkBufferUsageFlags usage)
+  auto upload_buffer(const Container& buffer, VkBufferUsageFlags usage, const char* debug_name = "")
       -> vkh::Expected<vkh::Buffer>
     requires(std::contiguous_iterator<typename Container::iterator>)
   {
     return upload_buffer(buffer.size() * sizeof(typename Container::value_type), buffer.data(),
-                         usage);
+                         usage, debug_name);
   }
 
   void present(uint32_t& swapchain_image_index);
