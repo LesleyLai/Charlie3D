@@ -47,9 +47,50 @@ struct App {
                                                          })},
         renderer{window}, camera{arcball_controller}
   {
-
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+
+    glfwSetWindowUserPointer(window.glfw_window(), this);
+
+    glfwSetWindowSizeCallback(
+        window.glfw_window(), [](GLFWwindow* glfw_window, int width_, int height_) {
+          fmt::print("Window resizes to {}x{}!\n", width_, height_);
+
+          auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
+          app.renderer.resize({.width = beyond::to_u32(width_), .height = beyond::to_u32(height_)});
+
+          app.camera.aspect_ratio = static_cast<float>(width_) / static_cast<float>(height_);
+        });
+    glfwSetCursorPosCallback(
+        window.glfw_window(), [](GLFWwindow* glfw_window, double xpos, double ypos) {
+          ImGui_ImplGlfw_CursorPosCallback(glfw_window, xpos, ypos);
+
+          const ImGuiIO& io = ImGui::GetIO();
+          if (!io.WantCaptureMouse) {
+            auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
+            app.camera.on_mouse_move(glfw_window, static_cast<int>(xpos), static_cast<int>(ypos));
+          }
+        });
+    glfwSetScrollCallback(
+        window.glfw_window(), [](GLFWwindow* glfw_window, double xoffset, double yoffset) {
+          ImGui_ImplGlfw_ScrollCallback(glfw_window, xoffset, yoffset);
+
+          const ImGuiIO& io = ImGui::GetIO();
+          if (!io.WantCaptureMouse) {
+            auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
+            app.camera.on_mouse_scroll(static_cast<float>(xoffset), static_cast<float>(yoffset));
+          }
+        });
+    glfwSetKeyCallback(window.glfw_window(),
+                       [](GLFWwindow* glfw_window, int key, int scancode, int action, int mods) {
+                         ImGui_ImplGlfw_KeyCallback(glfw_window, key, scancode, action, mods);
+
+                         const ImGuiIO& io = ImGui::GetIO();
+                         if (!io.WantCaptureKeyboard) {
+                           auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
+                           app.camera.on_key_input(key, scancode, action, mods);
+                         }
+                       });
   }
 
   void update()
@@ -108,49 +149,6 @@ private:
   }
 };
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-  ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
-
-  const ImGuiIO& io = ImGui::GetIO();
-  if (!io.WantCaptureKeyboard) {
-    auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
-    camera.on_key_input(key, scancode, action, mods);
-  }
-}
-
-void resize_callback(GLFWwindow* window, int width, int height)
-{
-  fmt::print("Window resizes to {}x{}!\n", width, height);
-
-  auto& app = *static_cast<App*>(glfwGetWindowUserPointer(window));
-  app.renderer.resize({.width = beyond::to_u32(width), .height = beyond::to_u32(height)});
-
-  app.camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
-}
-
-void cursor_callback(GLFWwindow* window, double xpos, double ypos)
-{
-  ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
-
-  const ImGuiIO& io = ImGui::GetIO();
-  if (!io.WantCaptureMouse) {
-    auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
-    camera.on_mouse_move(window, static_cast<int>(xpos), static_cast<int>(ypos));
-  }
-}
-
-void mouse_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-  ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
-
-  const ImGuiIO& io = ImGui::GetIO();
-  if (!io.WantCaptureMouse) {
-    auto& camera = static_cast<App*>(glfwGetWindowUserPointer(window))->camera;
-    camera.on_mouse_scroll(static_cast<float>(xoffset), static_cast<float>(yoffset));
-  }
-}
-
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
@@ -164,12 +162,6 @@ auto main(int /*argc*/, char* /*argv*/[]) -> int
   set_asset_path();
 
   App app;
-
-  glfwSetWindowUserPointer(app.window.glfw_window(), &app);
-  glfwSetWindowSizeCallback(app.window.glfw_window(), resize_callback);
-  glfwSetCursorPosCallback(app.window.glfw_window(), cursor_callback);
-  glfwSetScrollCallback(app.window.glfw_window(), mouse_scroll_callback);
-  glfwSetKeyCallback(app.window.glfw_window(), key_callback);
 
   init_lost_empire_scene(app.renderer);
 
