@@ -16,6 +16,8 @@
 
 #include <tracy/Tracy.hpp>
 
+#include <chrono>
+
 void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
@@ -50,6 +52,41 @@ struct App {
     camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
   }
 
+  void update()
+  {
+    camera.update();
+  }
+
+  void run()
+  {
+    using namespace std::literals::chrono_literals;
+    auto previous_time = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::duration lag = 0ns;
+    static constexpr auto MS_PER_UPDATE = 10ms;
+
+    while (!window.should_close()) {
+      const auto current_time = std::chrono::steady_clock::now();
+      const auto delta_time = current_time - previous_time;
+      previous_time = current_time;
+      lag += delta_time;
+
+      charlie::WindowManager::instance().pull_events();
+      window.swap_buffers();
+
+      draw_gui();
+
+      while (lag >= MS_PER_UPDATE) {
+        update();
+        lag -= MS_PER_UPDATE;
+      }
+
+      renderer.render(camera);
+
+      FrameMark;
+    }
+  }
+
+private:
   void draw_gui()
   {
     ImGui_ImplVulkan_NewFrame();
@@ -68,22 +105,6 @@ struct App {
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
 
     ImGui::End();
-  }
-
-  void run()
-  {
-    while (!window.should_close()) {
-      charlie::WindowManager::instance().pull_events();
-      window.swap_buffers();
-
-      camera.update();
-
-      draw_gui();
-
-      renderer.render(camera);
-
-      FrameMark;
-    }
   }
 };
 

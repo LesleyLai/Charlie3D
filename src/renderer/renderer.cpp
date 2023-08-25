@@ -97,8 +97,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                                                         .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
                                                         .debug_name = "Image Staging Buffer"})
           .value();
-  BEYOND_DEFER(
-      vmaDestroyBuffer(context.allocator(), staging_buffer.buffer, staging_buffer.allocation));
+  BEYOND_DEFER(vkh::destroy_buffer(context, staging_buffer));
 
   // copy data to buffer
   void* data = context.map(staging_buffer).value();
