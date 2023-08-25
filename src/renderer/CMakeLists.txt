@@ -14,6 +14,7 @@ add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 find_package(tinyobjloader REQUIRED)
 find_package(stb REQUIRED)
 find_package(tracy REQUIRED)
+find_package(SDL2 REQUIRED)
 
 target_link_libraries(charlie3d_renderer
         PUBLIC
@@ -26,6 +27,7 @@ target_link_libraries(charlie3d_renderer
         PRIVATE
         tinyobjloader::tinyobjloader
         stb::stb
+        SDL2::SDL2-static
         )
 
 include(../../cmake/CompileShader.cmake)

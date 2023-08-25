@@ -21,9 +21,6 @@
 
 #include "imgui_render_pass.hpp"
 
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
-
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
@@ -238,7 +235,7 @@ Renderer::Renderer(Window& window)
   upload_context_ = init_upload_context(context_).expect("Successfully create upload context");
 
   imgui_render_pass_ =
-      std::make_unique<ImguiRenderPass>(*this, window.glfw_window(), swapchain_.image_format());
+      std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
 
   init_texture();
 }
@@ -538,8 +535,16 @@ void Renderer::render(const charlie::Camera& camera)
   const auto& frame = current_frame();
   constexpr std::uint64_t one_second = 1'000'000'000;
 
-  // wait until the GPU has finished rendering the last frame.
+  std::uint32_t swapchain_image_index = 0;
+  {
+    ZoneScopedN("vkAcquireNextImageKHR");
+    const VkResult result = vkAcquireNextImageKHR(
+        context_, swapchain_, one_second, frame.present_semaphore, nullptr, &swapchain_image_index);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) { return; }
+    VK_CHECK(result);
+  }
 
+  // wait until the GPU has finished rendering the last frame.
   {
     ZoneScopedN("wait for render fence");
     VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, one_second));
@@ -547,12 +552,6 @@ void Renderer::render(const charlie::Camera& camera)
 
   VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
 
-  std::uint32_t swapchain_image_index = 0;
-  {
-    ZoneScopedN("vkAcquireNextImageKHR");
-    VK_CHECK(vkAcquireNextImageKHR(context_, swapchain_, one_second, frame.present_semaphore,
-                                   nullptr, &swapchain_image_index));
-  }
   const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
   const auto current_swapchain_image_view = swapchain_.image_views()[swapchain_image_index];
 
@@ -685,7 +684,12 @@ void Renderer::present(uint32_t& swapchain_image_index)
       .pImageIndices = &swapchain_image_index,
   };
 
-  VK_CHECK(vkQueuePresentKHR(graphics_queue_, &present_info));
+  const VkResult result = vkQueuePresentKHR(graphics_queue_, &present_info);
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    // Supress
+    return;
+  }
+  VK_CHECK(result);
 }
 
 [[nodiscard]] auto Renderer::create_material(VkPipeline pipeline, VkPipelineLayout layout,

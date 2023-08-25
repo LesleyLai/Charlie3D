@@ -14,8 +14,6 @@ class WindowManager {
 public:
   [[nodiscard]] static auto instance() -> WindowManager&;
 
-  void pull_events();
-
   /// @brief Creates a new window
   [[nodiscard]] auto create(int width, int height, const char* title, const WindowOptions& options)
       -> Window;

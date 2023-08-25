@@ -1,7 +1,9 @@
 #include "window_manager.hpp"
 #include "window.hpp"
 
-#include <GLFW/glfw3.h>
+#include <SDL2/SDL.h>
+
+#include <fmt/format.h>
 
 #include <beyond/utils/panic.hpp>
 
@@ -15,28 +17,26 @@ auto WindowManager::instance() -> WindowManager&
 
 WindowManager::WindowManager()
 {
-  if (!glfwInit()) { beyond::panic("Failed to initialize GLFW\n"); }
+  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    beyond::panic("Failed to initialize SDL: {}\n", SDL_GetError());
+  }
 }
 
 WindowManager::~WindowManager()
 {
-  glfwTerminate();
-}
-
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-void WindowManager::pull_events()
-{
-  glfwPollEvents();
+  SDL_Quit();
 }
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto WindowManager::create(int width, int height, const char* title, const WindowOptions& options)
     -> Window
 {
-  glfwWindowHint(GLFW_RESIZABLE, options.resizable);
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  GLFWwindow* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
-  if (!window) { beyond::panic("Cannot create a glfw window"); }
+  uint32_t window_flags = SDL_WINDOW_VULKAN;
+  if (options.resizable) { window_flags |= SDL_WINDOW_RESIZABLE; }
+
+  auto* window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width,
+                                  height, window_flags);
+  if (window == nullptr) { beyond::panic("Failed to create SDL window: {}\n", SDL_GetError()); }
   return Window{window};
 }
 

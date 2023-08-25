@@ -5,7 +5,7 @@
 
 #include <imgui.h>
 
-#include <glfw/glfw3.h>
+#include <SDL2/SDL.h>
 
 namespace charlie {
 
@@ -29,9 +29,19 @@ void Camera::on_key_input(int key, int scancode, int action, int mods)
   controller_->on_key_input(key, scancode, action, mods);
 }
 
-void Camera::on_mouse_move(GLFWwindow* window, int x, int y)
+void Camera::on_mouse_move(int x, int y)
 {
-  controller_->on_mouse_move(window, x, y);
+  controller_->on_mouse_move(x, y);
+}
+
+void Camera::on_mouse_button_down(uint8_t button)
+{
+  controller_->on_mouse_button_down(button);
+}
+
+void Camera::on_mouse_button_up(uint8_t button)
+{
+  controller_->on_mouse_button_up(button);
 }
 
 void Camera::update()
@@ -59,60 +69,61 @@ auto FirstPersonCameraController::view_matrix() const -> beyond::Mat4
   return camera_mat;
 }
 
-void FirstPersonCameraController::on_key_input(int key, int /*scancode*/, int action, int /*mods*/)
+void FirstPersonCameraController::on_key_input(int /*key*/, int /*scancode*/, int /*action*/,
+                                               int /*mods*/)
 {
-  switch (action) {
-  case GLFW_PRESS:
-    switch (key) {
-    case GLFW_KEY_W:
-      input_axis_.z -= 1.f;
-      break;
-    case GLFW_KEY_S:
-      input_axis_.z += 1.f;
-      break;
-    case GLFW_KEY_A:
-      input_axis_.x -= 1.f;
-      break;
-    case GLFW_KEY_D:
-      input_axis_.x += 1.f;
-      break;
-    case GLFW_KEY_R:
-      input_axis_.y += 1.f;
-      break;
-    case GLFW_KEY_F:
-      input_axis_.y -= 1.f;
-      break;
-    default:
-      break;
-    }
-    break;
-  case GLFW_RELEASE:
-    switch (key) {
-    case GLFW_KEY_W:
-      input_axis_.z += 1.f;
-      break;
-    case GLFW_KEY_S:
-      input_axis_.z -= 1.f;
-      break;
-    case GLFW_KEY_A:
-      input_axis_.x += 1.f;
-      break;
-    case GLFW_KEY_D:
-      input_axis_.x -= 1.f;
-      break;
-    case GLFW_KEY_R:
-      input_axis_.y -= 1.f;
-      break;
-    case GLFW_KEY_F:
-      input_axis_.y += 1.f;
-      break;
-    default:
-      break;
-    }
-    break;
-  default:
-    break;
-  }
+  //  switch (action) {
+  //  case GLFW_PRESS:
+  //    switch (key) {
+  //    case GLFW_KEY_W:
+  //      input_axis_.z -= 1.f;
+  //      break;
+  //    case GLFW_KEY_S:
+  //      input_axis_.z += 1.f;
+  //      break;
+  //    case GLFW_KEY_A:
+  //      input_axis_.x -= 1.f;
+  //      break;
+  //    case GLFW_KEY_D:
+  //      input_axis_.x += 1.f;
+  //      break;
+  //    case GLFW_KEY_R:
+  //      input_axis_.y += 1.f;
+  //      break;
+  //    case GLFW_KEY_F:
+  //      input_axis_.y -= 1.f;
+  //      break;
+  //    default:
+  //      break;
+  //    }
+  //    break;
+  //  case GLFW_RELEASE:
+  //    switch (key) {
+  //    case GLFW_KEY_W:
+  //      input_axis_.z += 1.f;
+  //      break;
+  //    case GLFW_KEY_S:
+  //      input_axis_.z -= 1.f;
+  //      break;
+  //    case GLFW_KEY_A:
+  //      input_axis_.x += 1.f;
+  //      break;
+  //    case GLFW_KEY_D:
+  //      input_axis_.x -= 1.f;
+  //      break;
+  //    case GLFW_KEY_R:
+  //      input_axis_.y -= 1.f;
+  //      break;
+  //    case GLFW_KEY_F:
+  //      input_axis_.y += 1.f;
+  //      break;
+  //    default:
+  //      break;
+  //    }
+  //    break;
+  //  default:
+  //    break;
+  //  }
 }
 
 auto ArcballCameraController::view_matrix() const -> beyond::Mat4
@@ -130,14 +141,13 @@ auto ArcballCameraController::view_matrix() const -> beyond::Mat4
   return cross(up_, forward_axis());
 }
 
-void ArcballCameraController::on_mouse_move(GLFWwindow* window, int x, int y)
+void ArcballCameraController::on_mouse_move(int x, int y)
 {
   const auto delta_mouse = old_mouse_pos_ - beyond::IPoint2{x, y};
 
-  if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
-
-    int width{}, height{};
-    glfwGetWindowSize(window, &width, &height);
+  if (left_mouse_button_down_) {
+    // TODO: need to query window resolution here
+    const int width = 1440, height = 900;
 
     constexpr auto pi = beyond::float_constants::pi;
     const auto delta_angle_x =
@@ -162,7 +172,7 @@ void ArcballCameraController::on_mouse_move(GLFWwindow* window, int x, int y)
   }
 
   // Panning
-  if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
+  if (right_mouse_button_down_) {
     const auto delta =
         cross(forward_axis(), right_axis()) * static_cast<float>(delta_mouse.y) * pan_speed_ +
         right_axis() * static_cast<float>(delta_mouse.x) * pan_speed_;
@@ -200,6 +210,34 @@ void ArcballCameraController::on_mouse_scroll(float /*x*/, float y)
   const auto advance_amount = forward_axis() * log(zooming + 1) * y * zoom_speed_;
   // Don't zoom in if too close
   if (advance_amount.length() <= zooming - 0.1 || y < 0) { eye_ += advance_amount; }
+}
+
+void ArcballCameraController::on_mouse_button_down(uint8_t button)
+{
+  switch (button) {
+  case SDL_BUTTON_LEFT:
+    left_mouse_button_down_ = true;
+    break;
+  case SDL_BUTTON_RIGHT:
+    right_mouse_button_down_ = true;
+    break;
+  default:
+    break;
+  }
+}
+
+void ArcballCameraController::on_mouse_button_up(uint8_t button)
+{
+  switch (button) {
+  case SDL_BUTTON_LEFT:
+    left_mouse_button_down_ = false;
+    break;
+  case SDL_BUTTON_RIGHT:
+    right_mouse_button_down_ = false;
+    break;
+  default:
+    break;
+  }
 }
 
 } // namespace charlie

@@ -1,28 +1,18 @@
 #include "window.hpp"
 
-#include <GLFW/glfw3.h>
+#include <SDL2/SDL.h>
 
 namespace charlie {
 
 Window::~Window()
 {
-  glfwDestroyWindow(window_);
-}
-
-void Window::swap_buffers() noexcept
-{
-  glfwSwapBuffers(window_);
-}
-
-auto Window::should_close() const noexcept -> bool
-{
-  return glfwWindowShouldClose(window_);
+  SDL_DestroyWindow(window_);
 }
 
 [[nodiscard]] auto Window::resolution() const noexcept -> Resolution
 {
   int width = 0, height = 0;
-  glfwGetWindowSize(window_, &width, &height);
+  SDL_GetWindowSize(window_, &width, &height);
   return Resolution{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
 }
 

@@ -9,10 +9,10 @@
 
 #include <beyond/math/transform.hpp>
 
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
-#include <GLFW/glfw3.h>
+#include <SDL2/SDL.h>
 
 #include <tracy/Tracy.hpp>
 
@@ -33,122 +33,6 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
                                             .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
 }
 
-struct App {
-  charlie::Window window;
-  charlie::Renderer renderer;
-  charlie::FirstPersonCameraController first_person_controller;
-  charlie::ArcballCameraController arcball_controller;
-  charlie::Camera camera;
-
-  App()
-      : window{charlie::WindowManager::instance().create(1920, 1080, "Charlie3D",
-                                                         {
-                                                             .resizable = true,
-                                                         })},
-        renderer{window}, camera{arcball_controller}
-  {
-    const auto [width, height] = window.resolution();
-    camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
-
-    glfwSetWindowUserPointer(window.glfw_window(), this);
-
-    glfwSetWindowSizeCallback(
-        window.glfw_window(), [](GLFWwindow* glfw_window, int width_, int height_) {
-          fmt::print("Window resizes to {}x{}!\n", width_, height_);
-
-          auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
-          app.renderer.resize({.width = beyond::to_u32(width_), .height = beyond::to_u32(height_)});
-
-          app.camera.aspect_ratio = static_cast<float>(width_) / static_cast<float>(height_);
-        });
-    glfwSetCursorPosCallback(
-        window.glfw_window(), [](GLFWwindow* glfw_window, double xpos, double ypos) {
-          ImGui_ImplGlfw_CursorPosCallback(glfw_window, xpos, ypos);
-
-          const ImGuiIO& io = ImGui::GetIO();
-          if (!io.WantCaptureMouse) {
-            auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
-            app.camera.on_mouse_move(glfw_window, static_cast<int>(xpos), static_cast<int>(ypos));
-          }
-        });
-    glfwSetScrollCallback(
-        window.glfw_window(), [](GLFWwindow* glfw_window, double xoffset, double yoffset) {
-          ImGui_ImplGlfw_ScrollCallback(glfw_window, xoffset, yoffset);
-
-          const ImGuiIO& io = ImGui::GetIO();
-          if (!io.WantCaptureMouse) {
-            auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
-            app.camera.on_mouse_scroll(static_cast<float>(xoffset), static_cast<float>(yoffset));
-          }
-        });
-    glfwSetKeyCallback(window.glfw_window(),
-                       [](GLFWwindow* glfw_window, int key, int scancode, int action, int mods) {
-                         ImGui_ImplGlfw_KeyCallback(glfw_window, key, scancode, action, mods);
-
-                         const ImGuiIO& io = ImGui::GetIO();
-                         if (!io.WantCaptureKeyboard) {
-                           auto& app = *static_cast<App*>(glfwGetWindowUserPointer(glfw_window));
-                           app.camera.on_key_input(key, scancode, action, mods);
-                         }
-                       });
-  }
-
-  void update()
-  {
-    camera.update();
-  }
-
-  void run()
-  {
-    using namespace std::literals::chrono_literals;
-    auto previous_time = std::chrono::steady_clock::now();
-    std::chrono::steady_clock::duration lag = 0ns;
-    static constexpr auto MS_PER_UPDATE = 10ms;
-
-    while (!window.should_close()) {
-      const auto current_time = std::chrono::steady_clock::now();
-      const auto delta_time = current_time - previous_time;
-      previous_time = current_time;
-      lag += delta_time;
-
-      charlie::WindowManager::instance().pull_events();
-      window.swap_buffers();
-
-      draw_gui();
-
-      while (lag >= MS_PER_UPDATE) {
-        update();
-        lag -= MS_PER_UPDATE;
-      }
-
-      renderer.render(camera);
-
-      FrameMark;
-    }
-  }
-
-private:
-  void draw_gui()
-  {
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    // ImGui::ShowDemoWindow();
-
-    bool show_control_panel = true;
-    const auto resolution = window.resolution();
-    const float control_panel_width = ImGui::GetFontSize() * 25.f;
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(resolution.width) - control_panel_width, 0));
-    ImGui::SetNextWindowSize(ImVec2(control_panel_width, static_cast<float>(resolution.height)));
-    ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
-
-    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
-
-    ImGui::End();
-  }
-};
-
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
@@ -157,13 +41,102 @@ void set_asset_path()
   Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
 }
 
-auto main(int /*argc*/, char* /*argv*/[]) -> int
+void draw_gui(charlie::Window& window, charlie::Camera& camera)
+{
+  ImGui_ImplVulkan_NewFrame();
+  ImGui_ImplSDL2_NewFrame();
+  ImGui::NewFrame();
+
+  // ImGui::ShowDemoWindow();
+
+  bool show_control_panel = true;
+  const auto resolution = window.resolution();
+  const float control_panel_width = ImGui::GetFontSize() * 25.f;
+  ImGui::SetNextWindowPos(ImVec2(static_cast<float>(resolution.width) - control_panel_width, 0));
+  ImGui::SetNextWindowSize(ImVec2(control_panel_width, static_cast<float>(resolution.height)));
+  ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
+
+  if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
+
+  ImGui::End();
+}
+
+int main()
 {
   set_asset_path();
 
-  App app;
+  auto& window_manager = charlie::WindowManager::instance();
 
-  init_lost_empire_scene(app.renderer);
+  auto window = window_manager.create(1440, 900, "Charlie3D", {.resizable = true});
 
-  app.run();
+  auto renderer = charlie::Renderer{window};
+
+  charlie::ArcballCameraController arcball_controller;
+  charlie::Camera camera{arcball_controller};
+  {
+    const auto [width, height] = window.resolution();
+    camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+  }
+
+  init_lost_empire_scene(renderer);
+
+  using namespace std::literals::chrono_literals;
+  auto previous_time = std::chrono::steady_clock::now();
+  std::chrono::steady_clock::duration lag = 0ns;
+  static constexpr auto MS_PER_UPDATE = 10ms;
+  while (true) {
+    const auto current_time = std::chrono::steady_clock::now();
+    const auto delta_time = current_time - previous_time;
+    previous_time = current_time;
+    lag += delta_time;
+
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      ImGui_ImplSDL2_ProcessEvent(&event);
+
+      switch (event.type) {
+      case SDL_WINDOWEVENT:
+        if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+          const auto [width, height] = window.resolution();
+
+          fmt::print("Window resizes to {}x{}!\n", width, height);
+
+          renderer.resize({.width = beyond::to_u32(width), .height = beyond::to_u32(height)});
+          camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+        }
+        break;
+      case SDL_MOUSEMOTION: {
+        const ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantCaptureMouse) { camera.on_mouse_move(event.motion.x, event.motion.y); }
+      } break;
+      case SDL_MOUSEBUTTONUP: {
+        const ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantCaptureMouse) { camera.on_mouse_button_up(event.button.button); }
+      } break;
+      case SDL_MOUSEBUTTONDOWN: {
+        const ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantCaptureMouse) { camera.on_mouse_button_down(event.button.button); }
+      } break;
+      case SDL_MOUSEWHEEL: {
+        const ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantCaptureMouse) {
+          camera.on_mouse_scroll(event.wheel.preciseX, event.wheel.preciseY);
+        }
+      } break;
+      case SDL_QUIT:
+        std::exit(0);
+      }
+
+      draw_gui(window, camera);
+
+      while (lag >= MS_PER_UPDATE) {
+        camera.update();
+        lag -= MS_PER_UPDATE;
+      }
+
+      renderer.render(camera);
+
+      FrameMark;
+    }
+  }
 }

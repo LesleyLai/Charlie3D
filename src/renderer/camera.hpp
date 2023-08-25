@@ -6,8 +6,6 @@
 #include <beyond/math/point.hpp>
 #include <beyond/math/quat.hpp>
 
-struct GLFWwindow;
-
 namespace charlie {
 
 struct CameraController;
@@ -35,8 +33,10 @@ public:
 
   void draw_gui();
   void on_key_input(int key, int scancode, int action, int mods);
-  void on_mouse_move(GLFWwindow* window, int x, int y);
+  void on_mouse_move(int x, int y);
   void on_mouse_scroll(float x, float y);
+  void on_mouse_button_down(uint8_t button);
+  void on_mouse_button_up(uint8_t button);
 
   void update();
 };
@@ -52,8 +52,10 @@ struct CameraController {
   [[nodiscard]] virtual auto view_matrix() const -> beyond::Mat4 = 0;
 
   virtual void on_key_input(int /*key*/, int /*scancode*/, int /*action*/, int /*mods*/) {}
-  virtual void on_mouse_move(GLFWwindow* /*window*/, int /*x*/, int /*y*/) {}
+  virtual void on_mouse_move(int /*x*/, int /*y*/) {}
   virtual void on_mouse_scroll(float /*x*/, float /*y*/) {}
+  virtual void on_mouse_button_down(uint8_t /*button*/) {}
+  virtual void on_mouse_button_up(uint8_t /*button*/) {}
 };
 
 class FirstPersonCameraController : public CameraController {
@@ -75,9 +77,15 @@ class ArcballCameraController : public CameraController {
   float pan_speed_ = 0.1f;
   float zoom_speed_ = 1.0f;
 
+  bool left_mouse_button_down_ = false;
+  bool right_mouse_button_down_ = false;
+
   [[nodiscard]] auto view_matrix() const -> beyond::Mat4 override;
-  void on_mouse_move(GLFWwindow* window, int x, int y) override;
+  void on_mouse_move(int x, int y) override;
   void on_mouse_scroll(float x, float y) override;
+  void on_mouse_button_down(uint8_t button) override;
+  void on_mouse_button_up(uint8_t button) override;
+
   void draw_gui() override;
 
   [[nodiscard]] auto forward_axis() const -> beyond::Vec3;

@@ -6,30 +6,8 @@
 #include <VkBootstrap.h>
 #include <fmt/format.h>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
+#include <SDL_vulkan.h>
 #include <beyond/utils/bit_cast.hpp>
-
-namespace {
-
-auto create_surface_glfw(VkInstance instance, GLFWwindow* window) -> VkSurfaceKHR
-{
-  VkSurfaceKHR surface = VK_NULL_HANDLE;
-  const VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
-  if (err) {
-    const char* error_msg = nullptr;
-    int ret = glfwGetError(&error_msg);
-    if (ret != 0) {
-      fmt::print("{} ", ret);
-      if (error_msg != nullptr) { fmt::print("{}", error_msg); }
-      fmt::print("\n");
-    }
-    surface = VK_NULL_HANDLE;
-  }
-  return surface;
-}
-} // namespace
 
 namespace vkh {
 
@@ -43,13 +21,13 @@ Context::Context(charlie::Window& window)
           .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
           .enable_extension("VK_EXT_debug_utils")
           .build();
-  if (!instance_ret) {
-    fmt::print("{}\n", instance_ret.error().message());
-    std::exit(-1);
-  }
+  if (!instance_ret) { beyond::panic(instance_ret.error().message()); }
   instance_ = instance_ret->instance;
   debug_messenger_ = instance_ret->debug_messenger;
-  surface_ = create_surface_glfw(instance_, window.glfw_window());
+
+  if (SDL_FALSE == SDL_Vulkan_CreateSurface(window.raw_window(), instance_, &surface_)) {
+    beyond::panic(SDL_GetError());
+  }
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
 
@@ -63,10 +41,7 @@ Context::Context(charlie::Window& window)
                              .set_required_features_11({.shaderDrawParameters = true})
                              .set_required_features_13({.dynamicRendering = true})
                              .select();
-  if (!phys_device_ret) {
-    fmt::print("{}\n", phys_device_ret.error().message());
-    std::exit(-1);
-  }
+  if (!phys_device_ret) { beyond::panic(phys_device_ret.error().message()); }
 
   vkb::PhysicalDevice vkb_physical_device = phys_device_ret.value();
   physical_device_ = vkb_physical_device.physical_device;
@@ -75,10 +50,7 @@ Context::Context(charlie::Window& window)
 
   vkb::DeviceBuilder device_builder{vkb_physical_device};
   auto device_ret = device_builder.build();
-  if (!device_ret) {
-    fmt::print("{}\n", device_ret.error().message());
-    std::exit(-1);
-  }
+  if (!device_ret) { beyond::panic(device_ret.error().message()); }
   auto vkb_device = device_ret.value();
   device_ = vkb_device.device;
 

@@ -1,4 +1,4 @@
-find_package(glfw3 REQUIRED)
+find_package(SDL2 REQUIRED)
 
 add_library(charlie3d_window
         window.hpp
@@ -11,6 +11,7 @@ target_link_libraries(charlie3d_window
         PUBLIC
         charlie3d::compiler_options
         fmt::fmt
-        glfw
+        SDL2::SDL2-static
         beyond::core
         )
+target_compile_definitions(charlie3d_window PUBLIC SDL_MAIN_HANDLED)

@@ -4,7 +4,7 @@
 #include <beyond/utils/utils.hpp>
 #include <utility>
 
-struct GLFWwindow;
+struct SDL_Window;
 
 namespace charlie {
 
@@ -16,7 +16,7 @@ struct Resolution {
 };
 
 class Window {
-  GLFWwindow* window_ = nullptr;
+  SDL_Window* window_ = nullptr;
 
 public:
   Window() = default;
@@ -29,11 +29,7 @@ public:
   }
   ~Window();
 
-  void swap_buffers() noexcept;
-
-  [[nodiscard]] auto should_close() const noexcept -> bool;
-
-  [[nodiscard]] BEYOND_FORCE_INLINE auto glfw_window() noexcept -> GLFWwindow*
+  [[nodiscard]] BEYOND_FORCE_INLINE auto raw_window() noexcept -> SDL_Window*
   {
     return window_;
   }
@@ -42,7 +38,7 @@ public:
 
 private:
   friend WindowManager;
-  explicit Window(GLFWwindow* glfw_window) : window_{glfw_window} {}
+  explicit Window(SDL_Window* raw_window) : window_{raw_window} {}
 };
 
 } // namespace charlie

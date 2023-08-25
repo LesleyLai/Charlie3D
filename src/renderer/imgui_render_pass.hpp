@@ -5,7 +5,7 @@
 
 #include "render_pass.hpp"
 
-struct GLFWwindow;
+struct SDL_Window;
 
 namespace charlie {
 
@@ -16,7 +16,7 @@ class ImguiRenderPass : public FrameGraphRenderPass {
   VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
 
 public:
-  explicit ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
+  explicit ImguiRenderPass(Renderer& renderer, SDL_Window* window,
                            VkFormat color_attachment_format);
   ~ImguiRenderPass() override;
 

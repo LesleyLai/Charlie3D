@@ -13,7 +13,7 @@ class CompressorRecipe(ConanFile):
         self.requires("fmt/10.0.0")
         self.requires("spdlog/1.12.0")
         self.requires("backward-cpp/1.6")
-        self.requires("glfw/3.3.8")
+        self.requires("sdl/2.28.2")
         self.requires("vulkan-memory-allocator/3.0.1")
         self.requires("stb/cci.20220909")
         self.requires("tinyobjloader/1.0.7")
@@ -23,8 +23,8 @@ class CompressorRecipe(ConanFile):
         self.requires("catch2/3.4.0")
 
     def generate(self):
-        copy(self, "*glfw*", os.path.join(self.dependencies["imgui"].package_folder,
-                                          "res", "bindings"),
+        copy(self, "*sdl*", os.path.join(self.dependencies["imgui"].package_folder,
+                                         "res", "bindings"),
              os.path.join(self.source_folder, "third-party/imgui/bindings"))
         copy(self, "*vulkan*", os.path.join(self.dependencies["imgui"].package_folder,
                                             "res", "bindings"),

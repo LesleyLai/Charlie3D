@@ -1,19 +1,20 @@
 find_package(Vulkan)
 
-find_package(glfw3 REQUIRED)
+find_package(SDL2 REQUIRED)
 find_package(imgui REQUIRED)
 
 add_library(imgui_bindings
         bindings/imgui_impl_vulkan.cpp
         bindings/imgui_impl_vulkan.h
-        bindings/imgui_impl_glfw.h
-        bindings/imgui_impl_glfw.cpp
+        bindings/imgui_impl_sdl2.h
+        bindings/imgui_impl_sdl2.cpp
         )
 
 target_link_libraries(imgui_bindings
         PUBLIC
-        glfw
         imgui::imgui
+        PRIVATE
+        SDL2::SDL2-static
         Vulkan::Vulkan)
 
 target_include_directories(imgui_bindings

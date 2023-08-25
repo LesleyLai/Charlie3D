@@ -1,7 +1,7 @@
 #include "imgui_render_pass.hpp"
 
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
 #include <vulkan/vulkan.h>
@@ -11,7 +11,7 @@
 
 namespace charlie {
 
-ImguiRenderPass::ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
+ImguiRenderPass::ImguiRenderPass(Renderer& renderer, SDL_Window* window,
                                  VkFormat color_attachment_format)
     : renderer_{&renderer}
 {
@@ -57,7 +57,7 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, GLFWwindow* window,
   io.Fonts->AddFontDefault(&default_config);
   io.Fonts->Build();
 
-  ImGui_ImplGlfw_InitForVulkan(window, true);
+  ImGui_ImplSDL2_InitForVulkan(window);
 
   ImGui_ImplVulkan_InitInfo init_info = {
       .Instance = context.instance(),
@@ -89,7 +89,7 @@ ImguiRenderPass::~ImguiRenderPass()
   vkDestroyDescriptorPool(renderer_->context(), descriptor_pool_, nullptr);
 
   ImGui_ImplVulkan_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
+  ImGui_ImplSDL2_Shutdown();
   ImGui::DestroyContext();
 }
 

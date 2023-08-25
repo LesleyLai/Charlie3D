@@ -10,8 +10,8 @@
   do {                                                                                             \
     const VkResult err = x;                                                                        \
     if (err) {                                                                                     \
-      fmt::print(stderr, "Vulkan error: {}\n",                                                     \
-                 static_cast<std::underlying_type_t<VkResult>>(err));                              \
+      fmt::print(stderr, "Vulkan error: {} at {}:{}\n",                                            \
+                 static_cast<std::underlying_type_t<VkResult>>(err), __FILE__, __LINE__);          \
     }                                                                                              \
   } while (0)
 
