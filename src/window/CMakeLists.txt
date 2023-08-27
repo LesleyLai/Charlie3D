@@ -4,7 +4,7 @@ add_library(charlie3d_window
         window.hpp
         window.cpp
         window_manager.hpp
-        window_manager.cpp)
+        window_manager.cpp input_handler.cpp input_handler.hpp resolution.hpp)
 add_library(charlie3d::window ALIAS charlie3d_window)
 
 target_link_libraries(charlie3d_window
@@ -13,9 +13,8 @@ target_link_libraries(charlie3d_window
         fmt::fmt
         SDL2::SDL2-static
         beyond::core
+        PRIVATE
+        third-party::imgui_bindings
         )
-#if (WIN32)
-#    # High-dpi support
-#    target_link_libraries(charlie3d_window PRIVATE Shcore.lib)
-#endif ()
+
 target_compile_definitions(charlie3d_window PUBLIC SDL_MAIN_HANDLED)

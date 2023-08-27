@@ -1,5 +1,6 @@
 #pragma once
 
+#include "resolution.hpp"
 #include <beyond/utils/copy_move.hpp>
 #include <beyond/utils/utils.hpp>
 #include <utility>
@@ -9,11 +10,6 @@ struct SDL_Window;
 namespace charlie {
 
 class WindowManager;
-
-struct Resolution {
-  std::uint32_t width = 0;
-  std::uint32_t height = 0;
-};
 
 class Window {
   SDL_Window* window_ = nullptr;
@@ -35,6 +31,8 @@ public:
   }
 
   [[nodiscard]] auto resolution() const noexcept -> Resolution;
+
+  [[nodiscard]] auto window_id() const noexcept -> std::uint32_t;
 
 private:
   friend WindowManager;

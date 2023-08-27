@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../window/input_handler.hpp"
 #include "../window/window.hpp"
 #include "vulkan_helpers/buffer.hpp"
 #include "vulkan_helpers/context.hpp"
@@ -81,7 +82,7 @@ struct FrameData {
 
 class Camera;
 
-class Renderer {
+class Renderer : public InputListener {
 public:
   explicit Renderer(Window& window);
   ~Renderer();
@@ -91,8 +92,6 @@ public:
   auto operator=(Renderer&&) & noexcept -> Renderer& = delete;
 
   void render(const charlie::Camera& camera);
-
-  void resize(Resolution res);
 
   auto create_material(VkPipeline pipeline, VkPipelineLayout layout, std::string name) -> Material&;
 
@@ -133,6 +132,7 @@ public:
   [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> MeshHandle;
 
 private:
+  Window* window_ = nullptr;
   Resolution resolution_;
   vkh::Context context_;
   VkQueue transfer_queue_{};
@@ -172,6 +172,10 @@ private:
   void init_descriptors();
   void init_pipelines();
   void init_texture();
+
+  void resize();
+
+  void on_input_event(const Event& event, const InputStates& states) override;
 
   auto upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage,
                      const char* debug_name = "") -> vkh::Expected<vkh::Buffer>;

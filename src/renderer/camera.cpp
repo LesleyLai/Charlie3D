@@ -19,42 +19,59 @@ namespace charlie {
   return beyond::perspective(fovy, aspect_ratio, z_near, z_far);
 }
 
+static void imgui_slider_degree(const char* label, beyond::Radian* v, beyond::Degree v_min,
+                                beyond::Degree v_max, const char* format = "%.0f",
+                                ImGuiSliderFlags flags = 0)
+{
+  auto val = beyond::to_degree(*v).value();
+  ImGui::SliderFloat(label, &val, v_min.value(), v_max.value(), format, flags);
+  *v = beyond::Degree{val};
+}
+
 void Camera::draw_gui()
 {
   controller_->draw_gui();
+
+  ImGui::SeparatorText("Perspective projection:");
+
+  imgui_slider_degree("Field of view", &fovy, beyond::Degree{10}, beyond::Degree{90});
+
+  ImGui::LabelText("Aspect ratio", "%f", aspect_ratio);
+  ImGui::LabelText("Z near", "%f", z_near);
+  ImGui::LabelText("Z far", "%f", z_far);
+
+  if (ImGui::Button("Reset camera")) {
+    fovy = beyond::Degree{70};
+
+    controller_->reset();
+  }
 }
 
-void Camera::on_key_input(int key, int scancode, int action, int mods)
+void Camera::fixed_update()
 {
-  controller_->on_key_input(key, scancode, action, mods);
+  controller_->fixed_update();
 }
 
-void Camera::on_mouse_move(int x, int y)
+void Camera::on_input_event(const Event& event, const InputStates& states)
 {
-  controller_->on_mouse_move(x, y);
+  std::visit(
+      [&](const auto& e) {
+        using EventType = std::remove_cvref_t<decltype(e)>;
+        if constexpr (std::is_same_v<EventType, charlie::WindowEvent>) {
+          if (e.type == charlie::WindowEventType::resize) {
+            SDL_Window* window = SDL_GetWindowFromID(e.window_id);
+            int width, height;
+            SDL_GetWindowSize(window, &width, &height);
+            this->aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+          }
+        }
+      },
+      event);
+
+  controller_->on_input_event(event, states);
 }
 
-void Camera::on_mouse_button_down(uint8_t button)
-{
-  controller_->on_mouse_button_down(button);
-}
-
-void Camera::on_mouse_button_up(uint8_t button)
-{
-  controller_->on_mouse_button_up(button);
-}
-
-void Camera::update()
-{
-  controller_->update();
-}
-
-void Camera::on_mouse_scroll(float x, float y)
-{
-  controller_->on_mouse_scroll(x, y);
-}
-
-void FirstPersonCameraController::update()
+void FirstPersonCameraController::fixed_update()
 {
   const auto velocity = input_axis_;
   position_ += velocity * 0.1f;
@@ -141,13 +158,13 @@ auto ArcballCameraController::view_matrix() const -> beyond::Mat4
   return cross(up_, forward_axis());
 }
 
-void ArcballCameraController::on_mouse_move(int x, int y)
+void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputStates& states)
 {
-  const auto delta_mouse = old_mouse_pos_ - beyond::IPoint2{x, y};
+  const auto mouse_pos = beyond::IPoint2{event.x, event.y};
+  const auto delta_mouse = old_mouse_pos_ - mouse_pos;
 
-  if (left_mouse_button_down_) {
-    // TODO: need to query window resolution here
-    const int width = 1440, height = 900;
+  if (states.mouse_button_down(MouseButton::left)) {
+    const auto [width, height] = window_->resolution();
 
     constexpr auto pi = beyond::float_constants::pi;
     const auto delta_angle_x =
@@ -172,27 +189,26 @@ void ArcballCameraController::on_mouse_move(int x, int y)
   }
 
   // Panning
-  if (right_mouse_button_down_) {
+  if (states.mouse_button_down(MouseButton::right)) {
     const auto delta =
         cross(forward_axis(), right_axis()) * static_cast<float>(delta_mouse.y) * pan_speed_ +
         right_axis() * static_cast<float>(delta_mouse.x) * pan_speed_;
     eye_ += delta;
     center_ += delta;
   }
-  old_mouse_pos_ = beyond::IPoint2{x, y};
+
+  old_mouse_pos_ = mouse_pos;
 }
 
 void ArcballCameraController::draw_gui()
 {
-  ImGui::SeparatorText("Arcball Camera:");
+  ImGui::SeparatorText("Arcball Controller:");
 
   ImGui::LabelText("Position", "%f %f %f", eye_.x, eye_.y, eye_.z);
   ImGui::LabelText("Look at", "%f %f %f", center_.x, center_.y, center_.z);
 
   ImGui::SliderFloat("Pan speed", &pan_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
   ImGui::SliderFloat("Zoom speed", &zoom_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
-
-  if (ImGui::Button("Reset camera")) { reset(); }
 }
 
 void ArcballCameraController::reset()
@@ -203,41 +219,27 @@ void ArcballCameraController::reset()
   zoom_speed_ = 1.0f;
 }
 
-void ArcballCameraController::on_mouse_scroll(float /*x*/, float y)
+void ArcballCameraController::on_input_event(const Event& event, const InputStates& states)
+{
+  std::visit(
+      [&](const auto& e) {
+        using EventType = std::remove_cvref_t<decltype(e)>;
+        if constexpr (std::is_same_v<EventType, MouseWheelEvent>) {
+          on_mouse_scroll(e);
+        } else if constexpr (std::is_same_v<EventType, MouseMoveEvent>) {
+          on_mouse_move(e, states);
+        }
+      },
+      event);
+}
+
+void ArcballCameraController::on_mouse_scroll(MouseWheelEvent event)
 {
   const auto zooming = (eye_ - center_).length();
 
-  const auto advance_amount = forward_axis() * log(zooming + 1) * y * zoom_speed_;
+  const auto advance_amount = forward_axis() * log(zooming + 1) * event.y * zoom_speed_;
   // Don't zoom in if too close
-  if (advance_amount.length() <= zooming - 0.1 || y < 0) { eye_ += advance_amount; }
-}
-
-void ArcballCameraController::on_mouse_button_down(uint8_t button)
-{
-  switch (button) {
-  case SDL_BUTTON_LEFT:
-    left_mouse_button_down_ = true;
-    break;
-  case SDL_BUTTON_RIGHT:
-    right_mouse_button_down_ = true;
-    break;
-  default:
-    break;
-  }
-}
-
-void ArcballCameraController::on_mouse_button_up(uint8_t button)
-{
-  switch (button) {
-  case SDL_BUTTON_LEFT:
-    left_mouse_button_down_ = false;
-    break;
-  case SDL_BUTTON_RIGHT:
-    right_mouse_button_down_ = false;
-    break;
-  default:
-    break;
-  }
+  if (advance_amount.length() <= zooming - 0.1 || event.y < 0) { eye_ += advance_amount; }
 }
 
 } // namespace charlie

@@ -1,3 +1,4 @@
+#include "window/input_handler.hpp"
 #include "window/window.hpp"
 #include "window/window_manager.hpp"
 
@@ -77,14 +78,17 @@ int main()
 
   auto window = window_manager.create(1440, 900, "Charlie3D", {.resizable = true});
 
+  auto input_handler = charlie::InputHandler{};
   auto renderer = charlie::Renderer{window};
+  input_handler.register_listener(renderer);
 
-  charlie::ArcballCameraController arcball_controller;
+  charlie::ArcballCameraController arcball_controller{window};
   charlie::Camera camera{arcball_controller};
   {
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
   }
+  input_handler.register_listener(camera);
 
   init_lost_empire_scene(renderer);
 
@@ -98,53 +102,17 @@ int main()
     previous_time = current_time;
     lag += delta_time;
 
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      ImGui_ImplSDL2_ProcessEvent(&event);
+    input_handler.handle_events();
 
-      switch (event.type) {
-      case SDL_WINDOWEVENT:
-        if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-          const auto [width, height] = window.resolution();
+    draw_gui(window, camera);
 
-          fmt::print("Window resizes to {}x{}!\n", width, height);
-
-          renderer.resize(window.resolution());
-          camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
-        }
-        break;
-      case SDL_MOUSEMOTION: {
-        const ImGuiIO& io = ImGui::GetIO();
-        if (!io.WantCaptureMouse) { camera.on_mouse_move(event.motion.x, event.motion.y); }
-      } break;
-      case SDL_MOUSEBUTTONUP: {
-        const ImGuiIO& io = ImGui::GetIO();
-        if (!io.WantCaptureMouse) { camera.on_mouse_button_up(event.button.button); }
-      } break;
-      case SDL_MOUSEBUTTONDOWN: {
-        const ImGuiIO& io = ImGui::GetIO();
-        if (!io.WantCaptureMouse) { camera.on_mouse_button_down(event.button.button); }
-      } break;
-      case SDL_MOUSEWHEEL: {
-        const ImGuiIO& io = ImGui::GetIO();
-        if (!io.WantCaptureMouse) {
-          camera.on_mouse_scroll(event.wheel.preciseX, event.wheel.preciseY);
-        }
-      } break;
-      case SDL_QUIT:
-        std::exit(0);
-      }
-
-      draw_gui(window, camera);
-
-      while (lag >= MS_PER_UPDATE) {
-        camera.update();
-        lag -= MS_PER_UPDATE;
-      }
-
-      renderer.render(camera);
-
-      FrameMark;
+    while (lag >= MS_PER_UPDATE) {
+      camera.fixed_update();
+      lag -= MS_PER_UPDATE;
     }
+
+    renderer.render(camera);
+
+    FrameMark;
   }
 }

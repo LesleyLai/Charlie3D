@@ -224,7 +224,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 namespace charlie {
 
 Renderer::Renderer(Window& window)
-    : resolution_{window.resolution()}, context_{window},
+    : window_{&window}, resolution_{window.resolution()}, context_{window},
       graphics_queue_{context_.graphics_queue()},
       swapchain_{context_, {.extent = to_extent2d(resolution_)}}
 {
@@ -606,7 +606,7 @@ void Renderer::render(const charlie::Camera& camera)
                             .x = 0,
                             .y = 0,
                         },
-                    .extent = to_extent2d(resolution_),
+                    .extent = to_extent2d(resolution()),
                 },
             .layerCount = 1,
             .colorAttachmentCount = 1,
@@ -618,14 +618,14 @@ void Renderer::render(const charlie::Camera& camera)
 
         const VkViewport viewport{
             .x = 0.0f,
-            .y = static_cast<float>(resolution_.height),
-            .width = static_cast<float>(resolution_.width),
-            .height = -static_cast<float>(resolution_.height),
+            .y = static_cast<float>(resolution().height),
+            .width = static_cast<float>(resolution().width),
+            .height = -static_cast<float>(resolution().height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
         vkCmdSetViewport(cmd, 0, 1, &viewport);
-        const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution_)};
+        const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution())};
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         draw_objects(cmd, render_objects_, camera);
@@ -939,16 +939,29 @@ void Renderer::add_object(RenderObject object)
   render_objects_.push_back(object);
 }
 
-void Renderer::resize(Resolution res)
+void Renderer::on_input_event(const Event& event, const InputStates& /*states*/)
+{
+  std::visit(
+      [this](auto e) {
+        if constexpr (std::is_same_v<decltype(e), WindowEvent>) {
+          if (e.window_id == window_->window_id() && e.type == WindowEventType::resize) {
+            this->resize();
+          }
+        }
+      },
+      event);
+}
+
+void Renderer::resize()
 {
   context_.wait_idle();
 
-  resolution_ = res;
+  resolution_ = window_->resolution();
 
   // recreate swapchain
-  swapchain_ =
-      vkh::Swapchain(context_, vkh::SwapchainCreateInfo{.extent = charlie::to_extent2d(resolution_),
-                                                        .old_swapchain = swapchain_.get()});
+  swapchain_ = vkh::Swapchain(context_,
+                              vkh::SwapchainCreateInfo{.extent = charlie::to_extent2d(resolution()),
+                                                       .old_swapchain = swapchain_.get()});
 
   // recreate depth image
   vkDestroyImageView(context_, depth_image_view_, nullptr);
