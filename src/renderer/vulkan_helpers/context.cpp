@@ -5,9 +5,39 @@
 
 #include <VkBootstrap.h>
 #include <fmt/format.h>
+#include <spdlog/spdlog.h>
 
 #include <SDL_vulkan.h>
 #include <beyond/utils/bit_cast.hpp>
+
+namespace {
+
+[[nodiscard]] auto debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+                                  VkDebugUtilsMessageTypeFlagsEXT /*message_types*/,
+                                  const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data,
+                                  void* /*p_user_data*/) -> VkBool32
+{
+  const auto log_level = [&]() {
+    switch (message_severity) {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+      return spdlog::level::trace;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+      return spdlog::level::info;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+      return spdlog::level::warn;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+      return spdlog::level::err;
+    default:
+      beyond::panic("Unknown severity level");
+    }
+  }();
+
+  spdlog::log(log_level, "{}", p_callback_data->pMessage);
+
+  return 0;
+}
+
+} // namespace
 
 namespace vkh {
 
@@ -16,7 +46,7 @@ Context::Context(charlie::Window& window)
   auto instance_ret =
       vkb::InstanceBuilder{}
           .require_api_version(1, 3, 0)
-          .use_default_debug_messenger()
+          .set_debug_callback(debug_callback)
           .request_validation_layers()
           .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
           .enable_extension("VK_EXT_debug_utils")

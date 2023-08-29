@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string_view>
+#include <span>
 #include <vulkan/vulkan.h>
 
 #include "error_handling.hpp"
@@ -13,8 +13,8 @@ struct ShaderModuleCreateInfo {
   const char* debug_name = nullptr;
 };
 
-[[nodiscard]] auto load_shader_module_from_file(Context& context, std::string_view filename,
-                                                const ShaderModuleCreateInfo& create_info)
-    -> Expected<VkShaderModule>;
+[[nodiscard]] auto load_shader_module(Context& context, std::span<const uint32_t> buffer,
+                                      const ShaderModuleCreateInfo& create_info)
+    -> beyond::expected<VkShaderModule, VkResult>;
 
 } // namespace vkh

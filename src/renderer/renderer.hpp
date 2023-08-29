@@ -15,16 +15,12 @@
 #include "render_pass.hpp"
 #include "uploader.hpp"
 
+#include <memory>
 #include <span>
 #include <unordered_map>
 #include <vector>
 
 namespace vkh {
-
-struct Texture {
-  Image image;
-  VkImageView image_view = {};
-};
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
@@ -42,6 +38,11 @@ namespace charlie {
 
 struct MeshHandle : beyond::GenerationalHandle<MeshHandle, uint32_t, 16> {
   using GenerationalHandle::GenerationalHandle;
+};
+
+struct Texture {
+  vkh::Image image;
+  VkImageView image_view = {};
 };
 
 struct Material {
@@ -155,6 +156,8 @@ private:
   VkDescriptorSetLayout object_descriptor_set_layout_ = {};
   VkDescriptorSetLayout single_texture_set_layout_ = {};
 
+  std::unique_ptr<class ShaderCompiler> shader_compiler_ = nullptr;
+
   VkPipelineLayout mesh_pipeline_layout_ = {};
   VkPipeline mesh_pipeline_ = {};
 
@@ -163,7 +166,7 @@ private:
   std::vector<RenderObject> render_objects_;
 
   VkSampler blocky_sampler_ = VK_NULL_HANDLE;
-  vkh::Texture texture_;
+  Texture texture_;
 
   std::unique_ptr<FrameGraphRenderPass> imgui_render_pass_ = nullptr;
 

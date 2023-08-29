@@ -8,6 +8,8 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
+#include "shader_compiler/shader_compiler.hpp"
+
 #include <cstddef>
 
 #include <stb_image.h>
@@ -416,6 +418,8 @@ void Renderer::init_descriptors()
 
 void Renderer::init_pipelines()
 {
+  shader_compiler_ = std::make_unique<ShaderCompiler>();
+
   const VkDescriptorSetLayout set_layouts[] = {
       global_descriptor_set_layout_, object_descriptor_set_layout_, single_texture_set_layout_};
 
@@ -427,15 +431,17 @@ void Renderer::init_pipelines()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &mesh_pipeline_layout_));
 
+  const auto vertex_shader_buffer =
+      shader_compiler_->compile_shader("mesh.vert.glsl", ShaderStage::vertex).value();
   auto triangle_vert_shader =
-      vkh::load_shader_module_from_file(context_, "shaders/mesh.vert.spv",
-                                        {.debug_name = "Mesh Vertex Shader"})
+      vkh::load_shader_module(context_, vertex_shader_buffer, {.debug_name = "Mesh Vertex Shader"})
           .value();
 
-  auto triangle_frag_shader =
-      vkh::load_shader_module_from_file(context_, "shaders/mesh.frag.spv",
-                                        {.debug_name = "Mesh Fragment Shader"})
-          .value();
+  const auto fragment_shader_buffer =
+      shader_compiler_->compile_shader("mesh.frag.glsl", ShaderStage::fragment).value();
+  auto triangle_frag_shader = vkh::load_shader_module(context_, fragment_shader_buffer,
+                                                      {.debug_name = "Mesh Fragment Shader"})
+                                  .value();
   BEYOND_DEFER({
     vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
     vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
@@ -496,7 +502,7 @@ void Renderer::init_pipelines()
 void Renderer::init_texture()
 {
   texture_.image =
-      load_image_from_file(*this, "../../assets/lost_empire/lost_empire-RGBA.png").value();
+      load_image_from_file(*this, "../../assets/models/lost_empire/lost_empire-RGBA.png").value();
   texture_.image_view =
       vkh::create_image_view(
           context_,
@@ -695,8 +701,7 @@ void Renderer::present(uint32_t& swapchain_image_index)
 [[nodiscard]] auto Renderer::create_material(VkPipeline pipeline, VkPipelineLayout layout,
                                              std::string name) -> Material&
 {
-  [[maybe_unused]] auto [itr, inserted] =
-      materials_.try_emplace(std::move(name), Material{pipeline, layout});
+  auto [itr, inserted] = materials_.try_emplace(std::move(name), Material{pipeline, layout});
   BEYOND_ENSURE(inserted);
   return itr->second;
 }

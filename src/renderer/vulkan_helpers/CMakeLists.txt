@@ -1,5 +1,6 @@
 find_package(Vulkan)
 find_package(vulkan-memory-allocator)
+find_package(spdlog)
 
 add_library(vulkan_helper
         buffer.hpp
@@ -34,5 +35,7 @@ target_link_libraries(vulkan_helper
         Vulkan::Vulkan
         vulkan-memory-allocator::vulkan-memory-allocator
         PRIVATE
-        charlie3d::window)
+        charlie3d::window
+        spdlog::spdlog
+        )
 add_library(charlie3d::vulkan_helper ALIAS vulkan_helper)

@@ -27,7 +27,7 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
 
-  const auto cpu_mesh = charlie::CPUMesh::load("lost_empire/lost_empire.obj");
+  const auto cpu_mesh = charlie::CPUMesh::load("models/lost_empire/lost_empire.obj");
 
   const charlie::MeshHandle lost_empire_mesh = renderer.upload_mesh_data("lost_empire", cpu_mesh);
 

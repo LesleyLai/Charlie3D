@@ -1,4 +1,5 @@
 add_subdirectory(vulkan_helpers)
+add_subdirectory(shader_compiler)
 
 add_library(charlie3d_renderer
         renderer.hpp renderer.cpp
@@ -20,7 +21,8 @@ target_link_libraries(charlie3d_renderer
         PUBLIC
         fmt::fmt
         charlie3d::vulkan_helper
-        charlie3d::util
+        charlie3d::utils
+        charlie3d::shader_compiler
         beyond::core
         third-party::imgui_bindings
         Tracy::TracyClient
@@ -30,16 +32,16 @@ target_link_libraries(charlie3d_renderer
         SDL2::SDL2-static
         )
 
-include(../../cmake/CompileShader.cmake)
-compile_shader(mesh_vert_shader
-        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.vert.glsl
-        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/mesh.vert.spv
-        )
+#include(../../cmake/CompileShader.cmake)
+##compile_shader(mesh_vert_shader
+##        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.vert.glsl
+##        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/mesh.vert.spv
+##        )
+#
+#compile_shader(mesh_frag_shader
+#        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.frag.glsl
+#        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/mesh.frag.spv
+#        )
 
-compile_shader(mesh_frag_shader
-        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.frag.glsl
-        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/mesh.frag.spv
-        )
-
-add_dependencies(charlie3d_renderer mesh_vert_shader)
-add_dependencies(charlie3d_renderer mesh_frag_shader)
+#add_dependencies(charlie3d_renderer mesh_vert_shader)
+#add_dependencies(charlie3d_renderer mesh_frag_shader)

@@ -1,7 +1,7 @@
-add_library(charlie3d_util INTERFACE)
-add_library(charlie3d::util ALIAS charlie3d_util)
+add_library(charlie3d_utils INTERFACE)
+add_library(charlie3d::utils ALIAS charlie3d_utils)
 
-target_link_libraries(charlie3d_util
+target_link_libraries(charlie3d_utils
         INTERFACE
         beyond::core
         )
