@@ -4,7 +4,7 @@
 #include <vulkan/vulkan.h>
 
 #include <beyond/types/expected.hpp>
-#include <beyond/utils/utils.hpp>
+#include <beyond/utils/narrowing.hpp>
 
 #include <cstdint>
 
@@ -136,7 +136,7 @@ public:
 
   template <typename T = void> auto map(Buffer& buffer) -> Expected<T*>
   {
-    return map_impl(buffer).map([](void* ptr) { return static_cast<T*>(ptr); });
+    return map_impl(buffer).map([](void* ptr) { return beyond::narrow<T*>(ptr); });
   }
 
   void unmap(const Buffer& buffer);

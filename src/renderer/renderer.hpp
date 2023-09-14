@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../asset//cpu_mesh.hpp"
 #include "../window/input_handler.hpp"
 #include "../window/window.hpp"
 #include "vulkan_helpers/buffer.hpp"
@@ -13,6 +14,7 @@
 
 #include "mesh.hpp"
 #include "render_pass.hpp"
+#include "scene.hpp"
 #include "uploader.hpp"
 
 #include <memory>
@@ -35,10 +37,6 @@ class VkCtx;
 }
 
 namespace charlie {
-
-struct MeshHandle : beyond::GenerationalHandle<MeshHandle, uint32_t, 16> {
-  using GenerationalHandle::GenerationalHandle;
-};
 
 struct Texture {
   vkh::Image image;
@@ -99,11 +97,10 @@ public:
   // returns nullptr if it can't be found
   [[nodiscard]] auto get_material(const std::string& name) -> Material*;
 
-  void add_object(RenderObject object);
+  auto set_scene(std::unique_ptr<const Scene> scene) -> const Scene&;
 
   // our draw function
-  void draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects,
-                    const charlie::Camera& camera);
+  void draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera);
 
   [[nodiscard]] auto frame_number() const -> std::size_t
   {
@@ -130,7 +127,7 @@ public:
     return upload_context_;
   }
 
-  [[nodiscard]] auto upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh) -> MeshHandle;
+  [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
 
 private:
   Window* window_ = nullptr;
@@ -164,6 +161,8 @@ private:
   std::unordered_map<std::string, Material> materials_;
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
+
+  std::unique_ptr<const Scene> scene_;
 
   VkSampler blocky_sampler_ = VK_NULL_HANDLE;
   Texture texture_;

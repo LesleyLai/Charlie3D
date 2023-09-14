@@ -10,8 +10,9 @@
   do {                                                                                             \
     const VkResult err = x;                                                                        \
     if (err) {                                                                                     \
-      fmt::print(stderr, "Vulkan error: {} at {}:{}\n",                                            \
-                 static_cast<std::underlying_type_t<VkResult>>(err), __FILE__, __LINE__);          \
+      fmt::print(stderr, "Vulkan error: {} [{}] at {}:{}\n",                                       \
+                 static_cast<std::underlying_type_t<VkResult>>(err), vkh::to_string(err),          \
+                 __FILE__, __LINE__);                                                              \
     }                                                                                              \
   } while (0)
 
@@ -23,5 +24,7 @@
 namespace vkh {
 
 template <class T> using Expected = beyond::expected<T, VkResult>;
+
+[[nodiscard]] auto to_string(VkResult result) -> const char*;
 
 } // namespace vkh

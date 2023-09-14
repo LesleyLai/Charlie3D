@@ -18,6 +18,7 @@ class CompressorRecipe(ConanFile):
         self.requires("stb/cci.20220909")
         self.requires("tinyobjloader/1.0.7")
         self.requires("imgui/1.89.8-docking")
+        self.requires("meshoptimizer/0.17")
 
         self.requires("tracy/0.9.1")
         self.requires("catch2/3.4.0")

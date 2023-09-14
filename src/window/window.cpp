@@ -2,6 +2,8 @@
 
 #include <SDL2/SDL.h>
 
+#include "beyond/utils/narrowing.hpp"
+
 namespace charlie {
 
 Window::~Window()
@@ -13,7 +15,7 @@ Window::~Window()
 {
   int width = 0, height = 0;
   SDL_GetWindowSize(window_, &width, &height);
-  return Resolution{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
+  return Resolution{beyond::narrow<std::uint32_t>(width), beyond::narrow<std::uint32_t>(height)};
 }
 
 [[nodiscard]] auto Window::window_id() const noexcept -> std::uint32_t

@@ -5,6 +5,8 @@
 #include "renderer/camera.hpp"
 #include "renderer/renderer.hpp"
 
+#include "renderer/scene.hpp"
+
 #include "utils/configuration.hpp"
 #include "utils/file.hpp"
 
@@ -27,15 +29,11 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
 
-  const auto cpu_mesh = charlie::CPUMesh::load("models/lost_empire/lost_empire.obj");
+  const char* filename = "models/lost_empire/lost_empire.obj";
+  // const auto cpu_mesh = charlie::CPUMesh::load(filename);
 
-  const charlie::MeshHandle lost_empire_mesh = renderer.upload_mesh_data("lost_empire", cpu_mesh);
-
-  const charlie::Material* default_material = renderer.get_material("default");
-  BEYOND_ENSURE(default_material != nullptr);
-  renderer.add_object(charlie::RenderObject{.mesh = lost_empire_mesh,
-                                            .material = default_material,
-                                            .model_matrix = beyond::translate(0.f, -20.f, 0.f)});
+  const auto scene =
+      renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(filename, renderer)));
 }
 
 void set_asset_path()
@@ -57,8 +55,8 @@ void draw_gui(charlie::Window& window, charlie::Camera& camera)
   bool show_control_panel = true;
   const auto resolution = window.resolution();
   const float control_panel_width = ImGui::GetFontSize() * 25.f;
-  ImGui::SetNextWindowPos(ImVec2(static_cast<float>(resolution.width) - control_panel_width, 0));
-  ImGui::SetNextWindowSize(ImVec2(control_panel_width, static_cast<float>(resolution.height)));
+  ImGui::SetNextWindowPos(ImVec2(beyond::narrow<float>(resolution.width) - control_panel_width, 0));
+  ImGui::SetNextWindowSize(ImVec2(control_panel_width, beyond::narrow<float>(resolution.height)));
   ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
 
   if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
@@ -82,11 +80,12 @@ int main()
   auto renderer = charlie::Renderer{window};
   input_handler.register_listener(renderer);
 
-  charlie::ArcballCameraController arcball_controller{window};
+  charlie::ArcballCameraController arcball_controller{window, beyond::Point3{0, 20, -1},
+                                                      beyond::Point3{0, 20, 0}};
   charlie::Camera camera{arcball_controller};
   {
     const auto [width, height] = window.resolution();
-    camera.aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+    camera.aspect_ratio = beyond::narrow<float>(width) / beyond::narrow<float>(height);
   }
   input_handler.register_listener(camera);
 

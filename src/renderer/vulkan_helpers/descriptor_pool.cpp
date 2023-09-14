@@ -15,7 +15,7 @@ auto create_descriptor_pool(Context& context, const DescriptorPoolCreateInfo& cr
       .pNext = nullptr,
       .flags = create_info.flags,
       .maxSets = create_info.max_sets,
-      .poolSizeCount = static_cast<std::uint32_t>(create_info.pool_sizes.size()),
+      .poolSizeCount = beyond::narrow<std::uint32_t>(create_info.pool_sizes.size()),
       .pPoolSizes = create_info.pool_sizes.data(),
   };
 

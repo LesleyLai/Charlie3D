@@ -6,7 +6,6 @@
 
 #include <beyond/utils/assert.hpp>
 #include <beyond/utils/bit_cast.hpp>
-#include <beyond/utils/conversion.hpp>
 
 namespace vkh {
 
@@ -15,9 +14,7 @@ namespace vkh {
     -> beyond::expected<VkPipeline, VkResult>
 {
   BEYOND_ENSURE(create_info.layout.value != VK_NULL_HANDLE);
-
-  using beyond::to_u32;
-
+  
   const auto vertex_binding_descriptions =
       create_info.vertex_input_state_create_info.binding_descriptions;
   const auto vertex_attribute_descriptions =
@@ -25,9 +22,10 @@ namespace vkh {
 
   const VkPipelineVertexInputStateCreateInfo vertex_input_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = to_u32(vertex_binding_descriptions.size()),
+      .vertexBindingDescriptionCount = beyond::narrow<uint32_t>(vertex_binding_descriptions.size()),
       .pVertexBindingDescriptions = vertex_binding_descriptions.data(),
-      .vertexAttributeDescriptionCount = to_u32(vertex_attribute_descriptions.size()),
+      .vertexAttributeDescriptionCount =
+          beyond::narrow<uint32_t>(vertex_attribute_descriptions.size()),
       .pVertexAttributeDescriptions = vertex_attribute_descriptions.data()};
 
   static constexpr VkPipelineInputAssemblyStateCreateInfo input_assembly{
@@ -92,7 +90,7 @@ namespace vkh {
       .pNext = VK_NULL_HANDLE,
       .viewMask = pipeline_rendering_create_info.view_mask,
       .colorAttachmentCount =
-          to_u32(pipeline_rendering_create_info.color_attachment_formats.size()),
+          beyond::narrow<uint32_t>(pipeline_rendering_create_info.color_attachment_formats.size()),
       .pColorAttachmentFormats = pipeline_rendering_create_info.color_attachment_formats.data(),
       .depthAttachmentFormat = pipeline_rendering_create_info.depth_attachment_format,
       .stencilAttachmentFormat = pipeline_rendering_create_info.stencil_attachment_format,
@@ -109,7 +107,7 @@ namespace vkh {
   const VkGraphicsPipelineCreateInfo pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .pNext = &vk_pipeline_rendering_create_info,
-      .stageCount = to_u32(create_info.shader_stages.size()),
+      .stageCount = beyond::narrow<uint32_t>(create_info.shader_stages.size()),
       .pStages = create_info.shader_stages.data(),
       .pVertexInputState = &vertex_input_info,
       .pInputAssemblyState = &input_assembly,

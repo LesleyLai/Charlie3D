@@ -85,7 +85,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   }
 
   void* pixel_ptr = static_cast<void*>(pixels);
-  const auto image_size = static_cast<VkDeviceSize>(tex_width) * tex_height * 4;
+  const auto image_size = beyond::narrow<VkDeviceSize>(tex_width) * tex_height * 4;
 
   constexpr VkFormat image_format = VK_FORMAT_R8G8B8A8_SRGB;
 
@@ -100,13 +100,13 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
 
   // copy data to buffer
   void* data = context.map(staging_buffer).value();
-  memcpy(data, pixel_ptr, static_cast<size_t>(image_size));
+  memcpy(data, pixel_ptr, beyond::narrow<size_t>(image_size));
   context.unmap(staging_buffer);
   stbi_image_free(pixels);
 
   const VkExtent3D image_extent = {
-      .width = static_cast<uint32_t>(tex_width),
-      .height = static_cast<uint32_t>(tex_height),
+      .width = beyond::narrow<uint32_t>(tex_width),
+      .height = beyond::narrow<uint32_t>(tex_height),
       .depth = 1,
   };
 
@@ -219,6 +219,40 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
   vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1,
                        &image_memory_barrier_to_present);
+}
+
+struct IndirectBatch {
+  charlie::MeshHandle mesh;
+  const charlie::Material* material = nullptr;
+  std::uint32_t first = 0;
+  std::uint32_t count = 0;
+};
+
+[[nodiscard]] auto compact_draws(std::span<const charlie::RenderObject> objects)
+    -> std::vector<IndirectBatch>
+{
+  std::vector<IndirectBatch> draws;
+
+  if (objects.empty()) return draws;
+
+  charlie::MeshHandle last_mesh;
+  const charlie::Material* last_material = nullptr;
+
+  for (std::uint32_t i = 0; i < objects.size(); ++i) {
+    const auto& object = objects[i];
+    const bool same_mesh = object.mesh == last_mesh;
+    const bool same_material = object.material == last_material;
+    if (same_mesh && same_material) {
+      BEYOND_ASSERT(!draws.empty());
+      ++draws.back().count;
+    } else {
+      draws.push_back(
+          IndirectBatch{.mesh = object.mesh, .material = object.material, .first = i, .count = 1});
+      last_material = object.material;
+      last_mesh = object.mesh;
+    }
+  }
+  return draws;
 }
 
 } // anonymous namespace
@@ -624,9 +658,9 @@ void Renderer::render(const charlie::Camera& camera)
 
         const VkViewport viewport{
             .x = 0.0f,
-            .y = static_cast<float>(resolution().height),
-            .width = static_cast<float>(resolution().width),
-            .height = -static_cast<float>(resolution().height),
+            .y = beyond::narrow<float>(resolution().height),
+            .width = beyond::narrow<float>(resolution().width),
+            .height = -beyond::narrow<float>(resolution().height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
@@ -634,7 +668,7 @@ void Renderer::render(const charlie::Camera& camera)
         const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution())};
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        draw_objects(cmd, render_objects_, camera);
+        draw_scene(cmd, camera);
         vkCmdEndRendering(cmd);
       }
 
@@ -712,23 +746,23 @@ void Renderer::present(uint32_t& swapchain_image_index)
   return it == materials_.end() ? nullptr : &it->second;
 }
 
-[[nodiscard]] auto Renderer::upload_mesh_data(const char* mesh_name, const CPUMesh& cpu_mesh)
-    -> MeshHandle
+[[nodiscard]] auto Renderer::upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle
 {
   static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
   const vkh::Buffer position_buffer =
-      upload_buffer(cpu_mesh.positions, buffer_usage, fmt::format("{} Position", mesh_name).c_str())
+      upload_buffer(cpu_mesh.positions, buffer_usage,
+                    fmt::format("{} Position", cpu_mesh.name).c_str())
           .value();
   const vkh::Buffer normal_buffer =
-      upload_buffer(cpu_mesh.normals, buffer_usage, fmt::format("{} Normal", mesh_name).c_str())
+      upload_buffer(cpu_mesh.normals, buffer_usage, fmt::format("{} Normal", cpu_mesh.name).c_str())
           .value();
   const vkh::Buffer uv_buffer =
-      upload_buffer(cpu_mesh.uv, buffer_usage, fmt::format("{} Texcoord", mesh_name).c_str())
+      upload_buffer(cpu_mesh.uv, buffer_usage, fmt::format("{} Texcoord", cpu_mesh.name).c_str())
           .value();
 
   const vkh::Buffer index_buffer = upload_buffer(cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                                                 fmt::format("{} Index", mesh_name).c_str())
+                                                 fmt::format("{} Index", cpu_mesh.name).c_str())
                                        .value();
 
   return meshes_.insert(
@@ -736,8 +770,8 @@ void Renderer::present(uint32_t& swapchain_image_index)
            .normal_buffer = normal_buffer,
            .uv_buffer = uv_buffer,
            .index_buffer = index_buffer,
-           .vertices_count = static_cast<std::uint32_t>(cpu_mesh.positions.size()),
-           .index_count = static_cast<std::uint32_t>(cpu_mesh.indices.size())});
+           .vertices_count = beyond::narrow<std::uint32_t>(cpu_mesh.positions.size()),
+           .index_count = beyond::narrow<std::uint32_t>(cpu_mesh.indices.size())});
 }
 
 auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage,
@@ -771,56 +805,8 @@ auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFl
       });
 }
 
-namespace {
-
-struct IndirectBatch {
-  MeshHandle mesh;
-  const Material* material = nullptr;
-  std::uint32_t first = 0;
-  std::uint32_t count = 0;
-};
-
-[[nodiscard]] auto compact_draws(std::span<RenderObject> objects) -> std::vector<IndirectBatch>
+void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
 {
-  std::vector<IndirectBatch> draws;
-  if (objects.empty()) return draws;
-
-  MeshHandle last_mesh;
-  const Material* last_material = nullptr;
-
-  for (std::uint32_t i = 0; i < objects.size(); ++i) {
-    const auto& object = objects[i];
-    const bool same_mesh = object.mesh == last_mesh;
-    const bool same_material = object.material == last_material;
-    if (same_mesh && same_material) {
-      BEYOND_ASSERT(!draws.empty());
-      ++draws.back().count;
-    } else {
-      draws.push_back(
-          IndirectBatch{.mesh = object.mesh, .material = object.material, .first = i, .count = 1});
-      last_material = object.material;
-      last_mesh = object.mesh;
-    }
-  }
-  return draws;
-}
-
-} // anonymous namespace
-
-void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects,
-                            const charlie::Camera& camera)
-{
-  // Copy to object buffer
-  auto* object_data =
-      static_cast<GPUObjectData*>(context_.map(current_frame().object_buffer).value());
-
-  const std::size_t object_count = objects.size();
-  BEYOND_ENSURE(object_count <= max_object_count);
-  for (std::size_t i = 0; i < objects.size(); ++i) {
-    object_data[i].model = objects[i].model_matrix;
-  }
-
-  context_.unmap(current_frame().object_buffer);
 
   // Camera
 
@@ -845,15 +831,41 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
   const Material* last_material = nullptr;
   beyond::optional<MeshHandle> last_mesh;
 
-  const auto draws = compact_draws(objects);
+  render_objects_.clear();
+  for (uint32_t i = 0; i < scene_->node_count(); ++i) {
+    if (const auto mesh_itr = scene_->meshes.find(i); mesh_itr != scene_->meshes.end()) {
+      const MeshHandle mesh = mesh_itr->second;
+      render_objects_.push_back(RenderObject{
+          .mesh = mesh,
+          .material = get_material("default"),
+          .model_matrix = scene_->global_transforms[i],
+      });
+    }
+  }
+
+  // Copy to object buffer
+  auto* object_data =
+      beyond::narrow<GPUObjectData*>(context_.map(current_frame().object_buffer).value());
+
+  const std::size_t object_count = render_objects_.size();
+  BEYOND_ENSURE(object_count <= max_object_count);
+  for (std::size_t i = 0; i < scene_->global_transforms.size(); ++i) {
+    object_data[i].model = scene_->global_transforms[i];
+  }
+
+  context_.unmap(current_frame().object_buffer);
+
+  // Generate draws
+  const auto draws = compact_draws(render_objects_);
 
   {
     auto* draw_commands =
         context_.map<VkDrawIndexedIndirectCommand>(current_frame().indirect_buffer).value();
     BEYOND_ENSURE(draw_commands != nullptr);
 
-    for (std::uint32_t i = 0; i < objects.size(); ++i) {
-      const auto& mesh = meshes_.try_get(objects[i].mesh).expect("Cannot find mesh by handle");
+    for (std::uint32_t i = 0; i < object_count; ++i) {
+      const auto mesh_handle = render_objects_[i].mesh;
+      const auto& mesh = meshes_.try_get(mesh_handle).expect("Cannot find mesh by handle");
 
       draw_commands[i] = VkDrawIndexedIndirectCommand{
           .indexCount = mesh.index_count,
@@ -891,8 +903,8 @@ void Renderer::draw_objects(VkCommandBuffer cmd, std::span<RenderObject> objects
       vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
-    const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndirectCommand);
-    constexpr uint32_t draw_stride = sizeof(VkDrawIndirectCommand);
+    const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndexedIndirectCommand);
+    constexpr uint32_t draw_stride = sizeof(VkDrawIndexedIndirectCommand);
     vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, indirect_offset, draw.count,
                              draw_stride);
 
@@ -939,9 +951,10 @@ Renderer::~Renderer()
   }
 }
 
-void Renderer::add_object(RenderObject object)
+auto Renderer::set_scene(std::unique_ptr<const Scene> scene) -> const Scene&
 {
-  render_objects_.push_back(object);
+  scene_ = std::move(scene);
+  return *scene_;
 }
 
 void Renderer::on_input_event(const Event& event, const InputStates& /*states*/)

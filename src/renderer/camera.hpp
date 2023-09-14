@@ -58,13 +58,22 @@ class FirstPersonCameraController : public CameraController {
 
 class ArcballCameraController : public CameraController {
 public:
-  explicit ArcballCameraController(Window& window) : window_{&window} {}
+  explicit ArcballCameraController(Window& window,
+                                   beyond::Point3 initial_eye = beyond::Point3{0, 0, -1},
+                                   beyond::Point3 initial_lookat = beyond::Point3{0, 0, 0})
+      : window_{&window}, initial_eye_{initial_eye}, initial_lookat_{initial_lookat},
+        eye_{initial_eye}, lookat_{initial_lookat_}
+  {
+  }
 
 private:
   Window* window_ = nullptr;
 
-  beyond::Point3 eye_ = beyond::Point3{0, 0, -1};   // camera position
-  beyond::Point3 center_ = beyond::Point3{0, 0, 0}; // the point look at
+  const beyond::Point3 initial_eye_;
+  const beyond::Point3 initial_lookat_;
+
+  beyond::Point3 eye_;    // camera position
+  beyond::Point3 lookat_; // the point look at
   static constexpr beyond::Vec3 up_ = beyond::Vec3{0, 1, 0};
 
   beyond::IPoint2 old_mouse_pos_;

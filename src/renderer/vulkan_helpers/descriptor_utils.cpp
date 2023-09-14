@@ -238,7 +238,7 @@ auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
   // build layout first
   const VkDescriptorSetLayoutCreateInfo layout_info{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<std::uint32_t>(bindings_.size()),
+      .bindingCount = beyond::narrow<std::uint32_t>(bindings_.size()),
       .pBindings = bindings_.data(),
   };
 
@@ -251,7 +251,7 @@ auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
         for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
 
         vkUpdateDescriptorSets(alloc_->context()->device(),
-                               static_cast<std::uint32_t>(writes_.size()), writes_.data(), 0,
+                               beyond::narrow<std::uint32_t>(writes_.size()), writes_.data(), 0,
                                nullptr);
 
         return DescriptorBuilderResult{layout, set};

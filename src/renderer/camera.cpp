@@ -2,6 +2,7 @@
 
 #include <beyond/math/constants.hpp>
 #include <beyond/math/transform.hpp>
+#include <beyond/utils/narrowing.hpp>
 
 #include <imgui.h>
 
@@ -62,7 +63,7 @@ void Camera::on_input_event(const Event& event, const InputStates& states)
             SDL_Window* window = SDL_GetWindowFromID(e.window_id);
             int width, height;
             SDL_GetWindowSize(window, &width, &height);
-            this->aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
+            this->aspect_ratio = beyond::narrow<float>(width) / beyond::narrow<float>(height);
           }
         }
       },
@@ -145,12 +146,12 @@ void FirstPersonCameraController::on_key_input(int /*key*/, int /*scancode*/, in
 
 auto ArcballCameraController::view_matrix() const -> beyond::Mat4
 {
-  return beyond::look_at(eye_, center_, up_);
+  return beyond::look_at(eye_, lookat_, up_);
 }
 
 [[nodiscard]] auto ArcballCameraController::forward_axis() const -> beyond::Vec3
 {
-  return normalize(center_ - eye_);
+  return normalize(lookat_ - eye_);
 }
 
 [[nodiscard]] auto ArcballCameraController::right_axis() const -> beyond::Vec3
@@ -168,10 +169,10 @@ void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputSta
 
     constexpr auto pi = beyond::float_constants::pi;
     const auto delta_angle_x =
-        static_cast<float>(delta_mouse.x) / static_cast<float>(width) * (2 * pi);
-    auto delta_angle_y = static_cast<float>(delta_mouse.y) / static_cast<float>(height) * pi;
+        beyond::narrow<float>(delta_mouse.x) / beyond::narrow<float>(width) * (2 * pi);
+    auto delta_angle_y = beyond::narrow<float>(delta_mouse.y) / beyond::narrow<float>(height) * pi;
 
-    const beyond::Vec4 pivot{center_, 1};
+    const beyond::Vec4 pivot{lookat_, 1};
     beyond::Vec4 position{eye_, 1};
 
     // If the camera view direction is the same as up vector
@@ -191,10 +192,10 @@ void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputSta
   // Panning
   if (states.mouse_button_down(MouseButton::right)) {
     const auto delta =
-        cross(forward_axis(), right_axis()) * static_cast<float>(delta_mouse.y) * pan_speed_ +
-        right_axis() * static_cast<float>(delta_mouse.x) * pan_speed_;
+        cross(forward_axis(), right_axis()) * beyond::narrow<float>(delta_mouse.y) * pan_speed_ +
+        right_axis() * beyond::narrow<float>(delta_mouse.x) * pan_speed_;
     eye_ += delta;
-    center_ += delta;
+    lookat_ += delta;
   }
 
   old_mouse_pos_ = mouse_pos;
@@ -205,7 +206,7 @@ void ArcballCameraController::draw_gui()
   ImGui::SeparatorText("Arcball Controller:");
 
   ImGui::LabelText("Position", "%f %f %f", eye_.x, eye_.y, eye_.z);
-  ImGui::LabelText("Look at", "%f %f %f", center_.x, center_.y, center_.z);
+  ImGui::LabelText("Look at", "%f %f %f", lookat_.x, lookat_.y, lookat_.z);
 
   ImGui::SliderFloat("Pan speed", &pan_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
   ImGui::SliderFloat("Zoom speed", &zoom_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
@@ -214,7 +215,7 @@ void ArcballCameraController::draw_gui()
 void ArcballCameraController::reset()
 {
   eye_ = beyond::Point3{0, 0, -1};
-  center_ = beyond::Point3{0, 0, 0};
+  lookat_ = beyond::Point3{0, 0, 0};
   pan_speed_ = 0.1f;
   zoom_speed_ = 1.0f;
 }
@@ -235,7 +236,7 @@ void ArcballCameraController::on_input_event(const Event& event, const InputStat
 
 void ArcballCameraController::on_mouse_scroll(MouseWheelEvent event)
 {
-  const auto zooming = (eye_ - center_).length();
+  const auto zooming = (eye_ - lookat_).length();
 
   const auto advance_amount = forward_axis() * log(zooming + 1) * event.y * zoom_speed_;
   // Don't zoom in if too close

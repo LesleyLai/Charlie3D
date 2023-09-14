@@ -9,10 +9,11 @@ add_library(charlie3d_renderer
         render_pass.hpp
         imgui_render_pass.cpp
         imgui_render_pass.hpp
-        uploader.cpp uploader.hpp)
+        uploader.cpp uploader.hpp
+        scene.cpp scene.hpp
+        )
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
-find_package(tinyobjloader REQUIRED)
 find_package(stb REQUIRED)
 find_package(tracy REQUIRED)
 find_package(SDL2 REQUIRED)
@@ -22,12 +23,12 @@ target_link_libraries(charlie3d_renderer
         fmt::fmt
         charlie3d::vulkan_helper
         charlie3d::utils
+        charlie3d::asset
         charlie3d::shader_compiler
         beyond::core
         third-party::imgui_bindings
         Tracy::TracyClient
         PRIVATE
-        tinyobjloader::tinyobjloader
         stb::stb
         SDL2::SDL2-static
         )

@@ -1,7 +1,7 @@
 #include "image.hpp"
 
 #include "beyond/utils/bit_cast.hpp"
-#include "beyond/utils/conversion.hpp"
+#include "beyond/utils/utils.hpp"
 #include "context.hpp"
 #include "debug_utils.hpp"
 
@@ -23,7 +23,8 @@ auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_inf
       .tiling = image_create_info.tiling,
       .usage = image_create_info.usage.value,
       .sharingMode = image_create_info.sharing_mode,
-      .queueFamilyIndexCount = beyond::to_u32(image_create_info.queue_fimily_indices.size()),
+      .queueFamilyIndexCount =
+          beyond::narrow<uint32_t>(image_create_info.queue_fimily_indices.size()),
       .pQueueFamilyIndices = image_create_info.queue_fimily_indices.data(),
       .initialLayout = image_create_info.initial_layout,
   };

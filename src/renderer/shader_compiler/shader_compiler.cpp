@@ -1,6 +1,8 @@
 #include "shader_compiler.hpp"
 
 #include <beyond/utils/assert.hpp>
+#include <beyond/utils/narrowing.hpp>
+#include <beyond/utils/utils.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -33,11 +35,11 @@ namespace {
 [[nodiscard]] auto read_text_file(const char* filename) -> std::string
 {
   const std::ifstream file(filename);
-  if (!file.is_open()) beyond::panic("Cannot open file {}\n", filename);
+  if (!file.is_open()) beyond::panic(fmt::format("Cannot open file {}\n", filename));
   std::stringstream buffer;
   buffer << file.rdbuf();
 
-  if (!file.good()) { beyond::panic("Error when reading {}\n", filename); }
+  if (!file.good()) { beyond::panic(fmt::format("Error when reading {}\n", filename)); }
 
   return buffer.str();
 }
@@ -46,16 +48,16 @@ namespace {
 {
   std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
-  if (!file.is_open()) { beyond::panic("Failed to open file {}", filename); }
+  if (!file.is_open()) { beyond::panic(fmt::format("Failed to open file {}", filename)); }
 
-  const auto file_size = static_cast<size_t>(file.tellg());
+  const auto file_size = beyond::narrow<size_t>(file.tellg());
   BEYOND_ENSURE(file_size % sizeof(uint32_t) == 0);
 
   std::vector<uint32_t> buffer;
   buffer.resize(file_size / 4);
 
   file.seekg(0);
-  file.read(beyond::bit_cast<char*>(buffer.data()), static_cast<std::streamsize>(file_size));
+  file.read(beyond::bit_cast<char*>(buffer.data()), beyond::narrow<std::streamsize>(file_size));
 
   if (!file.good()) {
     // Blah
@@ -124,7 +126,9 @@ auto ShaderCompiler::compile_shader(const char* filename, ShaderStage stage)
     auto data = compile_shader_impl(*impl_, shader_filename, shader_src, stage);
     if (data) {
       std::ofstream spirv_file{spirv_path, std::ios::out | std::ios::binary};
-      if (!spirv_file.is_open()) { beyond::panic("Failed to open {}", spirv_path.string()); }
+      if (!spirv_file.is_open()) {
+        beyond::panic(fmt::format("Failed to open {}", spirv_path.string()));
+      }
       spirv_file.write(beyond::bit_cast<const char*>(data.value().data()),
                        data.value().size() * sizeof(uint32_t));
     } else if (has_old_version) {

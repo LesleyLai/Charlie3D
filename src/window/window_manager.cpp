@@ -18,7 +18,7 @@ auto WindowManager::instance() -> WindowManager&
 WindowManager::WindowManager()
 {
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    beyond::panic("Failed to initialize SDL: {}\n", SDL_GetError());
+    beyond::panic(fmt::format("Failed to initialize SDL: {}\n", SDL_GetError()));
   }
 }
 
@@ -36,7 +36,9 @@ auto WindowManager::create(int width, int height, const char* title, const Windo
 
   auto* window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width,
                                   height, window_flags);
-  if (window == nullptr) { beyond::panic("Failed to create SDL window: {}\n", SDL_GetError()); }
+  if (window == nullptr) {
+    beyond::panic(fmt::format("Failed to create SDL window: {}\n", SDL_GetError()));
+  }
   return Window{window};
 }
 

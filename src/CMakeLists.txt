@@ -2,6 +2,7 @@ find_package(fmt REQUIRED)
 
 add_subdirectory(utils)
 add_subdirectory(window)
+add_subdirectory(asset)
 add_subdirectory(renderer)
 
 add_executable(charlie3d "main.cpp")
