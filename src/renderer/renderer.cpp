@@ -751,19 +751,21 @@ void Renderer::present(uint32_t& swapchain_image_index)
   static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
   const vkh::Buffer position_buffer =
-      upload_buffer(cpu_mesh.positions, buffer_usage,
+      upload_buffer(context_, upload_context_, cpu_mesh.positions, buffer_usage,
                     fmt::format("{} Position", cpu_mesh.name).c_str())
           .value();
   const vkh::Buffer normal_buffer =
-      upload_buffer(cpu_mesh.normals, buffer_usage, fmt::format("{} Normal", cpu_mesh.name).c_str())
+      upload_buffer(context_, upload_context_, cpu_mesh.normals, buffer_usage,
+                    fmt::format("{} Normal", cpu_mesh.name).c_str())
           .value();
-  const vkh::Buffer uv_buffer =
-      upload_buffer(cpu_mesh.uv, buffer_usage, fmt::format("{} Texcoord", cpu_mesh.name).c_str())
-          .value();
+  const vkh::Buffer uv_buffer = upload_buffer(context_, upload_context_, cpu_mesh.uv, buffer_usage,
+                                              fmt::format("{} Texcoord", cpu_mesh.name).c_str())
+                                    .value();
 
-  const vkh::Buffer index_buffer = upload_buffer(cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                                                 fmt::format("{} Index", cpu_mesh.name).c_str())
-                                       .value();
+  const vkh::Buffer index_buffer =
+      upload_buffer(context_, upload_context_, cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                    fmt::format("{} Index", cpu_mesh.name).c_str())
+          .value();
 
   return meshes_.insert(
       Mesh{.position_buffer = position_buffer,
@@ -772,37 +774,6 @@ void Renderer::present(uint32_t& swapchain_image_index)
            .index_buffer = index_buffer,
            .vertices_count = beyond::narrow<std::uint32_t>(cpu_mesh.positions.size()),
            .index_count = beyond::narrow<std::uint32_t>(cpu_mesh.indices.size())});
-}
-
-auto Renderer::upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage,
-                             const char* debug_name) -> vkh::Expected<vkh::Buffer>
-{
-  return vkh::create_buffer(context_, {.size = size,
-                                       .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                       .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                       .debug_name = fmt::format("{} Buffer", debug_name).c_str()})
-      .and_then([=, this](vkh::Buffer gpu_buffer) {
-        auto vertex_staging_buffer =
-            vkh::create_buffer_from_data(
-                context_,
-                {.size = size,
-                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                 .debug_name = fmt::format("{} Staging Buffer", debug_name).c_str()},
-                data)
-                .value();
-        BEYOND_DEFER(vkh::destroy_buffer(context_, vertex_staging_buffer));
-
-        immediate_submit(context_, upload_context_, [=](VkCommandBuffer cmd) {
-          const VkBufferCopy copy = {
-              .srcOffset = 0,
-              .dstOffset = 0,
-              .size = size,
-          };
-          vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, gpu_buffer.buffer, 1, &copy);
-        });
-        return vkh::Expected<vkh::Buffer>(gpu_buffer);
-      });
 }
 
 void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)

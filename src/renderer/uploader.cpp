@@ -1,7 +1,10 @@
 #include "uploader.hpp"
 
+#include "vulkan_helpers/buffer.hpp"
 #include "vulkan_helpers/commands.hpp"
 #include "vulkan_helpers/sync.hpp"
+
+#include <beyond/utils/defer.hpp>
 
 namespace charlie {
 
@@ -49,6 +52,40 @@ void immediate_submit(vkh::Context& context, UploadContext& upload_context,
   VK_CHECK(vkWaitForFences(context, 1, &upload_context.fence, true, 9999999999));
   VK_CHECK(vkResetFences(context, 1, &upload_context.fence));
   VK_CHECK(vkResetCommandPool(context, upload_context.command_pool, 0));
+}
+
+auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
+                   std::span<const std::byte> data, VkBufferUsageFlags usage,
+                   const char* debug_name) -> vkh::Expected<vkh::Buffer>
+{
+  const auto size = beyond::narrow<uint32_t>(data.size());
+
+  return vkh::create_buffer(context, {.size = size,
+                                      .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                      .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                                      .debug_name = fmt::format("{} Buffer", debug_name).c_str()})
+      .and_then([=, &context, &upload_context](vkh::Buffer gpu_buffer) {
+        auto vertex_staging_buffer =
+            vkh::create_buffer_from_data(
+                context,
+                {.size = size,
+                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                 .debug_name = fmt::format("{} Staging Buffer", debug_name).c_str()},
+                data.data())
+                .value();
+        BEYOND_DEFER(vkh::destroy_buffer(context, vertex_staging_buffer));
+
+        immediate_submit(context, upload_context, [=](VkCommandBuffer cmd) {
+          const VkBufferCopy copy = {
+              .srcOffset = 0,
+              .dstOffset = 0,
+              .size = size,
+          };
+          vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, gpu_buffer.buffer, 1, &copy);
+        });
+        return vkh::Expected<vkh::Buffer>(gpu_buffer);
+      });
 }
 
 } // namespace charlie

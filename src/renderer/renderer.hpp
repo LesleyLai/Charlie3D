@@ -179,18 +179,6 @@ private:
 
   void on_input_event(const Event& event, const InputStates& states) override;
 
-  auto upload_buffer(std::size_t size, const void* data, VkBufferUsageFlags usage,
-                     const char* debug_name = "") -> vkh::Expected<vkh::Buffer>;
-
-  template <class Container>
-  auto upload_buffer(const Container& buffer, VkBufferUsageFlags usage, const char* debug_name = "")
-      -> vkh::Expected<vkh::Buffer>
-    requires(std::contiguous_iterator<typename Container::iterator>)
-  {
-    return upload_buffer(buffer.size() * sizeof(typename Container::value_type), buffer.data(),
-                         usage, debug_name);
-  }
-
   void present(uint32_t& swapchain_image_index);
 };
 
