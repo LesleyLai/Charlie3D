@@ -178,23 +178,17 @@ void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
 {
   ZoneScoped;
 
-  const VkImageMemoryBarrier image_memory_barrier_to_render{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .image = current_swapchain_image,
-      .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-      }};
-
-  vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                       &image_memory_barrier_to_render);
+  const auto image_memory_barrier_to_render =
+      vkh::ImageBarrier2{
+          .stage_masks = {VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
+          .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT},
+          .layouts = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+          .image = current_swapchain_image,
+          .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
+      }
+          .to_vk_struct();
+  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{image_memory_barrier_to_render}});
 }
 
 void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
@@ -202,23 +196,17 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 {
   ZoneScoped;
 
-  const VkImageMemoryBarrier image_memory_barrier_to_present{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-      .image = current_swapchain_image,
-      .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-      }};
-
-  vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                       &image_memory_barrier_to_present);
+  const auto image_memory_barrier_to_present =
+      vkh::ImageBarrier2{
+          .stage_masks = {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                          VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT},
+          .access_masks = {VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_2_NONE},
+          .layouts = {VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
+          .image = current_swapchain_image,
+          .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
+      }
+          .to_vk_struct();
+  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{image_memory_barrier_to_present}});
 }
 
 struct IndirectBatch {
@@ -803,15 +791,12 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   beyond::optional<MeshHandle> last_mesh;
 
   render_objects_.clear();
-  for (uint32_t i = 0; i < scene_->node_count(); ++i) {
-    if (const auto mesh_itr = scene_->meshes.find(i); mesh_itr != scene_->meshes.end()) {
-      const MeshHandle mesh = mesh_itr->second;
-      render_objects_.push_back(RenderObject{
-          .mesh = mesh,
-          .material = get_material("default"),
-          .model_matrix = scene_->global_transforms[i],
-      });
-    }
+  for (const auto [node_index, mesh] : scene_->meshe_components_) {
+    render_objects_.push_back(RenderObject{
+        .mesh = mesh,
+        .material = get_material("default"),
+        .model_matrix = scene_->global_transforms[node_index],
+    });
   }
 
   // Copy to object buffer

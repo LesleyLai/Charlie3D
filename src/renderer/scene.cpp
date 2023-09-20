@@ -43,7 +43,7 @@ namespace charlie {
   return Scene{
       .local_transforms = std::move(local_transforms),
       .global_transforms = std::move(global_transforms),
-      .meshes = std::move(meshes),
+      .meshe_components_ = std::move(meshes),
   };
 }
 

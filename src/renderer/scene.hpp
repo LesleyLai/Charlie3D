@@ -24,14 +24,9 @@ struct MeshHandle : beyond::GenerationalHandle<MeshHandle, uint32_t, 16> {
 };
 
 struct Scene {
-  std::vector<beyond::Mat4> local_transforms;
+  std::vector<beyond::Mat4> local_transforms; // Cached local transformation for each nodes
   std::vector<beyond::Mat4> global_transforms;
-  std::unordered_map<uint32_t, MeshHandle> meshes;
-
-  [[nodiscard]] auto node_count() const noexcept -> uint32_t
-  {
-    return beyond::narrow<uint32_t>(local_transforms.size());
-  }
+  std::unordered_map<uint32_t, MeshHandle> meshe_components_;
 };
 
 [[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene;

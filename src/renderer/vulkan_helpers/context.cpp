@@ -61,16 +61,17 @@ Context::Context(charlie::Window& window)
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
 
-  auto phys_device_ret = phys_device_selector.set_surface(surface_)
-                             .allow_any_gpu_device_type(false)
-                             .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-                             .add_required_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
-                             .set_required_features({
-                                 .fillModeNonSolid = true,
-                             })
-                             .set_required_features_11({.shaderDrawParameters = true})
-                             .set_required_features_13({.dynamicRendering = true})
-                             .select();
+  auto phys_device_ret =
+      phys_device_selector.set_surface(surface_)
+          .allow_any_gpu_device_type(false)
+          .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+          .add_required_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
+          .set_required_features({
+              .fillModeNonSolid = true,
+          })
+          .set_required_features_11({.shaderDrawParameters = true})
+          .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
+          .select();
   if (!phys_device_ret) { beyond::panic(phys_device_ret.error().message()); }
 
   vkb::PhysicalDevice vkb_physical_device = phys_device_ret.value();
@@ -79,7 +80,7 @@ Context::Context(charlie::Window& window)
   fmt::print("Physical device name: {}\n", vkb_physical_device.name);
 
   vkb::DeviceBuilder device_builder{vkb_physical_device};
-  auto device_ret = device_builder.build();
+  const auto device_ret = device_builder.build();
   if (!device_ret) { beyond::panic(device_ret.error().message()); }
   auto vkb_device = device_ret.value();
   device_ = vkb_device.device;
@@ -88,6 +89,7 @@ Context::Context(charlie::Window& window)
   graphics_queue_family_index_ = vkb_device.get_queue_index(vkb::QueueType::graphics).value();
   compute_queue_ = vkb_device.get_queue(vkb::QueueType::compute).value();
   compute_queue_family_index_ = vkb_device.get_queue_index(vkb::QueueType::compute).value();
+
   //  transfer_queue_ = vkb_device.get_queue(vkb::QueueType::transfer).value();
   //  transfer_queue_family_index_ =
   //      vkb_device.get_queue_index(vkb::QueueType::transfer).value();
