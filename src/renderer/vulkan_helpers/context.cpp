@@ -161,14 +161,14 @@ auto Context::operator=(Context&& other) & noexcept -> Context&
   return *this;
 }
 
-auto Context::map_impl(const Buffer& buffer) -> Expected<void*>
+auto Context::map_impl(const AllocatedBuffer& buffer) -> Expected<void*>
 {
   void* ptr = nullptr;
   VKH_TRY(vmaMapMemory(allocator_, buffer.allocation, &ptr));
   return ptr;
 }
 
-void Context::unmap(const Buffer& buffer)
+void Context::unmap(const AllocatedBuffer& buffer)
 {
   vmaUnmapMemory(allocator_, buffer.allocation);
 }

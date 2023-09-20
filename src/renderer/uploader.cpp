@@ -56,7 +56,7 @@ void immediate_submit(vkh::Context& context, UploadContext& upload_context,
 
 auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
                    std::span<const std::byte> data, VkBufferUsageFlags usage,
-                   const char* debug_name) -> vkh::Expected<vkh::Buffer>
+                   const char* debug_name) -> vkh::Expected<vkh::AllocatedBuffer>
 {
   const auto size = beyond::narrow<uint32_t>(data.size());
 
@@ -64,7 +64,7 @@ auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
                                       .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                       .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
                                       .debug_name = fmt::format("{} Buffer", debug_name).c_str()})
-      .and_then([=, &context, &upload_context](vkh::Buffer gpu_buffer) {
+      .and_then([=, &context, &upload_context](vkh::AllocatedBuffer gpu_buffer) {
         auto vertex_staging_buffer =
             vkh::create_buffer_from_data(
                 context,
@@ -84,7 +84,7 @@ auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
           };
           vkCmdCopyBuffer(cmd, vertex_staging_buffer.buffer, gpu_buffer.buffer, 1, &copy);
         });
-        return vkh::Expected<vkh::Buffer>(gpu_buffer);
+        return vkh::Expected<vkh::AllocatedBuffer>(gpu_buffer);
       });
 }
 

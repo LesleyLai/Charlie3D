@@ -33,15 +33,15 @@ struct ImageCreateInfo {
   const char* debug_name = nullptr;
 };
 
-struct Image {
+struct AllocatedImage {
   VkImage image = {};
   VmaAllocation allocation = {};
 };
 
 auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_info)
-    -> Expected<Image>;
+    -> Expected<AllocatedImage>;
 
-void destroy_image(vkh::Context& context, Image& image);
+void destroy_image(vkh::Context& context, AllocatedImage& image);
 
 } // namespace vkh
 

@@ -71,7 +71,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
 }
 
 [[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer, const char* filename)
-    -> beyond::optional<vkh::Image>
+    -> beyond::optional<vkh::AllocatedImage>
 {
   vkh::Context& context = renderer.context();
 
@@ -110,7 +110,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
       .depth = 1,
   };
 
-  vkh::Image image =
+  vkh::AllocatedImage image =
       vkh::create_image(context,
                         vkh::ImageCreateInfo{
                             .format = image_format,
@@ -738,19 +738,20 @@ void Renderer::present(uint32_t& swapchain_image_index)
 {
   static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-  const vkh::Buffer position_buffer =
+  const vkh::AllocatedBuffer position_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.positions, buffer_usage,
                     fmt::format("{} Position", cpu_mesh.name).c_str())
           .value();
-  const vkh::Buffer normal_buffer =
+  const vkh::AllocatedBuffer normal_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.normals, buffer_usage,
                     fmt::format("{} Normal", cpu_mesh.name).c_str())
           .value();
-  const vkh::Buffer uv_buffer = upload_buffer(context_, upload_context_, cpu_mesh.uv, buffer_usage,
-                                              fmt::format("{} Texcoord", cpu_mesh.name).c_str())
-                                    .value();
+  const vkh::AllocatedBuffer uv_buffer =
+      upload_buffer(context_, upload_context_, cpu_mesh.uv, buffer_usage,
+                    fmt::format("{} Texcoord", cpu_mesh.name).c_str())
+          .value();
 
-  const vkh::Buffer index_buffer =
+  const vkh::AllocatedBuffer index_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                     fmt::format("{} Index", cpu_mesh.name).c_str())
           .value();
@@ -778,7 +779,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
       .view_proj = projection * view,
   };
 
-  const vkh::Buffer& camera_buffer = current_frame().camera_buffer;
+  const vkh::AllocatedBuffer& camera_buffer = current_frame().camera_buffer;
 
   void* data = nullptr;
   vmaMapMemory(context_.allocator(), camera_buffer.allocation, &data);

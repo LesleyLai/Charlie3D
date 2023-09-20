@@ -7,7 +7,7 @@
 namespace vkh {
 
 auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)
-    -> Expected<Buffer>
+    -> Expected<AllocatedBuffer>
 {
   const VkBufferCreateInfo vk_buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -17,7 +17,7 @@ auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_
 
   const VmaAllocationCreateInfo vma_alloc_info{.usage = buffer_create_info.memory_usage};
 
-  Buffer allocated_buffer;
+  AllocatedBuffer allocated_buffer;
   VKH_TRY(vmaCreateBuffer(context.allocator(), &vk_buffer_create_info, &vma_alloc_info,
                           &allocated_buffer.buffer, &allocated_buffer.allocation, nullptr));
 
@@ -30,10 +30,10 @@ auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_
 }
 
 auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
-                             const void* data) -> Expected<Buffer>
+                             const void* data) -> Expected<AllocatedBuffer>
 {
   return create_buffer(context, buffer_create_info)
-      .and_then([&](Buffer buffer) -> Expected<Buffer> {
+      .and_then([&](AllocatedBuffer buffer) -> Expected<AllocatedBuffer> {
         BEYOND_EXPECTED_ASSIGN(void*, buffer_ptr, context.map(buffer));
         std::memcpy(buffer_ptr, data, buffer_create_info.size);
         context.unmap(buffer);
@@ -41,7 +41,7 @@ auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buff
       });
 }
 
-void destroy_buffer(vkh::Context& context, Buffer buffer)
+void destroy_buffer(vkh::Context& context, AllocatedBuffer buffer)
 {
   vmaDestroyBuffer(context.allocator(), buffer.buffer, buffer.allocation);
 }

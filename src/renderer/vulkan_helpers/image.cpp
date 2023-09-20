@@ -8,7 +8,7 @@
 namespace vkh {
 
 auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_info)
-    -> Expected<Image>
+    -> Expected<AllocatedImage>
 {
   const VkImageCreateInfo vk_image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -34,7 +34,7 @@ auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_inf
       .requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
   };
 
-  Image image;
+  AllocatedImage image;
   VKH_TRY(vmaCreateImage(context.allocator(), &vk_image_create_info, &image_alloc_info,
                          &image.image, &image.allocation, nullptr));
 
@@ -46,7 +46,7 @@ auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_inf
   return image;
 }
 
-void destroy_image(Context& context, Image& image)
+void destroy_image(Context& context, AllocatedImage& image)
 {
   vmaDestroyImage(context.allocator(), image.image, image.allocation);
 }

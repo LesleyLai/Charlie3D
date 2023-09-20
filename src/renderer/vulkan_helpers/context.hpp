@@ -13,7 +13,7 @@
 
 namespace vkh {
 
-struct Buffer;
+struct AllocatedBuffer;
 
 struct VulkanFunctions {
   PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT = nullptr;
@@ -134,15 +134,15 @@ public:
     return device_;
   }
 
-  template <typename T = void> auto map(Buffer& buffer) -> Expected<T*>
+  template <typename T = void> auto map(AllocatedBuffer& buffer) -> Expected<T*>
   {
     return map_impl(buffer).map([](void* ptr) { return beyond::narrow<T*>(ptr); });
   }
 
-  void unmap(const Buffer& buffer);
+  void unmap(const AllocatedBuffer& buffer);
 
 private:
-  [[nodiscard]] auto map_impl(const Buffer& buffer) -> Expected<void*>;
+  [[nodiscard]] auto map_impl(const AllocatedBuffer& buffer) -> Expected<void*>;
 };
 
 } // namespace vkh

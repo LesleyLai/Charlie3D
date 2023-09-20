@@ -20,12 +20,12 @@ void immediate_submit(vkh::Context& context, UploadContext& upload_context,
 
 auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
                    std::span<const std::byte> data, VkBufferUsageFlags usage,
-                   const char* debug_name = "") -> vkh::Expected<vkh::Buffer>;
+                   const char* debug_name = "") -> vkh::Expected<vkh::AllocatedBuffer>;
 
 template <class Container>
 auto upload_buffer(vkh::Context& context, UploadContext& upload_context, const Container& buffer,
                    VkBufferUsageFlags usage, const char* debug_name = "")
-    -> vkh::Expected<vkh::Buffer>
+    -> vkh::Expected<vkh::AllocatedBuffer>
   requires(std::contiguous_iterator<typename Container::iterator>)
 {
   return charlie::upload_buffer(context, upload_context, std::as_bytes(std::span{buffer}), usage,

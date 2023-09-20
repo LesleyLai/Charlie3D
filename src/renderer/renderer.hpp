@@ -39,7 +39,7 @@ class VkCtx;
 namespace charlie {
 
 struct Texture {
-  vkh::Image image;
+  vkh::AllocatedImage image;
   VkImageView image_view = {};
 };
 
@@ -63,13 +63,13 @@ struct FrameData {
   VkCommandPool command_pool{};
   VkCommandBuffer main_command_buffer{};
 
-  vkh::Buffer camera_buffer{};
+  vkh::AllocatedBuffer camera_buffer{};
   VkDescriptorSet global_descriptor_set{};
 
-  vkh::Buffer object_buffer{};
+  vkh::AllocatedBuffer object_buffer{};
   VkDescriptorSet object_descriptor_set{};
 
-  vkh::Buffer indirect_buffer{};
+  vkh::AllocatedBuffer indirect_buffer{};
 
   tracy::VkCtx* tracy_vk_ctx = nullptr;
 };
@@ -141,7 +141,7 @@ private:
   UploadContext upload_context_;
 
   VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
-  vkh::Image depth_image_;
+  vkh::AllocatedImage depth_image_;
   VkImageView depth_image_view_ = {};
 
   std::size_t frame_number_ = 0;

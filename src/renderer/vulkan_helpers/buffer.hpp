@@ -18,7 +18,7 @@ struct BufferCreateInfo {
   const char* debug_name = nullptr;
 };
 
-struct [[nodiscard]] Buffer {
+struct [[nodiscard]] AllocatedBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
 
@@ -29,19 +29,19 @@ struct [[nodiscard]] Buffer {
 };
 
 auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)
-    -> Expected<Buffer>;
+    -> Expected<AllocatedBuffer>;
 
 auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
-                             const void* data) -> Expected<Buffer>;
+                             const void* data) -> Expected<AllocatedBuffer>;
 
 template <typename T>
 auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
-                             const T* data) -> Expected<Buffer>
+                             const T* data) -> Expected<AllocatedBuffer>
 {
   BEYOND_ENSURE(sizeof(T) <= buffer_create_info.size);
   return create_buffer_from_data(context, buffer_create_info, static_cast<const void*>(data));
 }
 
-void destroy_buffer(vkh::Context& context, Buffer buffer);
+void destroy_buffer(vkh::Context& context, AllocatedBuffer buffer);
 
 } // namespace vkh
