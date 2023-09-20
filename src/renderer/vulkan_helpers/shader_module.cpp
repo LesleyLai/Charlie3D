@@ -23,8 +23,7 @@ namespace vkh {
   VkShaderModule shader_module = VK_NULL_HANDLE;
   VKH_TRY(vkCreateShaderModule(context.device(), &vk_create_info, nullptr, &shader_module));
 
-  if (set_debug_name(context, beyond::bit_cast<uint64_t>(shader_module),
-                     VK_OBJECT_TYPE_SHADER_MODULE, create_info.debug_name)) {
+  if (set_debug_name(context, shader_module, create_info.debug_name)) {
     fmt::print("Cannot create debug name for {}\n", create_info.debug_name);
   }
   return shader_module;

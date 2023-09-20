@@ -39,8 +39,7 @@ auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_inf
                          &image.image, &image.allocation, nullptr));
 
   if (image_create_info.debug_name != nullptr &&
-      set_debug_name(context, beyond::bit_cast<uint64_t>(image.image), VK_OBJECT_TYPE_IMAGE,
-                     image_create_info.debug_name)) {
+      set_debug_name(context, image.image, image_create_info.debug_name)) {
     report_fail_to_set_debug_name(image_create_info.debug_name);
   }
 

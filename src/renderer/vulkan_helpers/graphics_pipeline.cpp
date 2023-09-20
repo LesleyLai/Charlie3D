@@ -14,7 +14,7 @@ namespace vkh {
     -> beyond::expected<VkPipeline, VkResult>
 {
   BEYOND_ENSURE(create_info.layout.value != VK_NULL_HANDLE);
-  
+
   const auto vertex_binding_descriptions =
       create_info.vertex_input_state_create_info.binding_descriptions;
   const auto vertex_attribute_descriptions =
@@ -127,8 +127,7 @@ namespace vkh {
                                     nullptr, &pipeline));
 
   if (create_info.debug_name != nullptr &&
-      set_debug_name(context, beyond::bit_cast<uint64_t>(pipeline), VK_OBJECT_TYPE_PIPELINE,
-                     create_info.debug_name)) {
+      set_debug_name(context, pipeline, create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }
 

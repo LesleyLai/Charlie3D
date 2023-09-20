@@ -16,8 +16,7 @@ namespace vkh {
   VkCommandBuffer command_buffer{};
   VKH_TRY(
       vkAllocateCommandBuffers(context.device(), &command_buffer_allocate_info, &command_buffer));
-  VKH_TRY(vkh::set_debug_name(context, beyond::bit_cast<uint64_t>(command_buffer),
-                              VK_OBJECT_TYPE_COMMAND_BUFFER, alloc_info.debug_name));
+  VKH_TRY(vkh::set_debug_name(context, command_buffer, alloc_info.debug_name));
   return command_buffer;
 }
 

@@ -27,10 +27,8 @@ Swapchain::Swapchain(Context& context, const SwapchainCreateInfo& create_info)
   image_format_ = vkb_swapchain.image_format;
 
   for (size_t i = 0; i < images_.size(); ++i) {
-    VK_CHECK(set_debug_name(context, std::bit_cast<uint64_t>(images_[i]), VK_OBJECT_TYPE_IMAGE,
-                            fmt::format("Swapchain Image {}", i).c_str()));
-    VK_CHECK(set_debug_name(context, std::bit_cast<uint64_t>(image_views_[i]),
-                            VK_OBJECT_TYPE_IMAGE_VIEW,
+    VK_CHECK(set_debug_name(context, images_[i], fmt::format("Swapchain Image {}", i).c_str()));
+    VK_CHECK(set_debug_name(context, image_views_[i],
                             fmt::format("Swapchain Image View {}", i).c_str()));
   }
 }

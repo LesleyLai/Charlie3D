@@ -23,8 +23,7 @@ auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_v
   VKH_TRY(vkCreateImageView(context, &create_info, nullptr, &image_view));
 
   if (image_view_create_info.debug_name != nullptr &&
-      set_debug_name(context, beyond::bit_cast<uint64_t>(image_view), VK_OBJECT_TYPE_IMAGE_VIEW,
-                     image_view_create_info.debug_name)) {
+      set_debug_name(context, image_view, image_view_create_info.debug_name)) {
     report_fail_to_set_debug_name(image_view_create_info.debug_name);
   }
 
