@@ -180,7 +180,7 @@ void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
 
   const auto image_memory_barrier_to_render =
       vkh::ImageBarrier2{
-          .stage_masks = {VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+          .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                           VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
           .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT},
           .layouts = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
@@ -199,7 +199,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
   const auto image_memory_barrier_to_present =
       vkh::ImageBarrier2{
           .stage_masks = {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                          VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT},
+                          VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT},
           .access_masks = {VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_2_NONE},
           .layouts = {VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
           .image = current_swapchain_image,
@@ -580,7 +580,7 @@ void Renderer::render(const charlie::Camera& camera)
 
   VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
 
-  const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
+  [[maybe_unused]] const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
   const auto current_swapchain_image_view = swapchain_.image_views()[swapchain_image_index];
 
   VK_CHECK(vkResetCommandBuffer(frame.main_command_buffer, 0));
