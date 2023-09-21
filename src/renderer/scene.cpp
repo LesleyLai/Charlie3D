@@ -1,5 +1,6 @@
 #include "scene.hpp"
 
+#include "../asset/gltf_loader.hpp"
 #include "../asset/obj_loader.hpp"
 
 #include "../utils/configuration.hpp"
@@ -17,6 +18,8 @@ namespace charlie {
   const CPUScene cpu_scene = [&]() {
     if (file_path.extension() == ".obj") {
       return load_obj(file_path);
+    } else if (file_path.extension() == ".gltf") {
+      return load_gltf(file_path);
     } else {
       beyond::panic("Unknown scene format!");
     }

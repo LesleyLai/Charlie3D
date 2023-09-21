@@ -17,6 +17,7 @@ class CompressorRecipe(ConanFile):
         self.requires("vulkan-memory-allocator/3.0.1")
         self.requires("stb/cci.20220909")
         self.requires("tinyobjloader/1.0.7")
+        self.requires("fastgltf/0.5.0")
         self.requires("imgui/1.89.8-docking")
         self.requires("meshoptimizer/0.17")
 

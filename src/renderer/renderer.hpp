@@ -84,7 +84,7 @@ class Camera;
 class Renderer : public InputListener {
 public:
   explicit Renderer(Window& window);
-  ~Renderer();
+  ~Renderer() override;
   Renderer(const Renderer&) = delete;
   auto operator=(const Renderer&) & -> Renderer& = delete;
   Renderer(Renderer&&) noexcept = delete;

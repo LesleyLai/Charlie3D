@@ -10,6 +10,5 @@ target_link_libraries(charlie3d_shader_compiler
         PRIVATE
         charlie3d::utils
         beyond::core
-        spdlog::spdlog
         shaderc
         )

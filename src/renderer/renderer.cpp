@@ -12,6 +12,7 @@
 
 #include <cstddef>
 
+#include <spdlog/spdlog.h>
 #include <stb_image.h>
 
 #include <beyond/math/transform.hpp>
@@ -169,7 +170,7 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
                          0, 0, nullptr, 0, nullptr, 1, &image_barrier_to_readable);
   });
 
-  fmt::print("Texture loaded successfully {}\n", filename);
+  SPDLOG_INFO("Texture loaded {}", filename);
   return image;
 }
 

@@ -29,11 +29,9 @@ void init_lost_empire_scene(charlie::Renderer& renderer)
 {
   using namespace beyond::literals;
 
-  const char* filename = "models/lost_empire/lost_empire.obj";
-  // const auto cpu_mesh = charlie::CPUMesh::load(filename);
+  const char* filename = "models/gltf_box/Box.gltf";
 
-  const auto scene =
-      renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(filename, renderer)));
+  renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(filename, renderer)));
 }
 
 void set_asset_path()
@@ -80,8 +78,8 @@ int main()
   auto renderer = charlie::Renderer{window};
   input_handler.register_listener(renderer);
 
-  charlie::ArcballCameraController arcball_controller{window, beyond::Point3{0, 20, -1},
-                                                      beyond::Point3{0, 20, 0}};
+  charlie::ArcballCameraController arcball_controller{window, beyond::Point3{0, 0, -1},
+                                                      beyond::Point3{0, 0, 0}};
   charlie::Camera camera{arcball_controller};
   {
     const auto [width, height] = window.resolution();

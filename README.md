@@ -29,7 +29,7 @@ No goals
 
 ### Asset
 
-- Obj file loading
+- GLTF and Obj file loading
 
 ### Utilities
 

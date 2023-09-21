@@ -15,7 +15,6 @@ add_library(charlie3d_renderer
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(stb REQUIRED)
-find_package(tracy REQUIRED)
 find_package(SDL2 REQUIRED)
 
 target_link_libraries(charlie3d_renderer
@@ -27,7 +26,6 @@ target_link_libraries(charlie3d_renderer
         charlie3d::shader_compiler
         beyond::core
         third-party::imgui_bindings
-        Tracy::TracyClient
         PRIVATE
         stb::stb
         SDL2::SDL2-static
