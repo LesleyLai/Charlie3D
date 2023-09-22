@@ -85,6 +85,12 @@ namespace charlie {
     result.local_transforms.push_back(transform);
   }
 
+  //  for (const auto& material : parsed_asset->materials) {
+  //    fmt::print("{}\n", material.name);
+  //    BEYOND_ENSURE(material.pbrData.has_value());
+  //    fmt::print("{}\n", fmt::join(material.pbrData->baseColorFactor, ", "));
+  //  }
+
   for (const auto& mesh : parsed_asset->meshes) {
     // TODO: handle more primitives
     BEYOND_ENSURE(mesh.primitives.size() == 1);

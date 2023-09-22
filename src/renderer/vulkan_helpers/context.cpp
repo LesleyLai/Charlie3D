@@ -76,10 +76,13 @@ Context::Context(charlie::Window& window)
 
   vkb::PhysicalDevice vkb_physical_device = phys_device_ret.value();
   physical_device_ = vkb_physical_device.physical_device;
+  gpu_properties_ = vkb_physical_device.properties;
 
-  fmt::print("Physical device name: {}\n", vkb_physical_device.name);
+  SPDLOG_INFO("Physical device name {}", vkb_physical_device.name);
+  SPDLOG_INFO("The GPU has a minimum buffer alignment of {}",
+              gpu_properties_.limits.minUniformBufferOffsetAlignment);
 
-  vkb::DeviceBuilder device_builder{vkb_physical_device};
+  const vkb::DeviceBuilder device_builder{vkb_physical_device};
   const auto device_ret = device_builder.build();
   if (!device_ret) { beyond::panic(device_ret.error().message()); }
   auto vkb_device = device_ret.value();

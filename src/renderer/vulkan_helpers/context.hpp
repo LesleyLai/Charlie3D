@@ -24,6 +24,7 @@ class Context {
   VkDebugUtilsMessengerEXT debug_messenger_{};
   VkSurfaceKHR surface_{};
   VkPhysicalDevice physical_device_{};
+  VkPhysicalDeviceProperties gpu_properties_;
   VkDevice device_{};
   VkQueue graphics_queue_{};
   VkQueue compute_queue_{};
@@ -122,6 +123,24 @@ public:
   [[nodiscard]] BEYOND_FORCE_INLINE auto functions() const noexcept -> VulkanFunctions
   {
     return functions_;
+  }
+
+  [[nodiscard]] BEYOND_FORCE_INLINE auto gpu_properties() const noexcept
+      -> const VkPhysicalDeviceProperties&
+  {
+    return gpu_properties_;
+  }
+
+  // Calculate required alignment based on minimum device offset alignment
+  // Snippet from https://github.com/SaschaWillems/Vulkan/tree/master/examples/dynamicuniformbuffer
+  [[nodiscard]] auto align_uniform_buffer_size(size_t original_size) -> size_t
+  {
+    const size_t min_ubo_alignment = gpu_properties_.limits.minUniformBufferOffsetAlignment;
+    size_t aligned_size = original_size;
+    if (min_ubo_alignment > 0) {
+      aligned_size = (aligned_size + min_ubo_alignment - 1) & ~(min_ubo_alignment - 1);
+    }
+    return aligned_size;
   }
 
   BEYOND_FORCE_INLINE explicit operator bool()

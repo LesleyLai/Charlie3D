@@ -81,6 +81,11 @@ struct FrameData {
 
 class Camera;
 
+struct GPUSceneParameters {
+  beyond::Vec4 sunlight_direction = {1, 0, 0, 0}; // w unused
+  beyond::Vec4 sunlight_color = {1, 1, 1, 1};     // w for intensity
+};
+
 class Renderer : public InputListener {
 public:
   explicit Renderer(Window& window);
@@ -129,6 +134,11 @@ public:
 
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
 
+  [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
+  {
+    return scene_parameters_;
+  }
+
 private:
   Window* window_ = nullptr;
   Resolution resolution_;
@@ -163,6 +173,8 @@ private:
   std::vector<RenderObject> render_objects_;
 
   std::unique_ptr<const Scene> scene_;
+  GPUSceneParameters scene_parameters_;
+  vkh::AllocatedBuffer scene_parameter_buffer_;
 
   VkSampler blocky_sampler_ = VK_NULL_HANDLE;
   Texture texture_;

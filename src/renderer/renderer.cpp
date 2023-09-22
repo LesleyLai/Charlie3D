@@ -336,10 +336,19 @@ void Renderer::init_descriptors()
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
 
+  static constexpr VkDescriptorSetLayoutBinding scene_buffer_binding = {
+      .binding = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT};
+
+  static constexpr VkDescriptorSetLayoutBinding bindings[] = {cam_buffer_binding,
+                                                              scene_buffer_binding};
+
   const VkDescriptorSetLayoutCreateInfo global_layout_create_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 1,
-      .pBindings = &cam_buffer_binding};
+      .bindingCount = beyond::size(bindings),
+      .pBindings = bindings};
 
   global_descriptor_set_layout_ =
       descriptor_layout_cache_->create_descriptor_layout(global_layout_create_info);
@@ -371,6 +380,17 @@ void Renderer::init_descriptors()
 
   single_texture_set_layout_ =
       descriptor_layout_cache_->create_descriptor_layout(single_texture_layout_create_info);
+
+  const size_t scene_param_buffer_size =
+      frame_overlap * context_.align_uniform_buffer_size(sizeof(GPUSceneParameters));
+  scene_parameter_buffer_ = vkh::create_buffer(context_,
+                                               {
+                                                   .size = scene_param_buffer_size,
+                                                   .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                                   .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                                   .debug_name = "Scene Parameter buffer",
+                                               })
+                                .value();
 
   for (auto i = 0u; i < frame_overlap; ++i) {
     FrameData& frame = frames_[i];
@@ -421,6 +441,16 @@ void Renderer::init_descriptors()
                                                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                                                .pBufferInfo = &camera_buffer_info};
 
+    const VkDescriptorBufferInfo scene_buffer_info = {
+        .buffer = scene_parameter_buffer_, .offset = 0, .range = sizeof(GPUSceneParameters)};
+    const VkWriteDescriptorSet scene_write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                              .dstSet = frame.global_descriptor_set,
+                                              .dstBinding = 1,
+                                              .descriptorCount = 1,
+                                              .descriptorType =
+                                                  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                                              .pBufferInfo = &scene_buffer_info};
+
     const VkDescriptorBufferInfo object_buffer_info = {.buffer = frame.object_buffer.buffer,
                                                        .offset = 0,
                                                        .range = sizeof(GPUObjectData) *
@@ -433,7 +463,7 @@ void Renderer::init_descriptors()
                                                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                                .pBufferInfo = &object_buffer_info};
 
-    VkWriteDescriptorSet set_writes[] = {camera_write, object_write};
+    VkWriteDescriptorSet set_writes[] = {camera_write, scene_write, object_write};
 
     vkUpdateDescriptorSets(context_, beyond::size(set_writes), set_writes, 0, nullptr);
   }
@@ -787,6 +817,16 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   memcpy(data, &cam_data, sizeof(GPUCameraData));
   vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
 
+  // Scene data
+  char* scene_data;
+  vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
+
+  const size_t frame_index = frame_number_ % frame_overlap;
+
+  scene_data += context_.align_uniform_buffer_size(sizeof(GPUSceneParameters)) * frame_index;
+  memcpy(scene_data, &scene_parameters_, sizeof(GPUSceneParameters));
+  vmaUnmapMemory(context_.allocator(), scene_parameter_buffer_.allocation);
+
   // Render objects
 
   const Material* last_material = nullptr;
@@ -839,8 +879,12 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   for (const IndirectBatch& draw : draws) {
     if (draw.material != last_material) {
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline);
+
+      const uint32_t uniform_offset =
+          beyond::narrow<uint32_t>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
+          beyond::narrow<uint32_t>(frame_index);
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline_layout,
-                              0, 1, &current_frame().global_descriptor_set, 0, nullptr);
+                              0, 1, &current_frame().global_descriptor_set, 1, &uniform_offset);
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline_layout,
                               1, 1, &current_frame().object_descriptor_set, 0, nullptr);
       if (draw.material->texture_set != VK_NULL_HANDLE) {
@@ -895,6 +939,7 @@ Renderer::~Renderer()
   descriptor_allocator_ = nullptr;
   descriptor_layout_cache_ = nullptr;
 
+  vkh::destroy_buffer(context_, scene_parameter_buffer_);
   for (auto& frame : frames_) {
     TracyVkDestroy(frame.tracy_vk_ctx);
 

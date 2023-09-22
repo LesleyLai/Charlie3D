@@ -93,7 +93,7 @@ auto compile_shader_impl(charlie::ShaderCompilerImpl& shader_compiler_impl,
 
   if (compilation_result.GetCompilationStatus() !=
       shaderc_compilation_status::shaderc_compilation_status_success) {
-    SPDLOG_ERROR("{}", "Failed to compile {}\n{}", filename, compilation_result.GetErrorMessage());
+    SPDLOG_ERROR("Failed to compile {}\n{}", filename, compilation_result.GetErrorMessage());
     return beyond::nullopt;
   }
 
