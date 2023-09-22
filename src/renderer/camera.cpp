@@ -210,14 +210,18 @@ void ArcballCameraController::draw_gui()
 
   ImGui::SliderFloat("Pan speed", &pan_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
   ImGui::SliderFloat("Zoom speed", &zoom_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
+  ImGui::SliderFloat("Min zooming", &min_zooming_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
+  const float zooming = (eye_ - lookat_).length();
+  ImGui::LabelText("Zooming", "%f", zooming);
 }
 
 void ArcballCameraController::reset()
 {
-  eye_ = beyond::Point3{0, 0, -1};
-  lookat_ = beyond::Point3{0, 0, 0};
-  pan_speed_ = 0.1f;
-  zoom_speed_ = 1.0f;
+  eye_ = initial_eye_;
+  lookat_ = initial_lookat_;
+  pan_speed_ = initial_pan_speed;
+  zoom_speed_ = initial_zoom_speed;
+  min_zooming_ = initial_min_zooming;
 }
 
 void ArcballCameraController::on_input_event(const Event& event, const InputStates& states)
@@ -236,11 +240,12 @@ void ArcballCameraController::on_input_event(const Event& event, const InputStat
 
 void ArcballCameraController::on_mouse_scroll(MouseWheelEvent event)
 {
-  const auto zooming = (eye_ - lookat_).length();
+  const float previous_zooming = (eye_ - lookat_).length();
 
-  const auto advance_amount = forward_axis() * log(zooming + 1) * event.y * zoom_speed_;
-  // Don't zoom in if too close
-  if (advance_amount.length() <= zooming - 0.1 || event.y < 0) { eye_ += advance_amount; }
+  float zooming = previous_zooming - event.y * zoom_speed_;
+  zooming = std::max(min_zooming_, zooming);
+
+  eye_ = lookat_ - zooming * forward_axis();
 }
 
 } // namespace charlie

@@ -40,6 +40,7 @@ struct CameraController {
   CameraController& operator=(const CameraController&) = delete;
 
   virtual void draw_gui() {}
+  virtual void update() {}
   virtual void fixed_update() {}
   [[nodiscard]] virtual auto view_matrix() const -> beyond::Mat4 = 0;
 
@@ -78,8 +79,13 @@ private:
 
   beyond::IPoint2 old_mouse_pos_;
 
-  float pan_speed_ = 0.1f;
-  float zoom_speed_ = 1.0f;
+  static constexpr float initial_pan_speed = 0.1f;
+  static constexpr float initial_zoom_speed = 1.0f;
+  static constexpr float initial_min_zooming = 1.0f;
+
+  float pan_speed_ = initial_pan_speed;
+  float zoom_speed_ = initial_zoom_speed;
+  float min_zooming_ = initial_min_zooming;
 
   [[nodiscard]] auto view_matrix() const -> beyond::Mat4 override;
 

@@ -74,6 +74,8 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
 [[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer, const char* filename)
     -> beyond::optional<vkh::AllocatedImage>
 {
+  ZoneScoped;
+
   vkh::Context& context = renderer.context();
 
   int tex_width{}, tex_height{}, tex_channels{};
