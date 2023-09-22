@@ -62,30 +62,47 @@ public:
   explicit ArcballCameraController(Window& window,
                                    beyond::Point3 initial_eye = beyond::Point3{0, 0, -1},
                                    beyond::Point3 initial_lookat = beyond::Point3{0, 0, 0})
-      : window_{&window}, initial_eye_{initial_eye}, initial_lookat_{initial_lookat},
-        eye_{initial_eye}, lookat_{initial_lookat_}
+      : window_{&window},
+
+        initial_lookat_{initial_lookat}, desired_lookat_{initial_lookat}, lookat_{initial_lookat_},
+
+        initial_forward_axis_{normalize(initial_lookat - initial_eye)},
+        forward_axis_{initial_forward_axis_},
+
+        initial_zooming_{(initial_lookat - initial_eye).length()},
+        desired_zooming_{initial_zooming_}, zooming_{initial_zooming_}
   {
   }
 
 private:
   Window* window_ = nullptr;
 
-  const beyond::Point3 initial_eye_;
-  const beyond::Point3 initial_lookat_;
+  bool smooth_movement_ = true;
 
-  beyond::Point3 eye_;    // camera position
-  beyond::Point3 lookat_; // the point look at
+  // the point look at
+  const beyond::Point3 initial_lookat_;
+  beyond::Point3 desired_lookat_;
+  beyond::Point3 lookat_;
+
+  // The direction from camera to the lookat point
+  const beyond::Vec3 initial_forward_axis_;
+  beyond::Vec3 forward_axis_;
+
   static constexpr beyond::Vec3 up_ = beyond::Vec3{0, 1, 0};
 
   beyond::IPoint2 old_mouse_pos_;
 
-  static constexpr float initial_pan_speed = 0.1f;
-  static constexpr float initial_zoom_speed = 1.0f;
-  static constexpr float initial_min_zooming = 1.0f;
+  static constexpr float initial_pan_speed = 1.0f;
+  static constexpr float initial_zoom_speed = 0.1f;
 
   float pan_speed_ = initial_pan_speed;
   float zoom_speed_ = initial_zoom_speed;
-  float min_zooming_ = initial_min_zooming;
+
+  const float initial_zooming_;
+  float desired_zooming_;
+  float zooming_;
+
+  void fixed_update() override;
 
   [[nodiscard]] auto view_matrix() const -> beyond::Mat4 override;
 
@@ -95,8 +112,9 @@ private:
 
   void draw_gui() override;
 
-  [[nodiscard]] auto forward_axis() const -> beyond::Vec3;
   [[nodiscard]] auto right_axis() const -> beyond::Vec3;
+
+  [[nodiscard]] auto eye_position_from_zooming(float zooming) const -> beyond::Point3;
 
   void reset() override;
 };

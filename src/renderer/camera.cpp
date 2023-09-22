@@ -146,17 +146,13 @@ void FirstPersonCameraController::on_key_input(int /*key*/, int /*scancode*/, in
 
 auto ArcballCameraController::view_matrix() const -> beyond::Mat4
 {
-  return beyond::look_at(eye_, lookat_, up_);
-}
-
-[[nodiscard]] auto ArcballCameraController::forward_axis() const -> beyond::Vec3
-{
-  return normalize(lookat_ - eye_);
+  const auto eye = eye_position_from_zooming(zooming_);
+  return beyond::look_at(eye, lookat_, up_);
 }
 
 [[nodiscard]] auto ArcballCameraController::right_axis() const -> beyond::Vec3
 {
-  return cross(up_, forward_axis());
+  return cross(up_, forward_axis_);
 }
 
 void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputStates& states)
@@ -164,21 +160,26 @@ void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputSta
   const auto mouse_pos = beyond::IPoint2{event.x, event.y};
   const auto delta_mouse = old_mouse_pos_ - mouse_pos;
 
+  const auto [width, height] = window_->resolution();
+  const auto normalized_delta_mouse = beyond::Vec2{
+      beyond::narrow<float>(delta_mouse.x) / beyond::narrow<float>(width) * 2.0f,
+      beyond::narrow<float>(delta_mouse.y) / beyond::narrow<float>(height),
+  };
+
+  const auto eye = eye_position_from_zooming(zooming_);
+
   if (states.mouse_button_down(MouseButton::left)) {
-    const auto [width, height] = window_->resolution();
 
     constexpr auto pi = beyond::float_constants::pi;
-    const auto delta_angle_x =
-        beyond::narrow<float>(delta_mouse.x) / beyond::narrow<float>(width) * (2 * pi);
-    auto delta_angle_y = beyond::narrow<float>(delta_mouse.y) / beyond::narrow<float>(height) * pi;
-
-    const beyond::Vec4 pivot{lookat_, 1};
-    beyond::Vec4 position{eye_, 1};
+    const auto delta_angle_x = normalized_delta_mouse.x * pi;
+    auto delta_angle_y = normalized_delta_mouse.y * pi;
 
     // If the camera view direction is the same as up vector
     const float y_sign = delta_angle_y == 0.f ? 0.f : delta_angle_y > 0.f ? 1.f : -1.f;
-    if (dot(forward_axis(), up_) * y_sign < -0.99f) { delta_angle_y = 0; }
+    if (dot(forward_axis_, up_) * y_sign < -0.99f) { delta_angle_y = 0; }
 
+    const beyond::Vec4 pivot{lookat_, 1};
+    beyond::Vec4 position{eye, 1};
     const auto rotation_x = beyond::rotate(beyond::Radian{delta_angle_x}, up_);
     position = (rotation_x * (position - pivot)) + pivot;
 
@@ -186,16 +187,19 @@ void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputSta
     position = (rotation_y * (position - pivot)) + pivot;
 
     // update camera position
-    eye_ = position.xyz;
+    const beyond::Point3 new_eye = position.xyz;
+    forward_axis_ = normalize(lookat_ - new_eye);
   }
 
   // Panning
   if (states.mouse_button_down(MouseButton::right)) {
-    const auto delta =
-        cross(forward_axis(), right_axis()) * beyond::narrow<float>(delta_mouse.y) * pan_speed_ +
-        right_axis() * beyond::narrow<float>(delta_mouse.x) * pan_speed_;
-    eye_ += delta;
-    lookat_ += delta;
+    const beyond::Vec2 delta_pan = normalized_delta_mouse * zooming_;
+
+    const auto delta = cross(right_axis(), forward_axis_) * delta_pan.y * pan_speed_ -
+                       right_axis() * delta_pan.x * pan_speed_;
+
+    desired_lookat_ += delta;
+    if (!smooth_movement_) { lookat_ = desired_lookat_; }
   }
 
   old_mouse_pos_ = mouse_pos;
@@ -204,24 +208,28 @@ void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputSta
 void ArcballCameraController::draw_gui()
 {
   ImGui::SeparatorText("Arcball Controller:");
+  ImGui::Checkbox("Smooth movement", &smooth_movement_);
 
-  ImGui::LabelText("Position", "%f %f %f", eye_.x, eye_.y, eye_.z);
+  const auto eye = eye_position_from_zooming(zooming_);
+  ImGui::LabelText("Position", "%f %f %f", eye.x, eye.y, eye.z);
   ImGui::LabelText("Look at", "%f %f %f", lookat_.x, lookat_.y, lookat_.z);
 
   ImGui::SliderFloat("Pan speed", &pan_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
-  ImGui::SliderFloat("Zoom speed", &zoom_speed_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
-  ImGui::SliderFloat("Min zooming", &min_zooming_, 0, 10, "%.3f", ImGuiSliderFlags_Logarithmic);
-  const float zooming = (eye_ - lookat_).length();
-  ImGui::LabelText("Zooming", "%f", zooming);
+  ImGui::SliderFloat("Zoom speed", &zoom_speed_, 0, 100, "%.3f", ImGuiSliderFlags_Logarithmic);
 }
 
 void ArcballCameraController::reset()
 {
-  eye_ = initial_eye_;
-  lookat_ = initial_lookat_;
+  forward_axis_ = initial_forward_axis_;
+  desired_lookat_ = initial_lookat_;
   pan_speed_ = initial_pan_speed;
   zoom_speed_ = initial_zoom_speed;
-  min_zooming_ = initial_min_zooming;
+  desired_zooming_ = initial_zooming_;
+
+  if (not smooth_movement_) {
+    lookat_ = desired_lookat_;
+    zooming_ = desired_zooming_;
+  }
 }
 
 void ArcballCameraController::on_input_event(const Event& event, const InputStates& states)
@@ -240,12 +248,27 @@ void ArcballCameraController::on_input_event(const Event& event, const InputStat
 
 void ArcballCameraController::on_mouse_scroll(MouseWheelEvent event)
 {
-  const float previous_zooming = (eye_ - lookat_).length();
+  desired_zooming_ -= event.y * zoom_speed_;
+  static constexpr float min_zooming = 0.1f;
+  desired_zooming_ = std::max(min_zooming, desired_zooming_);
 
-  float zooming = previous_zooming - event.y * zoom_speed_;
-  zooming = std::max(min_zooming_, zooming);
+  if (!smooth_movement_) { zooming_ = desired_zooming_; }
+}
 
-  eye_ = lookat_ - zooming * forward_axis();
+void ArcballCameraController::fixed_update()
+{
+  if (smooth_movement_) {
+    static constexpr float transition_speed = 0.2f;
+
+    zooming_ = beyond::lerp(zooming_, desired_zooming_, transition_speed);
+    lookat_ = beyond::lerp(lookat_, desired_lookat_, transition_speed);
+  }
+}
+
+[[nodiscard]] auto ArcballCameraController::eye_position_from_zooming(float zooming) const
+    -> beyond::Point3
+{
+  return lookat_ - zooming * forward_axis_;
 }
 
 } // namespace charlie
