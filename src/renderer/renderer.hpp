@@ -82,7 +82,7 @@ struct FrameData {
 class Camera;
 
 struct GPUSceneParameters {
-  beyond::Vec4 sunlight_direction = {1, 0, 0, 0}; // w unused
+  beyond::Vec4 sunlight_direction = {0, 1, 0, 0}; // w unused
   beyond::Vec4 sunlight_color = {1, 1, 1, 1};     // w for intensity
 };
 
