@@ -25,15 +25,6 @@
 #include <ShellScalingAPI.h>
 #endif
 
-void init_lost_empire_scene(charlie::Renderer& renderer)
-{
-  using namespace beyond::literals;
-
-  const char* filename = "models/gltf_box/Box.gltf";
-
-  renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(filename, renderer)));
-}
-
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
@@ -79,11 +70,14 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   ImGui::End();
 }
 
-int main()
+int main(int argc, const char** argv)
 {
 #ifdef _WIN32
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
+
+  const char* scene_file = "models/gltf_box/box.gltf";
+  if (argc == 2) { scene_file = argv[1]; }
 
   set_asset_path();
 
@@ -104,7 +98,7 @@ int main()
   }
   input_handler.register_listener(camera);
 
-  init_lost_empire_scene(renderer);
+  renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
 
   using namespace std::literals::chrono_literals;
   auto previous_time = std::chrono::steady_clock::now();

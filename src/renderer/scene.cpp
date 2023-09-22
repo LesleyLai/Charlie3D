@@ -11,9 +11,12 @@ namespace charlie {
 
 [[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene
 {
-  const auto& assets_path =
-      Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
-  const auto file_path = assets_path / filename;
+  std::filesystem::path file_path = filename;
+  if (file_path.is_relative()) {
+    const auto& assets_path =
+        Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+    file_path = assets_path / file_path;
+  }
 
   const CPUScene cpu_scene = [&]() {
     if (file_path.extension() == ".obj") {
