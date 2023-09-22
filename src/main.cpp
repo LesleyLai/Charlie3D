@@ -67,6 +67,13 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
 
   if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
 
+  if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+    const auto& scene = renderer.scene();
+
+    ImGui::SeparatorText("Scene Data");
+    ImGui::LabelText("Nodes", "%zu", scene.local_transforms.size());
+  }
+
   ImGui::End();
 }
 

@@ -90,7 +90,15 @@ public:
 
   void render(const charlie::Camera& camera);
 
-  auto set_scene(std::unique_ptr<const Scene> scene) -> const Scene&;
+  [[nodiscard]] auto scene() const -> const Scene&
+  {
+    return *scene_;
+  }
+  
+  void set_scene(std::unique_ptr<Scene> scene)
+  {
+    scene_ = std::move(scene);
+  }
 
   // our draw function
   void draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera);
@@ -159,11 +167,11 @@ private:
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
-  std::unique_ptr<const Scene> scene_;
+  std::unique_ptr<Scene> scene_;
   GPUSceneParameters scene_parameters_;
   vkh::AllocatedBuffer scene_parameter_buffer_;
 
-  VkSampler blocky_sampler_ = VK_NULL_HANDLE;
+  VkSampler sampler_ = VK_NULL_HANDLE;
   Texture texture_;
   VkDescriptorSet texture_set_ = {};
 

@@ -9,9 +9,13 @@
 #include <tracy/Tracy.hpp>
 
 #include <beyond/math/matrix.hpp>
+#include <beyond/types/optional.hpp>
 #include <beyond/utils/narrowing.hpp>
 
 namespace fastgltf {
+
+template <>
+struct ElementTraits<beyond::Vec2> : ElementTraitsBase<beyond::Vec2, AccessorType::Vec2, float> {};
 
 template <>
 struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorType::Vec3, float> {};
@@ -85,11 +89,16 @@ namespace charlie {
     result.local_transforms.push_back(transform);
   }
 
-  //  for (const auto& material : parsed_asset->materials) {
-  //    fmt::print("{}\n", material.name);
-  //    BEYOND_ENSURE(material.pbrData.has_value());
-  //    fmt::print("{}\n", fmt::join(material.pbrData->baseColorFactor, ", "));
-  //  }
+  for (const auto& material : parsed_asset->materials) {
+    fmt::print("{}: ", material.name);
+    BEYOND_ENSURE(material.pbrData.has_value());
+    fmt::print("{}\n", fmt::join(material.pbrData->baseColorFactor, ", "));
+
+    // TODO: handle materials without base textures
+    BEYOND_ENSURE(material.pbrData->baseColorTexture.has_value());
+    const fastgltf::TextureInfo& diffuse_texture_info = material.pbrData->baseColorTexture.value();
+    fmt::print("{}\n", diffuse_texture_info.textureIndex);
+  }
 
   for (const auto& mesh : parsed_asset->meshes) {
     // TODO: handle more primitives
@@ -100,6 +109,7 @@ namespace charlie {
 
     size_t position_accessor_id = 0;
     size_t normal_accessor_id = 0;
+    beyond::optional<size_t> texture_coord_accessor_id;
     size_t index_accessor_id = 0;
     if (const auto itr = primitive.attributes.find("POSITION"); itr != primitive.attributes.end()) {
       position_accessor_id = itr->second;
@@ -111,6 +121,11 @@ namespace charlie {
     } else {
       beyond::panic("Mesh misses NORMAL attribute!");
     }
+
+    if (const auto itr = primitive.attributes.find("TEXCOORD_0");
+        itr != primitive.attributes.end()) {
+      texture_coord_accessor_id = itr->second;
+    }
     // TODO: handle meshes without index accessor
     index_accessor_id = primitive.indicesAccessor.value();
 
@@ -118,9 +133,10 @@ namespace charlie {
     const fastgltf::Accessor& normal_accessor = parsed_asset->accessors.at(normal_accessor_id);
     const fastgltf::Accessor& index_accessor = parsed_asset->accessors.at(index_accessor_id);
 
-    BEYOND_ENSURE(position_accessor.type == fastgltf::AccessorType::Vec3);
-    BEYOND_ENSURE(normal_accessor.type == fastgltf::AccessorType::Vec3);
-    BEYOND_ENSURE(index_accessor.type == fastgltf::AccessorType::Scalar);
+    using fastgltf::AccessorType;
+    BEYOND_ENSURE(position_accessor.type == AccessorType::Vec3);
+    BEYOND_ENSURE(normal_accessor.type == AccessorType::Vec3);
+    BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
 
     std::vector<beyond::Vec3> positions;
     positions.resize(position_accessor.count);
@@ -130,8 +146,18 @@ namespace charlie {
     normals.resize(normal_accessor.count);
     fastgltf::copyFromAccessor<beyond::Vec3>(*parsed_asset, normal_accessor, normals.data());
 
-    // TODO: proper texture coordinates
-    std::vector<beyond::Vec2> tex_coords(positions.size());
+    std::vector<beyond::Vec2> tex_coords;
+    texture_coord_accessor_id
+        .map([&](size_t id) {
+          const auto& texture_coord_accessor = parsed_asset->accessors.at(id);
+
+          BEYOND_ENSURE(texture_coord_accessor.type == AccessorType::Vec2);
+
+          tex_coords.resize(texture_coord_accessor.count);
+          fastgltf::copyFromAccessor<beyond::Vec2>(*parsed_asset, texture_coord_accessor,
+                                                   tex_coords.data());
+        })
+        .or_else([&] { tex_coords.resize(positions.size()); });
 
     std::vector<std::uint32_t> indices;
     indices.resize(index_accessor.count);

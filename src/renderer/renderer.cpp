@@ -559,17 +559,22 @@ void Renderer::init_texture()
           .expect("Failed to create image view");
 
   // Create sampler
-  const VkSamplerCreateInfo sampler_info =
-      sampler_create_info(VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-  vkCreateSampler(context_, &sampler_info, nullptr, &blocky_sampler_);
+  const VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                                            .magFilter = VK_FILTER_LINEAR,
+                                            .minFilter = VK_FILTER_LINEAR,
+                                            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                                            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                                            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                                            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT};
+  vkCreateSampler(context_, &sampler_info, nullptr, &sampler_);
 
   // alloc descriptor set for material
   {
     texture_set_ = descriptor_allocator_->allocate(single_texture_set_layout_).value();
 
-    // write to the descriptor set so that it points to our empire_diffuse texture
+    // write to the descriptor set so that it points to diffuse texture
     const VkDescriptorImageInfo image_buffer_info = {
-        .sampler = blocky_sampler_,
+        .sampler = sampler_,
         .imageView = texture_.image_view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
@@ -867,7 +872,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
     vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);
     vkCmdBindVertexBuffers(cmd, 2, 1, &mesh.uv_buffer.buffer, &offset);
     vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-    
+
     const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndexedIndirectCommand);
     constexpr uint32_t draw_stride = sizeof(VkDrawIndexedIndirectCommand);
     vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, indirect_offset, draw.count,
@@ -883,7 +888,7 @@ Renderer::~Renderer()
 
   vkDestroyImageView(context_, texture_.image_view, nullptr);
   vkh::destroy_image(context_, texture_.image);
-  vkDestroySampler(context_, blocky_sampler_, nullptr);
+  vkDestroySampler(context_, sampler_, nullptr);
 
   for (const auto& mesh : meshes_.values()) { destroy_mesh(context_, mesh); }
 
@@ -912,12 +917,6 @@ Renderer::~Renderer()
     vkDestroySemaphore(context_, frame.present_semaphore, nullptr);
     vkDestroyCommandPool(context_, frame.command_pool, nullptr);
   }
-}
-
-auto Renderer::set_scene(std::unique_ptr<const Scene> scene) -> const Scene&
-{
-  scene_ = std::move(scene);
-  return *scene_;
 }
 
 void Renderer::on_input_event(const Event& event, const InputStates& /*states*/)
