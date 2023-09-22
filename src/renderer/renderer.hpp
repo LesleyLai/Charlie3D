@@ -43,15 +43,8 @@ struct Texture {
   VkImageView image_view = {};
 };
 
-struct Material {
-  VkPipeline pipeline = {};
-  VkPipelineLayout pipeline_layout = {};
-  VkDescriptorSet texture_set = {};
-};
-
 struct RenderObject {
   MeshHandle mesh;
-  const Material* material = nullptr;
   beyond::Mat4 model_matrix;
 };
 
@@ -96,11 +89,6 @@ public:
   auto operator=(Renderer&&) & noexcept -> Renderer& = delete;
 
   void render(const charlie::Camera& camera);
-
-  auto create_material(VkPipeline pipeline, VkPipelineLayout layout, std::string name) -> Material&;
-
-  // returns nullptr if it can't be found
-  [[nodiscard]] auto get_material(const std::string& name) -> Material*;
 
   auto set_scene(std::unique_ptr<const Scene> scene) -> const Scene&;
 
@@ -168,7 +156,6 @@ private:
   VkPipelineLayout mesh_pipeline_layout_ = {};
   VkPipeline mesh_pipeline_ = {};
 
-  std::unordered_map<std::string, Material> materials_;
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<RenderObject> render_objects_;
 
@@ -178,6 +165,7 @@ private:
 
   VkSampler blocky_sampler_ = VK_NULL_HANDLE;
   Texture texture_;
+  VkDescriptorSet texture_set_ = {};
 
   std::unique_ptr<FrameGraphRenderPass> imgui_render_pass_ = nullptr;
 

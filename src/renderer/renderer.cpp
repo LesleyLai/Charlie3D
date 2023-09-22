@@ -214,7 +214,6 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 
 struct IndirectBatch {
   charlie::MeshHandle mesh;
-  const charlie::Material* material = nullptr;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
 };
@@ -226,20 +225,15 @@ struct IndirectBatch {
 
   if (objects.empty()) return draws;
 
-  charlie::MeshHandle last_mesh;
-  const charlie::Material* last_material = nullptr;
-
+  beyond::optional<charlie::MeshHandle> last_mesh = beyond::nullopt;
   for (std::uint32_t i = 0; i < objects.size(); ++i) {
     const auto& object = objects[i];
     const bool same_mesh = object.mesh == last_mesh;
-    const bool same_material = object.material == last_material;
-    if (same_mesh && same_material) {
+    if (same_mesh) {
       BEYOND_ASSERT(!draws.empty());
       ++draws.back().count;
     } else {
-      draws.push_back(
-          IndirectBatch{.mesh = object.mesh, .material = object.material, .first = i, .count = 1});
-      last_material = object.material;
+      draws.push_back(IndirectBatch{.mesh = object.mesh, .first = i, .count = 1});
       last_mesh = object.mesh;
     }
   }
@@ -550,8 +544,6 @@ void Renderer::init_pipelines()
            .shader_stages = triangle_shader_stages,
            .cull_mode = vkh::CullMode::none})
           .value();
-
-  create_material(mesh_pipeline_, mesh_pipeline_layout_, "default");
 }
 
 void Renderer::init_texture()
@@ -572,10 +564,8 @@ void Renderer::init_texture()
   vkCreateSampler(context_, &sampler_info, nullptr, &blocky_sampler_);
 
   // alloc descriptor set for material
-  auto* material = get_material("default");
-  BEYOND_ENSURE(material != nullptr);
   {
-    material->texture_set = descriptor_allocator_->allocate(single_texture_set_layout_).value();
+    texture_set_ = descriptor_allocator_->allocate(single_texture_set_layout_).value();
 
     // write to the descriptor set so that it points to our empire_diffuse texture
     const VkDescriptorImageInfo image_buffer_info = {
@@ -584,7 +574,7 @@ void Renderer::init_texture()
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     const VkWriteDescriptorSet texture1 = write_descriptor_image(
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, material->texture_set, &image_buffer_info, 0);
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, texture_set_, &image_buffer_info, 0);
     vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
   }
 }
@@ -753,20 +743,6 @@ void Renderer::present(uint32_t& swapchain_image_index)
   VK_CHECK(result);
 }
 
-[[nodiscard]] auto Renderer::create_material(VkPipeline pipeline, VkPipelineLayout layout,
-                                             std::string name) -> Material&
-{
-  auto [itr, inserted] = materials_.try_emplace(std::move(name), Material{pipeline, layout});
-  BEYOND_ENSURE(inserted);
-  return itr->second;
-}
-
-[[nodiscard]] auto Renderer::get_material(const std::string& name) -> Material*
-{
-  auto it = materials_.find(name);
-  return it == materials_.end() ? nullptr : &it->second;
-}
-
 [[nodiscard]] auto Renderer::upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle
 {
   static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -830,15 +806,10 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   vmaUnmapMemory(context_.allocator(), scene_parameter_buffer_.allocation);
 
   // Render objects
-
-  const Material* last_material = nullptr;
-  beyond::optional<MeshHandle> last_mesh;
-
   render_objects_.clear();
-  for (const auto [node_index, mesh] : scene_->meshe_components_) {
+  for (const auto [node_index, render_component] : scene_->render_components_) {
     render_objects_.push_back(RenderObject{
-        .mesh = mesh,
-        .material = get_material("default"),
+        .mesh = render_component.mesh,
         .model_matrix = scene_->global_transforms[node_index],
     });
   }
@@ -878,42 +849,29 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
     context_.unmap(current_frame().indirect_buffer);
   }
 
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_);
+
+  const uint32_t uniform_offset =
+      beyond::narrow<uint32_t>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
+      beyond::narrow<uint32_t>(frame_index);
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
+                          &current_frame().global_descriptor_set, 1, &uniform_offset);
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
+                          &current_frame().object_descriptor_set, 0, nullptr);
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
+                          &texture_set_, 0, nullptr);
   for (const IndirectBatch& draw : draws) {
-    if (draw.material != last_material) {
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline);
-
-      const uint32_t uniform_offset =
-          beyond::narrow<uint32_t>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
-          beyond::narrow<uint32_t>(frame_index);
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline_layout,
-                              0, 1, &current_frame().global_descriptor_set, 1, &uniform_offset);
-      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline_layout,
-                              1, 1, &current_frame().object_descriptor_set, 0, nullptr);
-      if (draw.material->texture_set != VK_NULL_HANDLE) {
-        // texture descriptor
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                draw.material->pipeline_layout, 2, 1, &draw.material->texture_set,
-                                0, nullptr);
-      }
-    }
-
-    if (draw.mesh != last_mesh) {
-      const auto& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
-
-      constexpr VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
-      vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);
-      vkCmdBindVertexBuffers(cmd, 2, 1, &mesh.uv_buffer.buffer, &offset);
-      vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-    }
-
+    const auto& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
+    constexpr VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 2, 1, &mesh.uv_buffer.buffer, &offset);
+    vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+    
     const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndexedIndirectCommand);
     constexpr uint32_t draw_stride = sizeof(VkDrawIndexedIndirectCommand);
     vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, indirect_offset, draw.count,
                              draw_stride);
-
-    last_material = draw.material;
-    last_mesh = draw.mesh;
   }
 }
 

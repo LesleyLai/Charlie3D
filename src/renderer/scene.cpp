@@ -34,11 +34,14 @@ namespace charlie {
     mesh_storage.push_back(renderer.upload_mesh_data(mesh));
   }
 
-  std::unordered_map<uint32_t, MeshHandle> meshes;
+  std::unordered_map<uint32_t, RenderComponent> render_components;
   for (uint32_t i = 0; i < cpu_scene.objects.size(); ++i) {
     const auto& object = cpu_scene.objects[i];
     if (object.mesh_index >= 0) {
-      meshes.insert({i, mesh_storage[beyond::narrow<uint32_t>(object.mesh_index)]});
+      render_components.insert(
+          {i, RenderComponent{
+                  .mesh = mesh_storage[beyond::narrow<uint32_t>(object.mesh_index)],
+              }});
     }
   }
 
@@ -49,7 +52,7 @@ namespace charlie {
   return Scene{
       .local_transforms = std::move(local_transforms),
       .global_transforms = std::move(global_transforms),
-      .meshe_components_ = std::move(meshes),
+      .render_components_ = std::move(render_components),
   };
 }
 
