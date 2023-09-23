@@ -12,6 +12,8 @@
 #include <beyond/types/optional.hpp>
 #include <beyond/utils/narrowing.hpp>
 
+#include <stb_image.h>
+
 namespace fastgltf {
 
 template <>
@@ -21,6 +23,48 @@ template <>
 struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorType::Vec3, float> {};
 
 } // namespace fastgltf
+
+namespace {
+
+auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fastgltf::Image& image)
+    -> charlie::CPUImage
+{
+  return std::visit(
+      [&](const auto& data) -> charlie::CPUImage {
+        using DataType = std::remove_cvref_t<decltype(data)>;
+        charlie::CPUImage image_data;
+
+        if constexpr (std::is_same_v<DataType, fastgltf::sources::URI>) {
+          std::filesystem::path file_path =
+              data.uri.isLocalPath() ? gltf_directory / data.uri.fspath() : data.uri.fspath();
+          file_path = std::filesystem::canonical(file_path);
+
+          const uint8_t* pixels = stbi_load(file_path.string().c_str(), &image_data.width,
+                                            &image_data.height, &image_data.compoments, 4);
+          image_data.data.reset(pixels);
+          SPDLOG_INFO("Load Image from {}", file_path.string());
+
+          return image_data;
+
+        } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
+          // TODO: Handle other Mime types
+          BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::GltfBuffer);
+
+          const uint8_t* pixels =
+              stbi_load_from_memory(data.bytes.data(), data.bytes.size(), &image_data.width,
+                                    &image_data.height, &image_data.compoments, 4);
+          image_data.data.reset(pixels);
+
+          return image_data;
+
+        } else {
+          beyond::panic("Unsupported image data format!");
+        }
+      },
+      image.data);
+}
+
+} // anonymous namespace
 
 namespace charlie {
 
@@ -68,8 +112,7 @@ namespace charlie {
   // Parser::loadBinaryGLTF instead.
   using fastgltf::Options;
   auto asset = parser.loadGLTF(&data, file_path.parent_path(),
-                               Options::LoadGLBBuffers | Options::LoadExternalBuffers |
-                                   Options::LoadExternalImages);
+                               Options::LoadGLBBuffers | Options::LoadExternalBuffers);
 
   if (auto error = asset->parse(); error != fastgltf::Error::None) {
     SPDLOG_ERROR("Error while loading {}: {}", file_path.string(), static_cast<uint64_t>(error));
@@ -89,15 +132,25 @@ namespace charlie {
     result.local_transforms.push_back(transform);
   }
 
-  for (const auto& material : parsed_asset->materials) {
-    fmt::print("{}: ", material.name);
-    BEYOND_ENSURE(material.pbrData.has_value());
-    fmt::print("{}\n", fmt::join(material.pbrData->baseColorFactor, ", "));
+  result.images.reserve(parsed_asset->images.size());
+  std::ranges::transform(parsed_asset->images, std::back_inserter(result.images),
+                         std::bind_front(load_raw_image_data, file_path.parent_path()));
 
-    // TODO: handle materials without base textures
-    BEYOND_ENSURE(material.pbrData->baseColorTexture.has_value());
-    const fastgltf::TextureInfo& diffuse_texture_info = material.pbrData->baseColorTexture.value();
-    fmt::print("{}\n", diffuse_texture_info.textureIndex);
+  for (const auto& material : parsed_asset->materials) {
+    BEYOND_ENSURE(material.pbrData.has_value());
+
+    beyond::optional<uint32_t> albedo_texture_index;
+    if (material.pbrData->baseColorTexture.has_value()) {
+      albedo_texture_index =
+          beyond::narrow<uint32_t>(material.pbrData->baseColorTexture->textureIndex);
+    }
+
+    result.materials.push_back(
+        CPUMaterial{.base_color_factor = {material.pbrData->baseColorFactor[0],
+                                          material.pbrData->baseColorFactor[1],
+                                          material.pbrData->baseColorFactor[2],
+                                          material.pbrData->baseColorFactor[3]},
+                    .albedo_texture_index = albedo_texture_index});
   }
 
   for (const auto& mesh : parsed_asset->meshes) {
