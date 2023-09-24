@@ -26,36 +26,59 @@ struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorTyp
 
 namespace {
 
+auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
+{
+  return {
+      .name = texture.name,
+      .image_index = beyond::narrow<uint32_t>(texture.imageIndex.value()),
+      .sampler_index = beyond::narrow<uint32_t>(texture.samplerIndex.value()),
+  };
+};
+
 auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fastgltf::Image& image)
     -> charlie::CPUImage
 {
+  ZoneScoped;
+
   return std::visit(
       [&](const auto& data) -> charlie::CPUImage {
         using DataType = std::remove_cvref_t<decltype(data)>;
-        charlie::CPUImage image_data;
-
         if constexpr (std::is_same_v<DataType, fastgltf::sources::URI>) {
           std::filesystem::path file_path =
               data.uri.isLocalPath() ? gltf_directory / data.uri.fspath() : data.uri.fspath();
           file_path = std::filesystem::canonical(file_path);
 
-          const uint8_t* pixels = stbi_load(file_path.string().c_str(), &image_data.width,
-                                            &image_data.height, &image_data.compoments, 4);
-          image_data.data.reset(pixels);
+          int width, height, components;
+          const uint8_t* pixels =
+              stbi_load(file_path.string().c_str(), &width, &height, &components, STBI_rgb_alpha);
+          BEYOND_ENSURE(pixels != nullptr);
+
           SPDLOG_INFO("Load Image from {}", file_path.string());
 
-          return image_data;
+          return charlie::CPUImage{
+              .name = image.name.empty() ? file_path.string() : image.name,
+              .width = beyond::narrow<uint32_t>(width),
+              .height = beyond::narrow<uint32_t>(height),
+              .compoments = beyond::narrow<uint32_t>(components),
+              .data = std::unique_ptr<const uint8_t[]>(pixels),
+          };
 
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
           // TODO: Handle other Mime types
           BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::GltfBuffer);
 
-          const uint8_t* pixels =
-              stbi_load_from_memory(data.bytes.data(), data.bytes.size(), &image_data.width,
-                                    &image_data.height, &image_data.compoments, 4);
-          image_data.data.reset(pixels);
+          int width, height, components;
+          const uint8_t* pixels = stbi_load_from_memory(
+              data.bytes.data(), data.bytes.size(), &width, &height, &components, STBI_rgb_alpha);
+          BEYOND_ENSURE(pixels != nullptr);
 
-          return image_data;
+          return charlie::CPUImage{
+              .name = image.name,
+              .width = beyond::narrow<uint32_t>(width),
+              .height = beyond::narrow<uint32_t>(height),
+              .compoments = beyond::narrow<uint32_t>(components),
+              .data = std::unique_ptr<const uint8_t[]>(pixels),
+          };
 
         } else {
           beyond::panic("Unsupported image data format!");
@@ -136,6 +159,11 @@ namespace charlie {
   std::ranges::transform(parsed_asset->images, std::back_inserter(result.images),
                          std::bind_front(load_raw_image_data, file_path.parent_path()));
 
+  result.textures.reserve(parsed_asset->textures.size());
+  std::ranges::transform(parsed_asset->textures, std::back_inserter(result.textures),
+                         to_cpu_texture);
+
+  result.materials.reserve(parsed_asset->materials.size());
   for (const auto& material : parsed_asset->materials) {
     BEYOND_ENSURE(material.pbrData.has_value());
 
@@ -216,7 +244,14 @@ namespace charlie {
     indices.resize(index_accessor.count);
     fastgltf::copyFromAccessor<std::uint32_t>(*parsed_asset, index_accessor, indices.data());
 
+    BEYOND_ENSURE(mesh.primitives[0].materialIndex.has_value());
+    beyond::optional<uint32_t> material_index;
+    if (mesh.primitives[0].materialIndex.has_value()) {
+      material_index = beyond::narrow<uint32_t>(mesh.primitives[0].materialIndex.value());
+    }
+
     result.meshes.push_back(CPUMesh{.name = mesh.name,
+                                    .material_index = material_index,
                                     .positions = std::move(positions),
                                     .normals = std::move(normals),
                                     .uv = std::move(tex_coords),

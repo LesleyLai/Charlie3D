@@ -12,6 +12,7 @@
 #include <beyond/math/matrix.hpp>
 #include <beyond/utils/function_ref.hpp>
 
+#include "../asset/cpu_scene.hpp"
 #include "mesh.hpp"
 #include "render_pass.hpp"
 #include "scene.hpp"
@@ -39,12 +40,13 @@ class VkCtx;
 namespace charlie {
 
 struct Texture {
-  vkh::AllocatedImage image;
-  VkImageView image_view = {};
+  VkImage image = VK_NULL_HANDLE;
+  VkImageView image_view = VK_NULL_HANDLE;
 };
 
 struct RenderObject {
   MeshHandle mesh;
+  std::uint32_t albedo_texture_index = static_cast<uint32_t>(~0);
   beyond::Mat4 model_matrix;
 };
 
@@ -94,7 +96,7 @@ public:
   {
     return *scene_;
   }
-  
+
   void set_scene(std::unique_ptr<Scene> scene)
   {
     scene_ = std::move(scene);
@@ -129,6 +131,18 @@ public:
   }
 
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
+
+  auto upload_image(const charlie::CPUImage& cpu_image) -> VkImage;
+  [[nodiscard]] auto get_image_at(uint32_t i) const -> VkImage
+  {
+    return images_.at(i).image;
+  }
+  [[nodiscard]] auto get_mesh(MeshHandle handle) const -> const Mesh&
+  {
+    return meshes_.try_get(handle).value();
+  }
+
+  [[nodiscard]] void add_texture(Texture texture);
 
   [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
   {
@@ -165,15 +179,17 @@ private:
   VkPipeline mesh_pipeline_ = {};
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
+
+  std::vector<vkh::AllocatedImage> images_;
+  VkSampler sampler_ = VK_NULL_HANDLE;
+  std::vector<Texture> textures_;
+  std::vector<VkDescriptorSet> texture_descriptor_set_;
+
   std::vector<RenderObject> render_objects_;
 
   std::unique_ptr<Scene> scene_;
   GPUSceneParameters scene_parameters_;
   vkh::AllocatedBuffer scene_parameter_buffer_;
-
-  VkSampler sampler_ = VK_NULL_HANDLE;
-  Texture texture_;
-  VkDescriptorSet texture_set_ = {};
 
   std::unique_ptr<FrameGraphRenderPass> imgui_render_pass_ = nullptr;
 
@@ -181,7 +197,7 @@ private:
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
-  void init_texture();
+  void init_sampler();
 
   void resize();
 

@@ -6,10 +6,14 @@
 #include <string>
 #include <vector>
 
+#include <beyond/types/optional.hpp>
+
 namespace charlie {
 
 struct CPUMesh {
   std::string name;
+
+  beyond::optional<uint32_t> material_index;
 
   std::vector<beyond::Vec3> positions;
   std::vector<beyond::Vec3> normals;

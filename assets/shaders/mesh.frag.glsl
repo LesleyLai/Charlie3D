@@ -10,7 +10,7 @@ layout (set = 0, binding = 1) uniform SceneData {
     vec4 sunlightColor;
 } sceneData;
 
-layout (set = 2, binding = 0) uniform sampler2D diffuse_texture;
+layout (set = 2, binding = 0) uniform sampler2D albedo_texture;
 
 vec3 reinhard_tone_mapping(vec3 radiance) {
     return radiance / (radiance + vec3(1.0));
@@ -18,16 +18,17 @@ vec3 reinhard_tone_mapping(vec3 radiance) {
 
 void main()
 {
-
     vec3 sunlightDirection = sceneData.sunlightDirection.xyz;
     vec3 sunlightColor = sceneData.sunlightColor.xyz * sceneData.sunlightColor.w;
 
-    vec3 ambient = sceneData.sunlightColor.w * vec3(0.1);
+    vec3 albedo = texture(albedo_texture, inTexCoord).xyz;
 
-    vec3 diffuseColor = texture(diffuse_texture, inTexCoord).xyz;
-    vec3 diffuse = diffuseColor * sunlightColor * max(dot(sunlightDirection, inNormal), 0.0);
+    vec3 ambient = albedo * sceneData.sunlightColor.w * vec3(0.05);
+    vec3 diffuse = albedo * sunlightColor * max(dot(sunlightDirection, inNormal), 0.0);
 
-    vec3 color = ambient + diffuse;
+    vec3 li = ambient + diffuse;
 
-    outFragColor = vec4(reinhard_tone_mapping(color), 1.0f);
+    vec3 color = reinhard_tone_mapping(li);
+
+    outFragColor = vec4(color, 1.0f);
 }

@@ -72,11 +72,9 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
 }
 
 [[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer, const char* filename)
-    -> beyond::optional<vkh::AllocatedImage>
+    -> VkImage
 {
   ZoneScoped;
-
-  vkh::Context& context = renderer.context();
 
   int tex_width{}, tex_height{}, tex_channels{};
   stbi_uc* pixels = stbi_load(filename, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
@@ -84,96 +82,16 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   if (!pixels) {
     fmt::print(stderr, "Failed to load texture file {}\n", filename);
     std::fflush(stderr);
-    return beyond::nullopt;
+    return VK_NULL_HANDLE;
   }
 
-  void* pixel_ptr = static_cast<void*>(pixels);
-  const auto image_size = beyond::narrow<VkDeviceSize>(tex_width) * tex_height * 4;
-
-  constexpr VkFormat image_format = VK_FORMAT_R8G8B8A8_SRGB;
-
-  // allocate temporary buffer for holding texture data to upload
-  auto staging_buffer =
-      vkh::create_buffer(context, vkh::BufferCreateInfo{.size = image_size,
-                                                        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                                        .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
-                                                        .debug_name = "Image Staging Buffer"})
-          .value();
-  BEYOND_DEFER(vkh::destroy_buffer(context, staging_buffer));
-
-  // copy data to buffer
-  void* data = context.map(staging_buffer).value();
-  memcpy(data, pixel_ptr, beyond::narrow<size_t>(image_size));
-  context.unmap(staging_buffer);
-  stbi_image_free(pixels);
-
-  const VkExtent3D image_extent = {
+  return renderer.upload_image({
+      .name = filename,
       .width = beyond::narrow<uint32_t>(tex_width),
       .height = beyond::narrow<uint32_t>(tex_height),
-      .depth = 1,
-  };
-
-  vkh::AllocatedImage image =
-      vkh::create_image(context,
-                        vkh::ImageCreateInfo{
-                            .format = image_format,
-                            .extent = image_extent,
-                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                        })
-          .expect("Failed to create image");
-
-  immediate_submit(context, renderer.upload_context(), [&](VkCommandBuffer cmd) {
-    static constexpr VkImageSubresourceRange range = {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = 1,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-    };
-
-    const VkImageMemoryBarrier image_barrier_to_transfer = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .image = image.image,
-        .subresourceRange = range,
-    };
-
-    // barrier the image into the transfer-receive layout
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                         0, nullptr, 0, nullptr, 1, &image_barrier_to_transfer);
-
-    const VkBufferImageCopy copy_region = {.bufferOffset = 0,
-                                           .bufferRowLength = 0,
-                                           .bufferImageHeight = 0,
-                                           .imageSubresource =
-                                               {
-                                                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                   .mipLevel = 0,
-                                                   .baseArrayLayer = 0,
-                                                   .layerCount = 1,
-                                               },
-                                           .imageExtent = image_extent};
-
-    // copy the buffer into the image
-    vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, image.image,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
-
-    VkImageMemoryBarrier image_barrier_to_readable = image_barrier_to_transfer;
-    image_barrier_to_readable.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    image_barrier_to_readable.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    image_barrier_to_readable.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    image_barrier_to_readable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    // barrier the image into the shader readable layout
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0, 0, nullptr, 0, nullptr, 1, &image_barrier_to_readable);
+      .compoments = beyond::narrow<uint32_t>(tex_channels),
+      .data = std::unique_ptr<const uint8_t[]>(pixels),
   });
-
-  SPDLOG_INFO("Texture loaded {}", filename);
-  return image;
 }
 
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
@@ -214,6 +132,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 
 struct IndirectBatch {
   charlie::MeshHandle mesh;
+  std::uint32_t albedo_texture_index = static_cast<uint32_t>(~0);
   std::uint32_t first = 0;
   std::uint32_t count = 0;
 };
@@ -233,7 +152,12 @@ struct IndirectBatch {
       BEYOND_ASSERT(!draws.empty());
       ++draws.back().count;
     } else {
-      draws.push_back(IndirectBatch{.mesh = object.mesh, .first = i, .count = 1});
+      draws.push_back(IndirectBatch{
+          .mesh = object.mesh,
+          .albedo_texture_index = object.albedo_texture_index,
+          .first = i,
+          .count = 1,
+      });
       last_mesh = object.mesh;
     }
   }
@@ -258,7 +182,102 @@ Renderer::Renderer(Window& window)
   imgui_render_pass_ =
       std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
 
-  init_texture();
+  init_sampler();
+}
+
+auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
+{
+  ZoneScoped;
+
+  vkh::Context& context = context_;
+  charlie::UploadContext& upload_context = upload_context_;
+
+  const void* pixel_ptr = static_cast<const void*>(cpu_image.data.get());
+  const auto image_size = beyond::narrow<VkDeviceSize>(cpu_image.width) * cpu_image.height * 4;
+
+  // allocate temporary buffer for holding texture data to upload
+  auto staging_buffer =
+      vkh::create_buffer(context, vkh::BufferCreateInfo{.size = image_size,
+                                                        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                                        .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
+                                                        .debug_name = "Image Staging Buffer"})
+          .value();
+  BEYOND_DEFER(vkh::destroy_buffer(context, staging_buffer));
+
+  // copy data to buffer
+  void* data = context.map(staging_buffer).value();
+  memcpy(data, pixel_ptr, beyond::narrow<size_t>(image_size));
+  context.unmap(staging_buffer);
+
+  const VkExtent3D image_extent = {
+      .width = beyond::narrow<uint32_t>(cpu_image.width),
+      .height = beyond::narrow<uint32_t>(cpu_image.height),
+      .depth = 1,
+  };
+
+  vkh::AllocatedImage allocated_image =
+      vkh::create_image(context,
+                        vkh::ImageCreateInfo{
+                            .format = VK_FORMAT_R8G8B8A8_SRGB,
+                            .extent = image_extent,
+                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                        })
+          .expect("Failed to create image");
+
+  immediate_submit(context, upload_context, [&](VkCommandBuffer cmd) {
+    static constexpr VkImageSubresourceRange range = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+
+    const VkImageMemoryBarrier image_barrier_to_transfer = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = allocated_image.image,
+        .subresourceRange = range,
+    };
+
+    // barrier the image into the transfer-receive layout
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                         0, nullptr, 0, nullptr, 1, &image_barrier_to_transfer);
+
+    const VkBufferImageCopy copy_region = {.bufferOffset = 0,
+                                           .bufferRowLength = 0,
+                                           .bufferImageHeight = 0,
+                                           .imageSubresource =
+                                               {
+                                                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                   .mipLevel = 0,
+                                                   .baseArrayLayer = 0,
+                                                   .layerCount = 1,
+                                               },
+                                           .imageExtent = image_extent};
+
+    // copy the buffer into the image
+    vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, allocated_image.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+
+    VkImageMemoryBarrier image_barrier_to_readable = image_barrier_to_transfer;
+    image_barrier_to_readable.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    image_barrier_to_readable.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_barrier_to_readable.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    image_barrier_to_readable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    // barrier the image into the shader readable layout
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &image_barrier_to_readable);
+  });
+
+  SPDLOG_INFO("Image uploaded to GPU | Name: {}",
+              cpu_image.name.empty() ? "Unknown" : cpu_image.name);
+
+  return images_.emplace_back(allocated_image).image;
 }
 
 void Renderer::init_frame_data()
@@ -546,18 +565,8 @@ void Renderer::init_pipelines()
           .value();
 }
 
-void Renderer::init_texture()
+void Renderer::init_sampler()
 {
-  texture_.image =
-      load_image_from_file(*this, "../../assets/models/lost_empire/lost_empire-RGBA.png").value();
-  texture_.image_view =
-      vkh::create_image_view(
-          context_,
-          {.image = texture_.image.image,
-           .format = VK_FORMAT_R8G8B8A8_SRGB,
-           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT}})
-          .expect("Failed to create image view");
-
   // Create sampler
   const VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                                             .magFilter = VK_FILTER_LINEAR,
@@ -567,21 +576,6 @@ void Renderer::init_texture()
                                             .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                                             .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT};
   vkCreateSampler(context_, &sampler_info, nullptr, &sampler_);
-
-  // alloc descriptor set for material
-  {
-    texture_set_ = descriptor_allocator_->allocate(single_texture_set_layout_).value();
-
-    // write to the descriptor set so that it points to diffuse texture
-    const VkDescriptorImageInfo image_buffer_info = {
-        .sampler = sampler_,
-        .imageView = texture_.image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    const VkWriteDescriptorSet texture1 = write_descriptor_image(
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, texture_set_, &image_buffer_info, 0);
-    vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
-  }
 }
 
 void Renderer::render(const charlie::Camera& camera)
@@ -815,6 +809,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   for (const auto [node_index, render_component] : scene_->render_components_) {
     render_objects_.push_back(RenderObject{
         .mesh = render_component.mesh,
+        .albedo_texture_index = render_component.albedo_texture_index,
         .model_matrix = scene_->global_transforms[node_index],
     });
   }
@@ -863,9 +858,10 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
-                          &texture_set_, 0, nullptr);
   for (const IndirectBatch& draw : draws) {
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
+                            &texture_descriptor_set_.at(draw.albedo_texture_index), 0, nullptr);
+
     const auto& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
     constexpr VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
@@ -886,9 +882,10 @@ Renderer::~Renderer()
 
   imgui_render_pass_ = nullptr;
 
-  vkDestroyImageView(context_, texture_.image_view, nullptr);
-  vkh::destroy_image(context_, texture_.image);
   vkDestroySampler(context_, sampler_, nullptr);
+
+  for (auto texture : textures_) { vkDestroyImageView(context_, texture.image_view, nullptr); }
+  for (auto image : images_) { vkh::destroy_image(context_, image); }
 
   for (const auto& mesh : meshes_.values()) { destroy_mesh(context_, mesh); }
 
@@ -947,6 +944,29 @@ void Renderer::resize()
   vkDestroyImageView(context_, depth_image_view_, nullptr);
   vkh::destroy_image(context_, depth_image_);
   init_depth_image();
+}
+
+void Renderer::add_texture(Texture texture)
+{
+  textures_.push_back(texture);
+
+  // alloc descriptor set for material
+  {
+    VkDescriptorSet texture_set =
+        descriptor_allocator_->allocate(single_texture_set_layout_).value();
+
+    // write to the descriptor set so that it points to diffuse texture
+    const VkDescriptorImageInfo image_buffer_info = {
+        .sampler = sampler_,
+        .imageView = texture.image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    const VkWriteDescriptorSet texture1 = write_descriptor_image(
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, texture_set, &image_buffer_info, 0);
+    vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
+
+    texture_descriptor_set_.push_back(texture_set);
+  }
 }
 
 } // namespace charlie

@@ -115,12 +115,12 @@ auto index_mesh(charlie::CPUMesh& mesh)
     meshes.push_back(std::move(cpu_mesh));
   }
 
-  std::vector<CPUObject> objects;
+  std::vector<CPURenderObject> objects;
   objects.reserve(meshes.size() + 1);
-  objects.push_back(CPUObject{.mesh_index = -1}); // root
-  for (int i = 0; i < beyond::narrow<int>(meshes.size()); ++i) {
-    objects.push_back(CPUObject{
-        .mesh_index = i,
+  objects.push_back(CPURenderObject{.mesh_index = -1}); // root
+  for (size_t i = 0; i < meshes.size(); ++i) {
+    objects.push_back(CPURenderObject{
+        .mesh_index = beyond::narrow<int>(i),
     });
   }
 
