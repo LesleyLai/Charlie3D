@@ -12,8 +12,6 @@
 #include <beyond/types/optional.hpp>
 #include <beyond/utils/narrowing.hpp>
 
-#include <stb_image.h>
-
 namespace fastgltf {
 
 template <>
@@ -48,38 +46,12 @@ auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fast
               data.uri.isLocalPath() ? gltf_directory / data.uri.fspath() : data.uri.fspath();
           file_path = std::filesystem::canonical(file_path);
 
-          int width, height, components;
-          uint8_t* pixels =
-              stbi_load(file_path.string().c_str(), &width, &height, &components, STBI_rgb_alpha);
-          BEYOND_ENSURE(pixels != nullptr);
-
-          SPDLOG_INFO("Load Image from {}", file_path.string());
-
-          return charlie::CPUImage{
-              .name = image.name.empty() ? file_path.string() : image.name,
-              .width = beyond::narrow<uint32_t>(width),
-              .height = beyond::narrow<uint32_t>(height),
-              .compoments = beyond::narrow<uint32_t>(components),
-              .data = std::unique_ptr<uint8_t[]>(pixels),
-          };
-
+          const auto name = image.name.empty() ? file_path.string() : image.name;
+          return charlie::load_image_from_file(file_path, name.c_str());
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
           // TODO: Handle other Mime types
           BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::GltfBuffer);
-
-          int width, height, components;
-          uint8_t* pixels = stbi_load_from_memory(data.bytes.data(), data.bytes.size(), &width,
-                                                  &height, &components, STBI_rgb_alpha);
-          BEYOND_ENSURE(pixels != nullptr);
-
-          return charlie::CPUImage{
-              .name = image.name,
-              .width = beyond::narrow<uint32_t>(width),
-              .height = beyond::narrow<uint32_t>(height),
-              .compoments = beyond::narrow<uint32_t>(components),
-              .data = std::unique_ptr<uint8_t[]>(pixels),
-          };
-
+          return charlie::load_image_from_memory(data.bytes, image.name.c_str());
         } else {
           beyond::panic("Unsupported image data format!");
         }

@@ -121,7 +121,7 @@ Renderer::Renderer(Window& window)
   init_frame_data();
   init_descriptors();
   init_pipelines();
-  upload_context_ = init_upload_context(context_).expect("Successfully create upload context");
+  upload_context_ = init_upload_context(context_).expect("Failed to create upload context");
 
   imgui_render_pass_ =
       std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
@@ -164,13 +164,15 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
       .depth = 1,
   };
 
+  const auto image_debug_name =
+      cpu_image.name.empty() ? fmt::format("{} Image", cpu_image.name) : "Image";
   vkh::AllocatedImage allocated_image =
       vkh::create_image(context,
                         vkh::ImageCreateInfo{
                             .format = VK_FORMAT_R8G8B8A8_SRGB,
                             .extent = image_extent,
                             .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                            .debug_name = "Image Staging Buffer",
+                            .debug_name = image_debug_name.c_str(),
                         })
           .expect("Failed to create image");
 
@@ -183,19 +185,18 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
         .layerCount = 1,
     };
 
-    const VkImageMemoryBarrier image_barrier_to_transfer = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .image = allocated_image.image,
-        .subresourceRange = range,
-    };
-
     // barrier the image into the transfer-receive layout
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                         0, nullptr, 0, nullptr, 1, &image_barrier_to_transfer);
+    vkh::cmd_pipeline_barrier2(
+        cmd, {.image_barriers = std::array{
+                  vkh::ImageBarrier2{
+                      .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                      VK_PIPELINE_STAGE_2_TRANSFER_BIT},
+                      .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT},
+                      .layouts = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
+                      .image = allocated_image.image,
+                      .subresource_range = range}
+                      .to_vk_struct() //
+              }});
 
     const VkBufferImageCopy copy_region = {.bufferOffset = 0,
                                            .bufferRowLength = 0,
@@ -213,22 +214,20 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
     vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, allocated_image.image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
-    const VkImageMemoryBarrier image_barrier_to_readable = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .image = allocated_image.image,
-        .subresourceRange = range,
-    };
     // barrier the image into the shader readable layout
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0, 0, nullptr, 0, nullptr, 1, &image_barrier_to_readable);
+    vkh::cmd_pipeline_barrier2(
+        cmd, {.image_barriers = std::array{
+                  vkh::ImageBarrier2{
+                      .stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                      VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+                      .access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT},
+                      .layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                      .image = allocated_image.image,
+                      .subresource_range = range}
+                      .to_vk_struct() //
+              }});
   });
-
-  SPDLOG_INFO("Image uploaded to GPU | Name: {}",
-              cpu_image.name.empty() ? "Unknown" : cpu_image.name);
 
   return images_.emplace_back(allocated_image).image;
 }
@@ -575,27 +574,25 @@ void Renderer::render(const charlie::Camera& camera)
   }
 
   VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
-
-  [[maybe_unused]] const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
-  const auto current_swapchain_image_view = swapchain_.image_views()[swapchain_image_index];
-
   VK_CHECK(vkResetCommandBuffer(frame.main_command_buffer, 0));
 
+  imgui_render_pass_->pre_render();
+
   VkCommandBuffer cmd = frame.main_command_buffer;
+
+  const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
+  const auto current_swapchain_image_view = swapchain_.image_views()[swapchain_image_index];
 
   static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };
-
-  imgui_render_pass_->pre_render();
-
   {
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
     {
       TracyVkCollect(frame.tracy_vk_ctx, cmd);
-      TracyVkZone(frame.tracy_vk_ctx, cmd, "Render");
+      TracyVkZone(frame.tracy_vk_ctx, cmd, "Swapchain");
 
       transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
 
@@ -691,6 +688,7 @@ void Renderer::render(const charlie::Camera& camera)
 
   ++frame_number_;
 }
+
 void Renderer::present(uint32_t& swapchain_image_index)
 {
   ZoneScopedN("vkQueuePresentKHR");

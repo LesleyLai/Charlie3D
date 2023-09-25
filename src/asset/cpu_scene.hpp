@@ -5,6 +5,7 @@
 #include <beyond/types/optional.hpp>
 #include <vector>
 
+#include "cpu_image.hpp"
 #include "cpu_mesh.hpp"
 
 namespace charlie {
@@ -16,14 +17,6 @@ struct CPURenderObject {
 struct CPUMaterial {
   beyond::Vec4 base_color_factor;
   beyond::optional<uint32_t> albedo_texture_index;
-};
-
-struct CPUImage {
-  std::string name;
-  uint32_t width = 0;
-  uint32_t height = 0;
-  uint32_t compoments = 0;
-  std::unique_ptr<uint8_t[]> data;
 };
 
 struct CPUTexture {
