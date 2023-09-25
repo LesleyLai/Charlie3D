@@ -49,7 +49,7 @@ auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fast
           file_path = std::filesystem::canonical(file_path);
 
           int width, height, components;
-          const uint8_t* pixels =
+          uint8_t* pixels =
               stbi_load(file_path.string().c_str(), &width, &height, &components, STBI_rgb_alpha);
           BEYOND_ENSURE(pixels != nullptr);
 
@@ -60,7 +60,7 @@ auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fast
               .width = beyond::narrow<uint32_t>(width),
               .height = beyond::narrow<uint32_t>(height),
               .compoments = beyond::narrow<uint32_t>(components),
-              .data = std::unique_ptr<const uint8_t[]>(pixels),
+              .data = std::unique_ptr<uint8_t[]>(pixels),
           };
 
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
@@ -68,8 +68,8 @@ auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fast
           BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::GltfBuffer);
 
           int width, height, components;
-          const uint8_t* pixels = stbi_load_from_memory(
-              data.bytes.data(), data.bytes.size(), &width, &height, &components, STBI_rgb_alpha);
+          uint8_t* pixels = stbi_load_from_memory(data.bytes.data(), data.bytes.size(), &width,
+                                                  &height, &components, STBI_rgb_alpha);
           BEYOND_ENSURE(pixels != nullptr);
 
           return charlie::CPUImage{
@@ -77,7 +77,7 @@ auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fast
               .width = beyond::narrow<uint32_t>(width),
               .height = beyond::narrow<uint32_t>(height),
               .compoments = beyond::narrow<uint32_t>(components),
-              .data = std::unique_ptr<const uint8_t[]>(pixels),
+              .data = std::unique_ptr<uint8_t[]>(pixels),
           };
 
         } else {

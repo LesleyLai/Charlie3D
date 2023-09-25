@@ -71,29 +71,6 @@ auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
   };
 }
 
-[[nodiscard]] auto load_image_from_file(charlie::Renderer& renderer, const char* filename)
-    -> VkImage
-{
-  ZoneScoped;
-
-  int tex_width{}, tex_height{}, tex_channels{};
-  stbi_uc* pixels = stbi_load(filename, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
-
-  if (!pixels) {
-    fmt::print(stderr, "Failed to load texture file {}\n", filename);
-    std::fflush(stderr);
-    return VK_NULL_HANDLE;
-  }
-
-  return renderer.upload_image({
-      .name = filename,
-      .width = beyond::narrow<uint32_t>(tex_width),
-      .height = beyond::narrow<uint32_t>(tex_height),
-      .compoments = beyond::narrow<uint32_t>(tex_channels),
-      .data = std::unique_ptr<const uint8_t[]>(pixels),
-  });
-}
-
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
 {
@@ -195,12 +172,17 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
   const void* pixel_ptr = static_cast<const void*>(cpu_image.data.get());
   const auto image_size = beyond::narrow<VkDeviceSize>(cpu_image.width) * cpu_image.height * 4;
 
+  const auto staging_buffer_debug_name = cpu_image.name.empty()
+                                             ? fmt::format("{} Staging Buffer", cpu_image.name)
+                                             : "Image Staging Buffer";
+
   // allocate temporary buffer for holding texture data to upload
   auto staging_buffer =
-      vkh::create_buffer(context, vkh::BufferCreateInfo{.size = image_size,
-                                                        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                                        .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
-                                                        .debug_name = "Image Staging Buffer"})
+      vkh::create_buffer(context,
+                         vkh::BufferCreateInfo{.size = image_size,
+                                               .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                               .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
+                                               .debug_name = staging_buffer_debug_name.c_str()})
           .value();
   BEYOND_DEFER(vkh::destroy_buffer(context, staging_buffer));
 
@@ -221,6 +203,7 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
                             .format = VK_FORMAT_R8G8B8A8_SRGB,
                             .extent = image_extent,
                             .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            .debug_name = "Image Staging Buffer",
                         })
           .expect("Failed to create image");
 
@@ -576,6 +559,28 @@ void Renderer::init_sampler()
                                             .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                                             .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT};
   vkCreateSampler(context_, &sampler_info, nullptr, &sampler_);
+
+  CPUImage cpu_image{
+      .name = "Default Albedo Texture Image",
+      .width = 1,
+      .height = 1,
+      .compoments = 4,
+      .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
+  };
+  std::fill(cpu_image.data.get(), cpu_image.data.get() + 4, 255);
+
+  const auto default_albedo_image = upload_image(std::move(cpu_image));
+
+  const VkImageView default_albedo_image_view =
+      vkh::create_image_view(
+          context(),
+          {.image = default_albedo_image,
+           .format = VK_FORMAT_R8G8B8A8_SRGB,
+           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
+           .debug_name = "Default Albedo Texture Image View"})
+          .value();
+
+  add_texture(Texture{.image = default_albedo_image, .image_view = default_albedo_image_view});
 }
 
 void Renderer::render(const charlie::Camera& camera)

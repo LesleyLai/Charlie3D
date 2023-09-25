@@ -23,7 +23,7 @@ struct CPUImage {
   uint32_t width = 0;
   uint32_t height = 0;
   uint32_t compoments = 0;
-  std::unique_ptr<const uint8_t[]> data;
+  std::unique_ptr<uint8_t[]> data;
 };
 
 struct CPUTexture {

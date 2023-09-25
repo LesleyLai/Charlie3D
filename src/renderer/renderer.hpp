@@ -133,16 +133,12 @@ public:
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
 
   auto upload_image(const charlie::CPUImage& cpu_image) -> VkImage;
-  [[nodiscard]] auto get_image_at(uint32_t i) const -> VkImage
-  {
-    return images_.at(i).image;
-  }
-  [[nodiscard]] auto get_mesh(MeshHandle handle) const -> const Mesh&
-  {
-    return meshes_.try_get(handle).value();
-  }
 
-  [[nodiscard]] void add_texture(Texture texture);
+  void add_texture(Texture texture);
+  [[nodiscard]] auto texture_count() const -> uint32_t
+  {
+    return beyond::narrow<uint32_t>(textures_.size());
+  }
 
   [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
   {
