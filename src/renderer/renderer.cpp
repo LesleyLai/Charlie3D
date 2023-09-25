@@ -41,36 +41,6 @@ struct GPUCameraData {
 
 constexpr std::size_t max_object_count = 10000;
 
-[[nodiscard]] auto
-sampler_create_info(VkFilter filters,
-                    VkSamplerAddressMode address_mode /*= VK_SAMPLER_ADDRESS_MODE_REPEAT*/)
-    -> VkSamplerCreateInfo
-{
-  return VkSamplerCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .pNext = nullptr,
-      .magFilter = filters,
-      .minFilter = filters,
-      .addressModeU = address_mode,
-      .addressModeV = address_mode,
-      .addressModeW = address_mode,
-  };
-}
-
-auto write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet,
-                            const VkDescriptorImageInfo* image_info, uint32_t binding)
-    -> VkWriteDescriptorSet
-{
-  return VkWriteDescriptorSet{
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = dstSet,
-      .dstBinding = binding,
-      .descriptorCount = 1,
-      .descriptorType = type,
-      .pImageInfo = image_info,
-  };
-}
-
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
 {
@@ -246,12 +216,15 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
     vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, allocated_image.image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
-    VkImageMemoryBarrier image_barrier_to_readable = image_barrier_to_transfer;
-    image_barrier_to_readable.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    image_barrier_to_readable.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    image_barrier_to_readable.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    image_barrier_to_readable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
+    const VkImageMemoryBarrier image_barrier_to_readable = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .image = allocated_image.image,
+        .subresourceRange = range,
+    };
     // barrier the image into the shader readable layout
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          0, 0, nullptr, 0, nullptr, 1, &image_barrier_to_readable);
@@ -800,7 +773,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
 
   // Scene data
-  char* scene_data;
+  char* scene_data = nullptr;
   vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
 
   const size_t frame_index = frame_number_ % frame_overlap;
@@ -811,7 +784,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
 
   // Render objects
   render_objects_.clear();
-  for (const auto [node_index, render_component] : scene_->render_components_) {
+  for (const auto [node_index, render_component] : scene_->render_components) {
     render_objects_.push_back(RenderObject{
         .mesh = render_component.mesh,
         .albedo_texture_index = render_component.albedo_texture_index,
@@ -966,8 +939,14 @@ void Renderer::add_texture(Texture texture)
         .imageView = texture.image_view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
-    const VkWriteDescriptorSet texture1 = write_descriptor_image(
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, texture_set, &image_buffer_info, 0);
+    const VkWriteDescriptorSet texture1 = VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = texture_set,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &image_buffer_info,
+    };
     vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
 
     texture_descriptor_set_.push_back(texture_set);
