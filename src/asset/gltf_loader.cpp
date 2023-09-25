@@ -244,7 +244,7 @@ namespace charlie {
     indices.resize(index_accessor.count);
     fastgltf::copyFromAccessor<std::uint32_t>(*parsed_asset, index_accessor, indices.data());
 
-    BEYOND_ENSURE(mesh.primitives[0].materialIndex.has_value());
+    BEYOND_ENSURE(primitive.materialIndex.has_value());
     beyond::optional<uint32_t> material_index;
     if (mesh.primitives[0].materialIndex.has_value()) {
       material_index = beyond::narrow<uint32_t>(mesh.primitives[0].materialIndex.value());

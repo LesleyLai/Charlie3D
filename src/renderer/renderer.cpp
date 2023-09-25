@@ -10,10 +10,7 @@
 
 #include "shader_compiler/shader_compiler.hpp"
 
-#include <cstddef>
-
 #include <spdlog/spdlog.h>
-#include <stb_image.h>
 
 #include <beyond/math/transform.hpp>
 #include <beyond/types/optional.hpp>
@@ -523,7 +520,6 @@ void Renderer::init_pipelines()
 
 void Renderer::init_sampler()
 {
-  // Create sampler
   const VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                                             .magFilter = VK_FILTER_LINEAR,
                                             .minFilter = VK_FILTER_LINEAR,
@@ -542,9 +538,9 @@ void Renderer::init_sampler()
   };
   std::fill(cpu_image.data.get(), cpu_image.data.get() + 4, 255);
 
-  const auto default_albedo_image = upload_image(std::move(cpu_image));
+  const auto default_albedo_image = upload_image(cpu_image);
 
-  const VkImageView default_albedo_image_view =
+  VkImageView default_albedo_image_view =
       vkh::create_image_view(
           context(),
           {.image = default_albedo_image,

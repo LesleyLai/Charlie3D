@@ -20,6 +20,7 @@ google-runtime-*,
 hicpp-exception-baseclass,
 hicpp-multiway-paths-covered,
 misc-*,
+-misc-const-correctness,
 modernize-*,
 -*-avoid-c-arrays,
 performance-*,
@@ -34,25 +35,16 @@ readability-uniqueptr-delete-release,
 readability-use-anyofallof
 '
 WarningsAsErrors: '*'
-HeaderFilterRegex: 'catch.hpp'
+HeaderFilterRegex: 'catch\.hpp|Tracy\.hpp'
 FormatStyle: 'file'
 CheckOptions:
-  - key: readability-function-size.LineThreshold
-    value: '200'
-  - key: readability-function-size.ParameterThreshold
-    value: '16'
-  - key: readability-function-size.StatementThreshold
-    value: '400'
-  - key: misc-non-private-member-variables-in-classes.IgnorePublicMemberVariables
-    value: '1'
-  - key: cppcoreguidelines-avoid-magic-numbers.IgnoredIntegerValues
-    value: '1;2;3;4;8;'
-  - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
-    value: 'true'
-  - key: cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions
-    value: 'true'
-  - key: cppcoreguidelines-special-member-functions.AllowMissingMoveFunctionsWhenCopyIsDeleted
-    value: 'true'
-  - key: hicpp-signed-bitwise.IgnorePositiveIntegerLiterals
-    value: 'true'
+  readability-function-size:.LineThreshold: 200
+  readability-function-size.ParameterThreshold: 16
+  readability-function-size.StatementThreshold: 400
+  misc-non-private-member-variables-in-classes.IgnorePublicMemberVariables: 1
+  cppcoreguidelines-avoid-magic-numbers.IgnoredIntegerValues: '1;2;3;4;8;'
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: true
+  cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions: true
+  cppcoreguidelines-special-member-functions.AllowMissingMoveFunctionsWhenCopyIsDeleted: true
+  hicpp-signed-bitwise.IgnorePositiveIntegerLiterals: true
 ...

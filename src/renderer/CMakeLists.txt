@@ -4,7 +4,6 @@ add_subdirectory(shader_compiler)
 add_library(charlie3d_renderer
         renderer.hpp renderer.cpp
         mesh.hpp mesh.cpp
-        header_only_libs_impl.cpp
         camera.cpp camera.hpp
         render_pass.hpp
         imgui_render_pass.cpp
@@ -14,7 +13,6 @@ add_library(charlie3d_renderer
         )
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
-find_package(stb REQUIRED)
 find_package(SDL2 REQUIRED)
 
 target_link_libraries(charlie3d_renderer
@@ -27,7 +25,6 @@ target_link_libraries(charlie3d_renderer
         beyond::core
         third-party::imgui_bindings
         PRIVATE
-        stb::stb
         SDL2::SDL2-static
         )
 
