@@ -3,6 +3,8 @@
 #include "beyond/utils/narrowing.hpp"
 
 #include <meshoptimizer.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
 namespace charlie {

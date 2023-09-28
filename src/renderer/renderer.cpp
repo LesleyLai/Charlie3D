@@ -234,6 +234,7 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
 
 void Renderer::init_frame_data()
 {
+  ZoneScoped;
   const VkCommandPoolCreateInfo command_pool_create_info{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -271,6 +272,8 @@ void Renderer::init_frame_data()
 
 void Renderer::init_depth_image()
 {
+  ZoneScoped;
+
   depth_image_ =
       vkh::create_image(context_,
                         vkh::ImageCreateInfo{
@@ -294,6 +297,8 @@ void Renderer::init_depth_image()
 
 void Renderer::init_descriptors()
 {
+  ZoneScoped;
+
   descriptor_allocator_ = std::make_unique<vkh::DescriptorAllocator>(context_);
   descriptor_layout_cache_ = std::make_unique<vkh::DescriptorLayoutCache>(context_.device());
 
@@ -438,6 +443,8 @@ void Renderer::init_descriptors()
 
 void Renderer::init_pipelines()
 {
+  ZoneScoped;
+  
   shader_compiler_ = std::make_unique<ShaderCompiler>();
 
   const VkDescriptorSetLayout set_layouts[] = {

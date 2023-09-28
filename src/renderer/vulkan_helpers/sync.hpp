@@ -31,14 +31,14 @@ template <typename T> struct Transition {
   T dst = {};
 };
 
-struct ImageBarrier2 {
+struct ImageBarrier2 { // NOLINT(cppcoreguidelines-pro-type-member-init)
   Transition<VkPipelineStageFlags2> stage_masks;
   Transition<VkAccessFlagBits2> access_masks;
   Transition<VkImageLayout> layouts;
   Transition<uint32_t> queue_family_index = {VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED};
 
   RequiredField<VkImage> image;
-  VkImageSubresourceRange subresource_range;
+  VkImageSubresourceRange subresource_range = {};
 
   [[nodiscard]] auto to_vk_struct() const -> VkImageMemoryBarrier2;
 };

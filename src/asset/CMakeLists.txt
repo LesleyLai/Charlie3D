@@ -2,12 +2,11 @@ add_library(charlie3d_asset
         cpu_mesh.hpp cpu_scene.hpp
         obj_loader.hpp obj_loader.cpp
         gltf_loader.hpp gltf_loader.cpp
-        header_only_libs_impl.cpp cpu_image.cpp cpu_image.hpp)
+        cpu_image.cpp cpu_image.hpp)
 
 add_library(charlie3d::asset ALIAS charlie3d_asset)
 
 find_package(meshoptimizer REQUIRED)
-find_package(tinyobjloader REQUIRED)
 find_package(tinyobjloader REQUIRED)
 find_package(fastgltf REQUIRED)
 find_package(stb REQUIRED)

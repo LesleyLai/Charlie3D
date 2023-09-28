@@ -12,6 +12,10 @@
 #include <beyond/types/optional.hpp>
 #include <beyond/utils/narrowing.hpp>
 
+#include "../utils/thread_pool.hpp"
+
+#include <fmt/ostream.h>
+
 namespace fastgltf {
 
 template <>
@@ -33,30 +37,41 @@ auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
   };
 };
 
-auto load_raw_image_data(const std::filesystem::path& gltf_directory, const fastgltf::Image& image)
-    -> charlie::CPUImage
+[[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
+                                       const fastgltf::Image& image) -> charlie::CPUImage
 {
-  ZoneScoped;
+  // ZoneScoped;
 
   return std::visit(
       [&](const auto& data) -> charlie::CPUImage {
         using DataType = std::remove_cvref_t<decltype(data)>;
         if constexpr (std::is_same_v<DataType, fastgltf::sources::URI>) {
-          std::filesystem::path file_path =
-              data.uri.isLocalPath() ? gltf_directory / data.uri.fspath() : data.uri.fspath();
+          std::filesystem::path file_path = data.uri.fspath().is_absolute()
+                                                ? data.uri.fspath()
+                                                : gltf_directory / data.uri.fspath();
           file_path = std::filesystem::canonical(file_path);
 
           const auto name = image.name.empty() ? file_path.string() : image.name;
           return charlie::load_image_from_file(file_path, name.c_str());
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
           // TODO: Handle other Mime types
-          BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::GltfBuffer);
+          BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::JPEG ||
+                        data.mimeType == fastgltf::MimeType::PNG ||
+                        data.mimeType == fastgltf::MimeType::GltfBuffer);
           return charlie::load_image_from_memory(data.bytes, image.name.c_str());
         } else {
           beyond::panic("Unsupported image data format!");
         }
       },
       image.data);
+}
+
+auto load_raw_image_data_async(charlie::ThreadPool& scheduler, std::filesystem::path gltf_directory,
+                               const fastgltf::Image& image, charlie::CPUImage& output)
+    -> charlie::Task<void>
+{
+  co_await scheduler.schedule();
+  output = load_raw_image_data(gltf_directory, image);
 }
 
 } // anonymous namespace
@@ -91,6 +106,8 @@ namespace charlie {
 [[nodiscard]] auto load_gltf(const std::filesystem::path& file_path) -> CPUScene
 {
   ZoneScoped;
+
+  ThreadPool io_thread_pool;
 
   // Creates a Parser instance. Optimally, you should reuse this across loads, but don't use it
   // across threads. To enable extensions, you have to pass them into the parser's constructor.
@@ -127,9 +144,11 @@ namespace charlie {
     result.local_transforms.push_back(transform);
   }
 
-  result.images.reserve(parsed_asset->images.size());
-  std::ranges::transform(parsed_asset->images, std::back_inserter(result.images),
-                         std::bind_front(load_raw_image_data, file_path.parent_path()));
+  result.images.resize(parsed_asset->images.size());
+  for (std::size_t i = 0; i < parsed_asset->images.size(); ++i) {
+    io_thread_pool.enqueue(load_raw_image_data_async(io_thread_pool, file_path.parent_path(),
+                                                     parsed_asset->images[i], result.images[i]));
+  }
 
   result.textures.reserve(parsed_asset->textures.size());
   std::ranges::transform(parsed_asset->textures, std::back_inserter(result.textures),
@@ -155,7 +174,7 @@ namespace charlie {
 
   for (const auto& mesh : parsed_asset->meshes) {
     // TODO: handle more primitives
-    BEYOND_ENSURE(mesh.primitives.size() == 1);
+    BEYOND_ENSURE(mesh.primitives.size() >= 1);
 
     const auto& primitive = mesh.primitives.at(0);
     BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
@@ -234,6 +253,8 @@ namespace charlie {
     SPDLOG_ERROR("GLTF validation error {} from{}", static_cast<uint64_t>(error),
                  file_path.string().c_str());
   }
+
+  io_thread_pool.wait();
 
   SPDLOG_INFO("GLTF loaded from {}", file_path.string().c_str());
   return result;
