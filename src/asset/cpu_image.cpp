@@ -13,7 +13,7 @@
 namespace charlie {
 
 [[nodiscard]] auto load_image_from_file(const std::filesystem::path& file_path,
-                                        const char* image_name) -> CPUImage
+                                        std::string image_name) -> CPUImage
 {
   ZoneScoped;
   int width{}, height{}, components{};
@@ -30,7 +30,7 @@ namespace charlie {
   };
 }
 
-[[nodiscard]] auto load_image_from_memory(std::span<const uint8_t> bytes, const char* image_name)
+[[nodiscard]] auto load_image_from_memory(std::span<const uint8_t> bytes, std::string image_name)
     -> CPUImage
 {
   ZoneScoped;
@@ -41,7 +41,7 @@ namespace charlie {
   BEYOND_ENSURE(pixels != nullptr);
 
   return charlie::CPUImage{
-      .name = image_name,
+      .name = std::move(image_name),
       .width = beyond::narrow<uint32_t>(width),
       .height = beyond::narrow<uint32_t>(height),
       .compoments = beyond::narrow<uint32_t>(components),

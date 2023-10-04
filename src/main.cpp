@@ -9,8 +9,7 @@
 
 #include "utils/configuration.hpp"
 #include "utils/file.hpp"
-
-#include <beyond/math/transform.hpp>
+#include "utils/framerate_counter.hpp"
 
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
@@ -33,7 +32,8 @@ void set_asset_path()
   Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
 }
 
-void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charlie::Camera& camera)
+void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charlie::Camera& camera,
+              std::chrono::steady_clock::duration delta_time)
 {
   ImGui_ImplVulkan_NewFrame();
   ImGui_ImplSDL2_NewFrame();
@@ -67,11 +67,17 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
 
   if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }
 
+  static charlie::FramerateCounter framerate_counter;
+  framerate_counter.update(delta_time);
   if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
     const auto& scene = renderer.scene();
 
     ImGui::SeparatorText("Scene Data");
     ImGui::LabelText("Nodes", "%zu", scene.local_transforms.size());
+
+    ImGui::SeparatorText("Performance Data");
+    ImGui::LabelText("FPS", "%.0f", 1e3f / framerate_counter.average_ms_per_frame);
+    ImGui::LabelText("ms per frame", "%.2f", framerate_counter.average_ms_per_frame);
   }
 
   ImGui::End();
@@ -119,7 +125,7 @@ int main(int argc, const char** argv)
 
     input_handler.handle_events();
 
-    draw_gui(window.resolution(), renderer, camera);
+    draw_gui(window.resolution(), renderer, camera, delta_time);
 
     while (lag >= MS_PER_UPDATE) {
       camera.fixed_update();

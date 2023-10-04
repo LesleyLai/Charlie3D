@@ -14,10 +14,10 @@ struct CPUImage {
   std::unique_ptr<uint8_t[]> data;
 };
 
-[[nodiscard]] auto load_image_from_file(const std::filesystem::path& path, const char* filepath)
+[[nodiscard]] auto load_image_from_file(const std::filesystem::path& path, std::string filepath)
     -> CPUImage;
 
-[[nodiscard]] auto load_image_from_memory(std::span<const uint8_t> bytes, const char* image_name)
+[[nodiscard]] auto load_image_from_memory(std::span<const uint8_t> bytes, std::string image_name)
     -> CPUImage;
 
 } // namespace charlie
