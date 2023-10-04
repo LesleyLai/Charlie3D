@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <beyond/utils/zstring_view.hpp>
 #include <span>
 #include <string>
 
@@ -43,7 +44,7 @@ struct GraphicsPipelineCreateInfo {
   RequiredField<PipelineRenderingCreateInfo> pipeline_rendering_create_info;
 
   // Optional
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
   PipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
   std::span<const VkPipelineShaderStageCreateInfo> shader_stages;
   PolygonMode polygon_mode = PolygonMode::fill;

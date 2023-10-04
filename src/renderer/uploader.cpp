@@ -63,7 +63,7 @@ auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
   return vkh::create_buffer(context, {.size = size,
                                       .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                       .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
-                                      .debug_name = fmt::format("{} Buffer", debug_name).c_str()})
+                                      .debug_name = fmt::format("{} Buffer", debug_name)})
       .and_then([=, &context, &upload_context](vkh::AllocatedBuffer gpu_buffer) {
         auto vertex_staging_buffer =
             vkh::create_buffer_from_data(
@@ -71,7 +71,7 @@ auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
                 {.size = size,
                  .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                  .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                 .debug_name = fmt::format("{} Staging Buffer", debug_name).c_str()},
+                 .debug_name = fmt::format("{} Staging Buffer", debug_name)},
                 data.data())
                 .value();
         BEYOND_DEFER(vkh::destroy_buffer(context, vertex_staging_buffer));

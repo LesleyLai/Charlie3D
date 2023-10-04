@@ -16,13 +16,6 @@ namespace charlie {
                                         const char* image_name) -> CPUImage
 {
   ZoneScoped;
-  //
-  //  std::unique_ptr<FILE, decltype(&fclose)> f(fopen(file_path.string().c_str(), "rb"), &fclose);
-  //  unsigned char* result = nullptr;
-  //  if (!f) beyond::panic("can't fopen");
-  //
-  //  int bytes_read = fread(buffer, sizeof(char), BUFFERSIZE, filp);
-
   int width{}, height{}, components{};
   uint8_t* pixels =
       stbi_load(file_path.string().c_str(), &width, &height, &components, STBI_rgb_alpha);

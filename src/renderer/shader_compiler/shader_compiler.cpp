@@ -3,6 +3,7 @@
 #include <beyond/utils/assert.hpp>
 #include <beyond/utils/narrowing.hpp>
 #include <beyond/utils/utils.hpp>
+#include <beyond/utils/zstring_view.hpp>
 
 #include <spdlog/spdlog.h>
 
@@ -59,9 +60,7 @@ namespace {
   file.seekg(0);
   file.read(beyond::bit_cast<char*>(buffer.data()), beyond::narrow<std::streamsize>(file_size));
 
-  if (!file.good()) {
-    // Blah
-  }
+  if (!file.good()) { beyond::panic("Failed to read spirv binary"); }
 
   return buffer;
 }
@@ -79,7 +78,7 @@ namespace {
 }
 
 auto compile_shader_impl(charlie::ShaderCompilerImpl& shader_compiler_impl,
-                         const std::string& filename, const std::string& src,
+                         beyond::ZStringView filename, const std::string& src,
                          charlie::ShaderStage stage) -> beyond::optional<std::vector<uint32_t>>
 {
   const shaderc::Compiler& compiler = shader_compiler_impl.compiler;
@@ -130,7 +129,7 @@ auto ShaderCompiler::compile_shader(const char* filename, ShaderStage stage)
         beyond::panic(fmt::format("Failed to open {}", spirv_path.string()));
       }
       spirv_file.write(beyond::bit_cast<const char*>(data.value().data()),
-                       data.value().size() * sizeof(uint32_t));
+                       beyond::narrow<std::streamsize>(data.value().size() * sizeof(uint32_t)));
     } else if (has_old_version) {
       SPDLOG_INFO("Fallback to old version {}", spirv_path.string());
       return read_spirv_binary(spirv_path.string());

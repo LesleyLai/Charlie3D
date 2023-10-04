@@ -30,7 +30,7 @@ struct ImageCreateInfo {
   VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
   std::span<uint32_t> queue_fimily_indices = {};
   VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 struct AllocatedImage {

@@ -15,7 +15,7 @@ struct BufferCreateInfo {
   size_t size = 0;
   VkBufferUsageFlags usage = 0;
   VmaMemoryUsage memory_usage = VMA_MEMORY_USAGE_UNKNOWN;
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 struct [[nodiscard]] AllocatedBuffer {

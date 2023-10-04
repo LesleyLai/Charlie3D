@@ -126,8 +126,7 @@ namespace vkh {
   VKH_TRY(vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1, &pipeline_create_info,
                                     nullptr, &pipeline));
 
-  if (create_info.debug_name != nullptr &&
-      set_debug_name(context, pipeline, create_info.debug_name)) {
+  if (set_debug_name(context, pipeline, create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }
 

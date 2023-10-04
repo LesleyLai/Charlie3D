@@ -10,7 +10,7 @@ namespace vkh {
 class Context;
 
 struct ShaderModuleCreateInfo {
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 [[nodiscard]] auto load_shader_module(Context& context, std::span<const uint32_t> buffer,

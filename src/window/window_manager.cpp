@@ -28,14 +28,14 @@ WindowManager::~WindowManager()
 }
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-auto WindowManager::create(int width, int height, const char* title, const WindowOptions& options)
-    -> Window
+auto WindowManager::create(int width, int height, beyond::ZStringView title,
+                           const WindowOptions& options) -> Window
 {
   uint32_t window_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI;
   if (options.resizable) { window_flags |= SDL_WINDOW_RESIZABLE; }
 
-  auto* window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width,
-                                  height, window_flags);
+  auto* window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                  width, height, window_flags);
   if (window == nullptr) {
     beyond::panic(fmt::format("Failed to create SDL window: {}\n", SDL_GetError()));
   }

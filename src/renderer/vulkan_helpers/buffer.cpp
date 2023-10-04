@@ -21,7 +21,7 @@ auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_
   VKH_TRY(vmaCreateBuffer(context.allocator(), &vk_buffer_create_info, &vma_alloc_info,
                           &allocated_buffer.buffer, &allocated_buffer.allocation, nullptr));
 
-  if (buffer_create_info.debug_name != nullptr &&
+  if (not buffer_create_info.debug_name.empty() &&
       set_debug_name(context, allocated_buffer.buffer, buffer_create_info.debug_name)) {
     report_fail_to_set_debug_name(buffer_create_info.debug_name);
   }

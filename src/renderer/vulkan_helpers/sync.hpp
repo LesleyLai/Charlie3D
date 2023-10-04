@@ -13,11 +13,11 @@ class Context;
 
 struct FenceCreateInfo {
   VkFenceCreateFlags flags = {};
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 struct SemaphoreCreateInfo {
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 [[nodiscard]] auto create_fence(Context& context, const FenceCreateInfo& create_info)

@@ -43,7 +43,7 @@ struct ImageViewCreateInfo {
   RequiredField<VkFormat> format;
   VkComponentMapping components = {};
   RequiredField<SubresourceRange> subresource_range;
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_view_create_info)

@@ -22,8 +22,7 @@ auto create_descriptor_pool(Context& context, const DescriptorPoolCreateInfo& cr
   VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
   VKH_TRY(vkCreateDescriptorPool(context.device(), &pool_info, nullptr, &descriptor_pool));
 
-  if (create_info.debug_name != nullptr &&
-      set_debug_name(context, descriptor_pool, create_info.debug_name)) {
+  if (set_debug_name(context, descriptor_pool, create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }
 

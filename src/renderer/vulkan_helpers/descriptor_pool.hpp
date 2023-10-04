@@ -14,7 +14,7 @@ struct DescriptorPoolCreateInfo {
   VkDescriptorPoolCreateFlags flags = 0;
   std::uint32_t max_sets = 0;
   std::span<const VkDescriptorPoolSize> pool_sizes;
-  const char* debug_name = nullptr;
+  beyond::ZStringView debug_name;
 };
 
 auto create_descriptor_pool(Context& context, const DescriptorPoolCreateInfo& create_info)

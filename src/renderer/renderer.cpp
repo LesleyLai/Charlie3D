@@ -145,11 +145,10 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
 
   // allocate temporary buffer for holding texture data to upload
   auto staging_buffer =
-      vkh::create_buffer(context,
-                         vkh::BufferCreateInfo{.size = image_size,
-                                               .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                               .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
-                                               .debug_name = staging_buffer_debug_name.c_str()})
+      vkh::create_buffer(context, vkh::BufferCreateInfo{.size = image_size,
+                                                        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                                        .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
+                                                        .debug_name = staging_buffer_debug_name})
           .value();
   BEYOND_DEFER(vkh::destroy_buffer(context, staging_buffer));
 
@@ -172,7 +171,7 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
                             .format = VK_FORMAT_R8G8B8A8_SRGB,
                             .extent = image_extent,
                             .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                            .debug_name = image_debug_name.c_str(),
+                            .debug_name = image_debug_name,
                         })
           .expect("Failed to create image");
 
@@ -245,24 +244,21 @@ void Renderer::init_frame_data()
     VK_CHECK(
         vkCreateCommandPool(context_, &command_pool_create_info, nullptr, &frame.command_pool));
     frame.main_command_buffer =
-        vkh::allocate_command_buffer(
-            context_,
-            {
-                .command_pool = frame.command_pool,
-                .debug_name = fmt::format("Main Command Buffer {}", i).c_str(),
-            })
+        vkh::allocate_command_buffer(context_,
+                                     {
+                                         .command_pool = frame.command_pool,
+                                         .debug_name = fmt::format("Main Command Buffer {}", i),
+                                     })
             .value();
     frame.present_semaphore =
-        vkh::create_semaphore(context_,
-                              {.debug_name = fmt::format("Present Semaphore {}", i).c_str()})
+        vkh::create_semaphore(context_, {.debug_name = fmt::format("Present Semaphore {}", i)})
             .value();
     frame.render_semaphore =
-        vkh::create_semaphore(context_,
-                              {.debug_name = fmt::format("Render Semaphore {}", i).c_str()})
+        vkh::create_semaphore(context_, {.debug_name = fmt::format("Render Semaphore {}", i)})
             .value();
     frame.render_fence =
         vkh::create_fence(context_, {.flags = VK_FENCE_CREATE_SIGNALED_BIT,
-                                     .debug_name = fmt::format("Render Fence {}", i).c_str()})
+                                     .debug_name = fmt::format("Render Fence {}", i)})
             .value();
 
     frame.tracy_vk_ctx = TracyVkContext(context_.physical_device(), context_.device(),
@@ -366,25 +362,23 @@ void Renderer::init_descriptors()
 
   for (auto i = 0u; i < frame_overlap; ++i) {
     FrameData& frame = frames_[i];
-    frame.camera_buffer =
-        vkh::create_buffer(context_,
-                           vkh::BufferCreateInfo{
-                               .size = sizeof(GPUCameraData),
-                               .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                               .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                               .debug_name = fmt::format("Camera Buffer {}", i).c_str(),
-                           })
-            .value();
+    frame.camera_buffer = vkh::create_buffer(context_,
+                                             vkh::BufferCreateInfo{
+                                                 .size = sizeof(GPUCameraData),
+                                                 .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                                 .debug_name = fmt::format("Camera Buffer {}", i),
+                                             })
+                              .value();
 
-    frame.object_buffer =
-        vkh::create_buffer(context_,
-                           vkh::BufferCreateInfo{
-                               .size = sizeof(GPUObjectData) * max_object_count,
-                               .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                               .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                               .debug_name = fmt::format("Objects Buffer {}", i).c_str(),
-                           })
-            .value();
+    frame.object_buffer = vkh::create_buffer(context_,
+                                             vkh::BufferCreateInfo{
+                                                 .size = sizeof(GPUObjectData) * max_object_count,
+                                                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                                 .debug_name = fmt::format("Objects Buffer {}", i),
+                                             })
+                              .value();
 
     frame.indirect_buffer =
         vkh::create_buffer(context_,
@@ -394,7 +388,7 @@ void Renderer::init_descriptors()
                                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                                .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                               .debug_name = fmt::format("Indirect Buffer {}", i).c_str(),
+                               .debug_name = fmt::format("Indirect Buffer {}", i),
                            })
             .value();
 
@@ -444,7 +438,7 @@ void Renderer::init_descriptors()
 void Renderer::init_pipelines()
 {
   ZoneScoped;
-  
+
   shader_compiler_ = std::make_unique<ShaderCompiler>();
 
   const VkDescriptorSetLayout set_layouts[] = {

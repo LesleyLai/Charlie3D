@@ -83,7 +83,7 @@ int main(int argc, const char** argv)
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
 
-  const char* scene_file = "models/gltf_box/box.gltf";
+  std::string_view scene_file = "models/gltf_box/box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
 
   set_asset_path();
