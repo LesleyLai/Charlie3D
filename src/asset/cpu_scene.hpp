@@ -17,6 +17,7 @@ struct CPURenderObject {
 struct CPUMaterial {
   beyond::Vec4 base_color_factor;
   beyond::optional<uint32_t> albedo_texture_index;
+  beyond::optional<uint32_t> normal_texture_index;
 };
 
 struct CPUTexture {

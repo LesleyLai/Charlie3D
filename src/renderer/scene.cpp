@@ -61,21 +61,27 @@ namespace charlie {
 
   std::unordered_map<uint32_t, RenderComponent> render_components;
 
+  auto offset_texture_index = [texture_index_offset](uint32_t index) {
+    return index + texture_index_offset;
+  };
+
   for (uint32_t i = 0; i < cpu_scene.objects.size(); ++i) {
     const auto& object = cpu_scene.objects[i];
     if (object.mesh_index >= 0) {
       const auto mesh_handle = mesh_storage[beyond::narrow<uint32_t>(object.mesh_index)];
 
       const auto material_index = cpu_scene.meshes.at(object.mesh_index).material_index.value();
-      // TODO: handle model without albedo textures
-      const auto albedo_texture_index =
-          cpu_scene.materials[material_index]
-              .albedo_texture_index
-              .map([&](uint32_t index) { return index + texture_index_offset; })
-              .value_or(0);
+      auto material_info = cpu_scene.materials[material_index];
+      material_info.albedo_texture_index =
+          material_info.albedo_texture_index.map(offset_texture_index)
+              .value_or(renderer.default_albedo_texture_index);
+      // TODO: Handle materials without normal textures
+      material_info.normal_texture_index =
+          material_info.normal_texture_index.map(offset_texture_index).value();
 
-      render_components.insert(
-          {i, RenderComponent{.mesh = mesh_handle, .albedo_texture_index = albedo_texture_index}});
+      const MaterialHandle material = renderer.create_material(material_info);
+
+      render_components.insert({i, RenderComponent{.mesh = mesh_handle, .material = material}});
     }
   }
 

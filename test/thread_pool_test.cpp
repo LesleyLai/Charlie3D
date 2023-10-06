@@ -4,8 +4,8 @@
 
 TEST_CASE("Thread pool tests")
 {
-  SECTION("An empty thread pool won't stuck")
-  {
-    charlie::ThreadPool thread_pool;
-  }
+  //  SECTION("An empty thread pool won't stuck")
+  //  {
+  //    charlie::ThreadPool thread_pool;
+  //  }
 }

@@ -44,9 +44,13 @@ struct Texture {
   VkImageView image_view = VK_NULL_HANDLE;
 };
 
+struct Material {
+  VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+};
+
 struct RenderObject {
   MeshHandle mesh;
-  std::uint32_t albedo_texture_index = static_cast<uint32_t>(~0);
+  MaterialHandle material;
   beyond::Mat4 model_matrix;
 };
 
@@ -134,16 +138,21 @@ public:
 
   auto upload_image(const charlie::CPUImage& cpu_image) -> VkImage;
 
-  void add_texture(Texture texture);
+  // Returns texture index
+  auto add_texture(Texture texture) -> uint32_t;
   [[nodiscard]] auto texture_count() const -> uint32_t
   {
     return beyond::narrow<uint32_t>(textures_.size());
   }
 
+  [[nodiscard]] auto create_material(const CPUMaterial& material) -> MaterialHandle;
+
   [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
   {
     return scene_parameters_;
   }
+
+  uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
 
 private:
   Window* window_ = nullptr;
@@ -167,7 +176,7 @@ private:
   std::unique_ptr<vkh::DescriptorLayoutCache> descriptor_layout_cache_;
   VkDescriptorSetLayout global_descriptor_set_layout_ = {};
   VkDescriptorSetLayout object_descriptor_set_layout_ = {};
-  VkDescriptorSetLayout single_texture_set_layout_ = {};
+  VkDescriptorSetLayout material_set_layout_ = {};
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
 
@@ -175,11 +184,11 @@ private:
   VkPipeline mesh_pipeline_ = {};
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
+  beyond::SlotMap<MaterialHandle, Material> materials_;
 
   std::vector<vkh::AllocatedImage> images_;
   VkSampler sampler_ = VK_NULL_HANDLE;
   std::vector<Texture> textures_;
-  std::vector<VkDescriptorSet> texture_descriptor_set_;
 
   std::vector<RenderObject> render_objects_;
 
@@ -194,6 +203,7 @@ private:
   void init_descriptors();
   void init_pipelines();
   void init_sampler();
+  void init_default_texture();
 
   void resize();
 

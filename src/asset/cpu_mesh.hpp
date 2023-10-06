@@ -18,6 +18,7 @@ struct CPUMesh {
   std::vector<beyond::Vec3> positions;
   std::vector<beyond::Vec3> normals;
   std::vector<beyond::Vec2> uv;
+  std::vector<beyond::Vec4> tangents;
 
   std::vector<std::uint32_t> indices;
 };

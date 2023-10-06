@@ -136,7 +136,6 @@ void ThreadPool::process_(std::coroutine_handle<> task)
 
 void ThreadPool::wait()
 {
-
   for (auto& worker : workers_) { worker.join(); }
 }
 

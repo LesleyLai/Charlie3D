@@ -24,6 +24,9 @@ struct ElementTraits<beyond::Vec2> : ElementTraitsBase<beyond::Vec2, AccessorTyp
 template <>
 struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorType::Vec3, float> {};
 
+template <>
+struct ElementTraits<beyond::Vec4> : ElementTraitsBase<beyond::Vec4, AccessorType::Vec4, float> {};
+
 } // namespace fastgltf
 
 namespace {
@@ -164,12 +167,19 @@ namespace charlie {
           beyond::narrow<uint32_t>(material.pbrData->baseColorTexture->textureIndex);
     }
 
-    result.materials.push_back(
-        CPUMaterial{.base_color_factor = {material.pbrData->baseColorFactor[0],
-                                          material.pbrData->baseColorFactor[1],
-                                          material.pbrData->baseColorFactor[2],
-                                          material.pbrData->baseColorFactor[3]},
-                    .albedo_texture_index = albedo_texture_index});
+    beyond::optional<uint32_t> normal_texture_index;
+    if (material.normalTexture.has_value()) {
+      normal_texture_index = beyond::narrow<uint32_t>(material.normalTexture->textureIndex);
+    }
+
+    result.materials.push_back(CPUMaterial{
+        .base_color_factor = {material.pbrData->baseColorFactor[0],
+                              material.pbrData->baseColorFactor[1],
+                              material.pbrData->baseColorFactor[2],
+                              material.pbrData->baseColorFactor[3]},
+        .albedo_texture_index = albedo_texture_index,
+        .normal_texture_index = normal_texture_index,
+    });
   }
 
   for (const auto& mesh : parsed_asset->meshes) {
@@ -181,6 +191,7 @@ namespace charlie {
 
     size_t position_accessor_id = 0;
     size_t normal_accessor_id = 0;
+    beyond::optional<size_t> tangent_accessor_id;
     beyond::optional<size_t> texture_coord_accessor_id;
     size_t index_accessor_id = 0;
     if (const auto itr = primitive.attributes.find("POSITION"); itr != primitive.attributes.end()) {
@@ -192,6 +203,11 @@ namespace charlie {
       normal_accessor_id = itr->second;
     } else {
       beyond::panic("Mesh misses NORMAL attribute!");
+    }
+    if (const auto itr = primitive.attributes.find("TANGENT"); itr != primitive.attributes.end()) {
+      tangent_accessor_id = itr->second;
+    } else {
+      beyond::panic("Mesh misses TANGENT attribute!");
     }
 
     if (const auto itr = primitive.attributes.find("TEXCOORD_0");
@@ -231,6 +247,18 @@ namespace charlie {
         })
         .or_else([&] { tex_coords.resize(positions.size()); });
 
+    std::vector<beyond::Vec4> tangents;
+    tangent_accessor_id
+        .map([&](size_t id) {
+          const auto& tangent_accessor = parsed_asset->accessors.at(id);
+          BEYOND_ENSURE(tangent_accessor.type == AccessorType::Vec4);
+
+          tangents.resize(tangent_accessor.count);
+          fastgltf::copyFromAccessor<beyond::Vec4>(*parsed_asset, tangent_accessor,
+                                                   tangents.data());
+        })
+        .or_else([&] { tangents.resize(positions.size()); });
+
     std::vector<std::uint32_t> indices;
     indices.resize(index_accessor.count);
     fastgltf::copyFromAccessor<std::uint32_t>(*parsed_asset, index_accessor, indices.data());
@@ -246,6 +274,7 @@ namespace charlie {
                                     .positions = std::move(positions),
                                     .normals = std::move(normals),
                                     .uv = std::move(tex_coords),
+                                    .tangents = std::move(tangents),
                                     .indices = std::move(indices)});
   }
 

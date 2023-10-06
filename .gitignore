@@ -6,4 +6,4 @@ CMakeUserPresets.json
 # Copied by conan
 third-party/imgui/bindings
 
-.spv
+**/*.spv

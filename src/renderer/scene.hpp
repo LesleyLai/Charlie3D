@@ -23,9 +23,13 @@ struct MeshHandle : beyond::GenerationalHandle<MeshHandle, uint32_t, 16> {
   using GenerationalHandle::GenerationalHandle;
 };
 
+struct MaterialHandle : beyond::GenerationalHandle<MaterialHandle, uint32_t, 16> {
+  using GenerationalHandle::GenerationalHandle;
+};
+
 struct RenderComponent {
   MeshHandle mesh;
-  uint32_t albedo_texture_index = 0;
+  MaterialHandle material;
 };
 
 struct Scene {

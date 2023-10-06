@@ -56,7 +56,7 @@ void immediate_submit(vkh::Context& context, UploadContext& upload_context,
 
 auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
                    std::span<const std::byte> data, VkBufferUsageFlags usage,
-                   const char* debug_name) -> vkh::Expected<vkh::AllocatedBuffer>
+                   beyond::ZStringView debug_name) -> vkh::Expected<vkh::AllocatedBuffer>
 {
   const auto size = beyond::narrow<uint32_t>(data.size());
 

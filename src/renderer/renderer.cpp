@@ -76,7 +76,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 
 struct IndirectBatch {
   charlie::MeshHandle mesh;
-  std::uint32_t albedo_texture_index = static_cast<uint32_t>(~0);
+  charlie::MaterialHandle material;
   std::uint32_t first = 0;
   std::uint32_t count = 0;
 };
@@ -98,7 +98,7 @@ struct IndirectBatch {
     } else {
       draws.push_back(IndirectBatch{
           .mesh = object.mesh,
-          .albedo_texture_index = object.albedo_texture_index,
+          .material = object.material,
           .first = i,
           .count = 1,
       });
@@ -127,6 +127,7 @@ Renderer::Renderer(Window& window)
       std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
 
   init_sampler();
+  init_default_texture();
 }
 
 auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
@@ -335,19 +336,25 @@ void Renderer::init_descriptors()
   object_descriptor_set_layout_ =
       descriptor_layout_cache_->create_descriptor_layout(object_layout_create_info);
 
-  static constexpr VkDescriptorSetLayoutBinding single_texture_binding = {
-      .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
+  static constexpr VkDescriptorSetLayoutBinding textures_binding[] = {
+      // albedo
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      // normal
+      {.binding = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
 
-  static constexpr VkDescriptorSetLayoutCreateInfo single_texture_layout_create_info = {
+  static constexpr VkDescriptorSetLayoutCreateInfo textures_layout_create_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 1,
-      .pBindings = &single_texture_binding};
+      .bindingCount = beyond::size(textures_binding),
+      .pBindings = textures_binding};
 
-  single_texture_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_layout(single_texture_layout_create_info);
+  material_set_layout_ =
+      descriptor_layout_cache_->create_descriptor_layout(textures_layout_create_info);
 
   const size_t scene_param_buffer_size =
       frame_overlap * context_.align_uniform_buffer_size(sizeof(GPUSceneParameters));
@@ -441,8 +448,8 @@ void Renderer::init_pipelines()
 
   shader_compiler_ = std::make_unique<ShaderCompiler>();
 
-  const VkDescriptorSetLayout set_layouts[] = {
-      global_descriptor_set_layout_, object_descriptor_set_layout_, single_texture_set_layout_};
+  const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
+                                               object_descriptor_set_layout_, material_set_layout_};
 
   const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -493,12 +500,18 @@ void Renderer::init_pipelines()
           .binding = 2,
           .stride = sizeof(beyond::Vec2),
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      },
+      {
+          .binding = 3,
+          .stride = sizeof(beyond::Vec4),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       }};
 
   static constexpr VkVertexInputAttributeDescription attribute_descriptions[] = {
       {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
       {.location = 1, .binding = 1, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
-      {.location = 2, .binding = 2, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0}};
+      {.location = 2, .binding = 2, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0},
+      {.location = 3, .binding = 3, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = 0}};
 
   const VkFormat color_attachment_formats[] = {swapchain_.image_format()};
   mesh_pipeline_ =
@@ -528,7 +541,10 @@ void Renderer::init_sampler()
                                             .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                                             .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT};
   vkCreateSampler(context_, &sampler_info, nullptr, &sampler_);
+}
 
+void Renderer::init_default_texture()
+{
   CPUImage cpu_image{
       .name = "Default Albedo Texture Image",
       .width = 1,
@@ -549,7 +565,8 @@ void Renderer::init_sampler()
            .debug_name = "Default Albedo Texture Image View"})
           .value();
 
-  add_texture(Texture{.image = default_albedo_image, .image_view = default_albedo_image_view});
+  default_albedo_texture_index =
+      add_texture(Texture{.image = default_albedo_image, .image_view = default_albedo_image_view});
 }
 
 void Renderer::render(const charlie::Camera& camera)
@@ -721,26 +738,31 @@ void Renderer::present(uint32_t& swapchain_image_index)
 
   const vkh::AllocatedBuffer position_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.positions, buffer_usage,
-                    fmt::format("{} Position", cpu_mesh.name).c_str())
+                    fmt::format("{} Position", cpu_mesh.name))
           .value();
   const vkh::AllocatedBuffer normal_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.normals, buffer_usage,
-                    fmt::format("{} Normal", cpu_mesh.name).c_str())
+                    fmt::format("{} Normal", cpu_mesh.name))
           .value();
   const vkh::AllocatedBuffer uv_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.uv, buffer_usage,
-                    fmt::format("{} Texcoord", cpu_mesh.name).c_str())
+                    fmt::format("{} Texcoord", cpu_mesh.name))
+          .value();
+  const vkh::AllocatedBuffer tangent_buffer =
+      upload_buffer(context_, upload_context_, cpu_mesh.tangents, buffer_usage,
+                    fmt::format("{} Tangent", cpu_mesh.name))
           .value();
 
   const vkh::AllocatedBuffer index_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                    fmt::format("{} Index", cpu_mesh.name).c_str())
+                    fmt::format("{} Index", cpu_mesh.name))
           .value();
 
   return meshes_.insert(
       Mesh{.position_buffer = position_buffer,
            .normal_buffer = normal_buffer,
            .uv_buffer = uv_buffer,
+           .tangent_buffer = tangent_buffer,
            .index_buffer = index_buffer,
            .vertices_count = beyond::narrow<std::uint32_t>(cpu_mesh.positions.size()),
            .index_count = beyond::narrow<std::uint32_t>(cpu_mesh.indices.size())});
@@ -782,7 +804,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   for (const auto [node_index, render_component] : scene_->render_components) {
     render_objects_.push_back(RenderObject{
         .mesh = render_component.mesh,
-        .albedo_texture_index = render_component.albedo_texture_index,
+        .material = render_component.material,
         .model_matrix = scene_->global_transforms[node_index],
     });
   }
@@ -832,14 +854,17 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
   for (const IndirectBatch& draw : draws) {
+    const auto& material = materials_.try_get(draw.material);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
-                            &texture_descriptor_set_.at(draw.albedo_texture_index), 0, nullptr);
+                            &material.value().descriptor_set, 0, nullptr);
 
     const auto& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
     constexpr VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
     vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);
     vkCmdBindVertexBuffers(cmd, 2, 1, &mesh.uv_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 3, 1, &mesh.tangent_buffer.buffer, &offset);
+
     vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndexedIndirectCommand);
@@ -919,33 +944,54 @@ void Renderer::resize()
   init_depth_image();
 }
 
-void Renderer::add_texture(Texture texture)
+auto Renderer::add_texture(Texture texture) -> uint32_t
 {
   textures_.push_back(texture);
+  return beyond::narrow<uint32_t>(textures_.size() - 1);
+}
+
+auto Renderer::create_material(const CPUMaterial& material_info) -> MaterialHandle
+{
+  const auto albedo_texture = textures_.at(material_info.albedo_texture_index.value());
+  const auto normal_texture = textures_.at(material_info.normal_texture_index.value());
 
   // alloc descriptor set for material
-  {
-    VkDescriptorSet texture_set =
-        descriptor_allocator_->allocate(single_texture_set_layout_).value();
+  VkDescriptorSet material_descriptor_set =
+      descriptor_allocator_->allocate(material_set_layout_).value();
 
-    // write to the descriptor set so that it points to diffuse texture
-    const VkDescriptorImageInfo image_buffer_info = {
-        .sampler = sampler_,
-        .imageView = texture.image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    const VkWriteDescriptorSet texture1 = VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = texture_set,
-        .dstBinding = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &image_buffer_info,
-    };
-    vkUpdateDescriptorSets(context_, 1, &texture1, 0, nullptr);
+  // write to the descriptor set so that it points to diffuse texture
+  const VkDescriptorImageInfo albedo_image_buffer_info = {
+      .sampler = sampler_,
+      .imageView = albedo_texture.image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
 
-    texture_descriptor_set_.push_back(texture_set);
-  }
+  const VkDescriptorImageInfo normal_image_buffer_info = {
+      .sampler = sampler_,
+      .imageView = normal_texture.image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+  const VkWriteDescriptorSet albedo_texture_write = VkWriteDescriptorSet{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = material_descriptor_set,
+      .dstBinding = 0,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .pImageInfo = &albedo_image_buffer_info,
+  };
+  const VkWriteDescriptorSet normal_texture_write = VkWriteDescriptorSet{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = material_descriptor_set,
+      .dstBinding = 1,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .pImageInfo = &normal_image_buffer_info,
+  };
+  const VkWriteDescriptorSet texture_write_sets[] = {albedo_texture_write, normal_texture_write};
+  vkUpdateDescriptorSets(context_, beyond::size(texture_write_sets), texture_write_sets, 0,
+                         nullptr);
+
+  return materials_.insert(Material{.descriptor_set = material_descriptor_set});
 }
 
 } // namespace charlie
