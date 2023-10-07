@@ -8,7 +8,6 @@
 #include <spdlog/spdlog.h>
 
 #include <SDL_vulkan.h>
-#include <beyond/utils/bit_cast.hpp>
 
 namespace {
 
@@ -70,6 +69,7 @@ Context::Context(charlie::Window& window)
               .fillModeNonSolid = true,
           })
           .set_required_features_11({.shaderDrawParameters = true})
+          .set_required_features_12({.descriptorIndexing = true})
           .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
           .select();
   if (!phys_device_ret) { beyond::panic(phys_device_ret.error().message()); }
@@ -100,7 +100,7 @@ Context::Context(charlie::Window& window)
   present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
 
   functions_ = {
-      .setDebugUtilsObjectNameEXT = beyond::bit_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+      .setDebugUtilsObjectNameEXT = std::bit_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
           vkGetDeviceProcAddr(device_, "vkSetDebugUtilsObjectNameEXT")),
   };
 

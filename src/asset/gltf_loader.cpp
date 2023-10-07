@@ -25,6 +25,10 @@ template <>
 struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorType::Vec3, float> {};
 
 template <>
+struct ElementTraits<beyond::Point3>
+    : ElementTraitsBase<beyond::Point3, AccessorType::Vec3, float> {};
+
+template <>
 struct ElementTraits<beyond::Vec4> : ElementTraitsBase<beyond::Vec4, AccessorType::Vec4, float> {};
 
 } // namespace fastgltf
@@ -106,6 +110,20 @@ namespace charlie {
   }
 }
 
+//[[nodiscard]] auto calculate_bounding_box(std::span<const beyond::Point3> positions)
+//    -> beyond::AABB3
+//{
+//
+//  beyond::Point3 min{1e20f, 1e20f, 1e20f};
+//  beyond::Point3 max{-1e20f, -1e20f, -1e20f};
+//  for (const auto& position : positions) {
+//    min = beyond::min(min, position);
+//    max = beyond::max(max, position);
+//  }
+//
+//  return beyond::AABB3{min, max};
+//}
+
 [[nodiscard]] auto load_gltf(const std::filesystem::path& file_path) -> CPUScene
 {
   ZoneScoped;
@@ -184,7 +202,7 @@ namespace charlie {
 
   for (const auto& mesh : parsed_asset->meshes) {
     // TODO: handle more primitives
-    BEYOND_ENSURE(mesh.primitives.size() >= 1);
+    BEYOND_ENSURE(mesh.primitives.size() == 1);
 
     const auto& primitive = mesh.primitives.at(0);
     BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
@@ -226,9 +244,9 @@ namespace charlie {
     BEYOND_ENSURE(normal_accessor.type == AccessorType::Vec3);
     BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
 
-    std::vector<beyond::Vec3> positions;
+    std::vector<beyond::Point3> positions;
     positions.resize(position_accessor.count);
-    fastgltf::copyFromAccessor<beyond::Vec3>(*parsed_asset, position_accessor, positions.data());
+    fastgltf::copyFromAccessor<beyond::Point3>(*parsed_asset, position_accessor, positions.data());
 
     std::vector<beyond::Vec3> normals;
     normals.resize(normal_accessor.count);

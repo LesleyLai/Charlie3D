@@ -4,8 +4,6 @@
 #include "debug_utils.hpp"
 #include "error_handling.hpp"
 
-#include <beyond/utils/bit_cast.hpp>
-
 #include <fmt/format.h>
 
 namespace vkh {

@@ -2,8 +2,6 @@
 
 #include "debug_utils.hpp"
 
-#include <beyond/utils/bit_cast.hpp>
-
 namespace vkh {
 
 [[nodiscard]] auto allocate_command_buffer(Context& context, CommandBufferAllocInfo alloc_info)

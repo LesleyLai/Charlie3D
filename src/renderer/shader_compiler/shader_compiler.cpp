@@ -13,7 +13,6 @@
 #include <source_location>
 
 #include "../../utils/configuration.hpp"
-#include "beyond/utils/bit_cast.hpp"
 
 namespace charlie {
 
@@ -58,7 +57,7 @@ namespace {
   buffer.resize(file_size / 4);
 
   file.seekg(0);
-  file.read(beyond::bit_cast<char*>(buffer.data()), beyond::narrow<std::streamsize>(file_size));
+  file.read(std::bit_cast<char*>(buffer.data()), beyond::narrow<std::streamsize>(file_size));
 
   if (!file.good()) { beyond::panic("Failed to read spirv binary"); }
 
@@ -128,7 +127,7 @@ auto ShaderCompiler::compile_shader(const char* filename, ShaderStage stage)
       if (!spirv_file.is_open()) {
         beyond::panic(fmt::format("Failed to open {}", spirv_path.string()));
       }
-      spirv_file.write(beyond::bit_cast<const char*>(data.value().data()),
+      spirv_file.write(std::bit_cast<const char*>(data.value().data()),
                        beyond::narrow<std::streamsize>(data.value().size() * sizeof(uint32_t)));
     } else if (has_old_version) {
       SPDLOG_INFO("Fallback to old version {}", spirv_path.string());

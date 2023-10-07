@@ -1,6 +1,5 @@
 #include "image.hpp"
 
-#include "beyond/utils/bit_cast.hpp"
 #include "beyond/utils/utils.hpp"
 #include "context.hpp"
 #include "debug_utils.hpp"

@@ -78,7 +78,7 @@ auto index_mesh(charlie::CPUMesh& mesh)
     }
     // const auto& material = materials[first_material_id];
 
-    std::vector<beyond::Vec3> positions;
+    std::vector<beyond::Point3> positions;
     std::vector<beyond::Vec3> normals;
     std::vector<beyond::Vec2> uv;
 

@@ -2,8 +2,6 @@
 #include "context.hpp"
 #include "debug_utils.hpp"
 
-#include <beyond/utils/bit_cast.hpp>
-
 namespace vkh {
 
 auto create_descriptor_pool(Context& context, const DescriptorPoolCreateInfo& create_info)
