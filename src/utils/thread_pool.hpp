@@ -7,6 +7,10 @@
 #include <thread>
 #include <vector>
 
+#include <windows.h>
+
+#include <fmt/format.h>
+
 namespace charlie {
 
 /**
@@ -44,15 +48,7 @@ class TaskQueue {
   std::condition_variable cv_;
 
 public:
-  auto pop() -> std::coroutine_handle<>
-  {
-    std::unique_lock lock{mutex_};
-    while (tasks_.empty() && !done_) cv_.wait(lock);
-    if (tasks_.empty()) return nullptr;
-    auto result = tasks_.front();
-    tasks_.pop();
-    return result;
-  }
+  auto pop() -> std::coroutine_handle<>;
 
   auto push(std::coroutine_handle<> coroutine_handle)
   {
@@ -73,7 +69,8 @@ public:
 
 class ThreadPool {
 public:
-  explicit ThreadPool(size_t thread_count = std::jthread::hardware_concurrency());
+  explicit ThreadPool(std::string_view name,
+                      size_t thread_count = std::jthread::hardware_concurrency());
 
   void enqueue(Task<void> task);
   void wait();
@@ -94,50 +91,6 @@ private:
 
   void process_(std::coroutine_handle<> task);
 };
-
-ThreadPool::ThreadPool(size_t thread_count)
-{
-  workers_.reserve(thread_count);
-
-  for (size_t t = 0; t < thread_count; ++t) {
-    workers_.emplace_back([this]() {
-      while (true) {
-        std::coroutine_handle<> task = queue_.pop();
-        if (stop_) { return; }
-        if (task) { process_(task); }
-      }
-    });
-  }
-}
-
-void ThreadPool::enqueue(Task<void> task)
-{
-  ++total_tasks_;
-  queue_.push(task.get_coroutine_handle());
-}
-
-void ThreadPool::process_(std::coroutine_handle<> task)
-{
-  if (not task.done()) {
-    task.resume();
-    queue_.push(task);
-  } else {
-    task.destroy();
-    ++finished_;
-
-    if (finished_.load() >= total_tasks_) {
-      {
-        queue_.done();
-        stop_ = true;
-      }
-    }
-  }
-}
-
-void ThreadPool::wait()
-{
-  for (auto& worker : workers_) { worker.join(); }
-}
 
 } // namespace charlie
 

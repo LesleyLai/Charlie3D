@@ -47,8 +47,6 @@ auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
 [[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
                                        const fastgltf::Image& image) -> charlie::CPUImage
 {
-  // ZoneScoped;
-
   return std::visit(
       [&](const auto& data) -> charlie::CPUImage {
         using DataType = std::remove_cvref_t<decltype(data)>;
@@ -128,7 +126,7 @@ namespace charlie {
 {
   ZoneScoped;
 
-  ThreadPool io_thread_pool;
+  ThreadPool io_thread_pool{"IO Thread Pool"};
 
   // Creates a Parser instance. Optimally, you should reuse this across loads, but don't use it
   // across threads. To enable extensions, you have to pass them into the parser's constructor.

@@ -20,10 +20,6 @@
 
 #include <chrono>
 
-#ifdef _WIN32
-#include <ShellScalingAPI.h>
-#endif
-
 void set_asset_path()
 {
   const auto current_path = std::filesystem::current_path();
@@ -85,21 +81,20 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
 
 int main(int argc, const char** argv)
 {
-#ifdef _WIN32
-  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-#endif
-
   std::string_view scene_file = "models/gltf_box/box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
 
   set_asset_path();
 
-  auto& window_manager = charlie::WindowManager::instance();
-
-  auto window = window_manager.create(1440, 900, "Charlie3D", {.resizable = true});
+  auto window =
+      charlie::WindowManager::instance().create(1440, 900, "Charlie3D", {.resizable = true});
 
   auto input_handler = charlie::InputHandler{};
-  auto renderer = charlie::Renderer{window};
+
+  auto renderer = [&]() {
+    ZoneScopedN("Renderer Constructor");
+    return charlie::Renderer{window};
+  }();
   input_handler.register_listener(renderer);
 
   charlie::ArcballCameraController arcball_controller{window, beyond::Point3{0, 0, -2},
@@ -113,12 +108,13 @@ int main(int argc, const char** argv)
 
   renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
 
+  using Clock = std::chrono::steady_clock;
   using namespace std::literals::chrono_literals;
-  auto previous_time = std::chrono::steady_clock::now();
-  std::chrono::steady_clock::duration lag = 0ns;
-  static constexpr auto MS_PER_UPDATE = 10ms;
+  auto previous_time = Clock::now();
+  Clock::duration lag = 0ns;
+  static constexpr auto MS_PER_FIXED_UPDATE = 10ms;
   while (true) {
-    const auto current_time = std::chrono::steady_clock::now();
+    const auto current_time = Clock::now();
     const auto delta_time = current_time - previous_time;
     previous_time = current_time;
     lag += delta_time;
@@ -127,9 +123,9 @@ int main(int argc, const char** argv)
 
     draw_gui(window.resolution(), renderer, camera, delta_time);
 
-    while (lag >= MS_PER_UPDATE) {
+    while (lag >= MS_PER_FIXED_UPDATE) {
       camera.fixed_update();
-      lag -= MS_PER_UPDATE;
+      lag -= MS_PER_FIXED_UPDATE;
     }
 
     renderer.render(camera);

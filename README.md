@@ -1,6 +1,6 @@
 # Charlie3D
 
-Personal rendering framework/engine in Vulkan. It is built on top of
+Charlie 3D is my personal R&D rendering framework in Vulkan. It is built on top of
 my [beyond-core](https://github.com/Beyond-Engine/Core) library.
 
 ## Goals and no-goals

@@ -10,6 +10,7 @@ add_library(charlie3d::window ALIAS charlie3d_window)
 target_link_libraries(charlie3d_window
         PUBLIC
         charlie3d::compiler_options
+        charlie3d::utils
         fmt::fmt
         SDL2::SDL2-static
         beyond::core

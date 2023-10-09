@@ -9,6 +9,8 @@
 
 #include <SDL_vulkan.h>
 
+#include <tracy/Tracy.hpp>
+
 namespace {
 
 [[nodiscard]] auto debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
@@ -42,36 +44,47 @@ namespace vkh {
 
 Context::Context(charlie::Window& window)
 {
-  auto instance_ret =
-      vkb::InstanceBuilder{}
-          .require_api_version(1, 3, 0)
-          .set_debug_callback(debug_callback)
-          .request_validation_layers()
-          .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
-          .enable_extension("VK_EXT_debug_utils")
-          .build();
+  ZoneScoped;
+
+  auto instance_ret = []() {
+    ZoneScopedN("vkCreateInstance");
+    return vkb::InstanceBuilder{}
+        .require_api_version(1, 3, 0)
+        .set_debug_callback(debug_callback)
+        .request_validation_layers()
+        .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
+        .enable_extension("VK_EXT_debug_utils")
+        .build();
+  }();
+
   if (!instance_ret) { beyond::panic(instance_ret.error().message()); }
   instance_ = instance_ret->instance;
   debug_messenger_ = instance_ret->debug_messenger;
 
-  if (SDL_FALSE == SDL_Vulkan_CreateSurface(window.raw_window(), instance_, &surface_)) {
-    beyond::panic(SDL_GetError());
+  {
+    ZoneScopedN("SDL_Vulkan_CreateSurface");
+    if (SDL_FALSE == SDL_Vulkan_CreateSurface(window.raw_window(), instance_, &surface_)) {
+      beyond::panic(SDL_GetError());
+    }
   }
 
   vkb::PhysicalDeviceSelector phys_device_selector(instance_ret.value());
 
-  auto phys_device_ret =
-      phys_device_selector.set_surface(surface_)
-          .allow_any_gpu_device_type(false)
-          .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-          .add_required_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
-          .set_required_features({
-              .fillModeNonSolid = true,
-          })
-          .set_required_features_11({.shaderDrawParameters = true})
-          .set_required_features_12({.descriptorIndexing = true})
-          .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
-          .select();
+  auto phys_device_ret = [&]() {
+    ZoneScopedN("Select physical device");
+    return phys_device_selector.set_surface(surface_)
+        .allow_any_gpu_device_type(false)
+        .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
+        .add_required_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
+        .set_required_features({
+            .fillModeNonSolid = true,
+        })
+        .set_required_features_11({.shaderDrawParameters = true})
+        .set_required_features_12({.descriptorIndexing = true})
+        .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
+        .select();
+  }();
+
   if (!phys_device_ret) { beyond::panic(phys_device_ret.error().message()); }
 
   vkb::PhysicalDevice vkb_physical_device = phys_device_ret.value();
@@ -83,7 +96,10 @@ Context::Context(charlie::Window& window)
               gpu_properties_.limits.minUniformBufferOffsetAlignment);
 
   const vkb::DeviceBuilder device_builder{vkb_physical_device};
-  const auto device_ret = device_builder.build();
+  const auto device_ret = [&]() {
+    ZoneScopedN("vkCreateDevice");
+    return device_builder.build();
+  }();
   if (!device_ret) { beyond::panic(device_ret.error().message()); }
   auto vkb_device = device_ret.value();
   device_ = vkb_device.device;
@@ -109,7 +125,11 @@ Context::Context(charlie::Window& window)
       .device = device_,
       .instance = instance_,
   };
-  VK_CHECK(vmaCreateAllocator(&allocator_create_info, &allocator_));
+
+  {
+    ZoneScopedN("vmaCreateAllocator");
+    VK_CHECK(vmaCreateAllocator(&allocator_create_info, &allocator_));
+  }
 } // namespace vkh
 
 Context::~Context()

@@ -6,10 +6,14 @@
 
 #include <beyond/utils/defer.hpp>
 
+#include <tracy/Tracy.hpp>
+
 namespace charlie {
 
 auto init_upload_context(vkh::Context& context) -> vkh::Expected<UploadContext>
 {
+  ZoneScoped;
+
   return vkh::create_fence(context, vkh::FenceCreateInfo{.debug_name = "Upload Fence"})
       .and_then([&](VkFence fence) -> vkh::Expected<UploadContext> {
         UploadContext upload_context;
@@ -30,6 +34,8 @@ auto init_upload_context(vkh::Context& context) -> vkh::Expected<UploadContext>
 void immediate_submit(vkh::Context& context, UploadContext& upload_context,
                       beyond::function_ref<void(VkCommandBuffer)> function)
 {
+  ZoneScoped;
+
   VkCommandBuffer cmd =
       vkh::allocate_command_buffer(context, {.command_pool = upload_context.command_pool,
                                              .debug_name = "Uploading Command Buffer"})
