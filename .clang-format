@@ -3,7 +3,7 @@ BasedOnStyle: LLVM
 AllowShortBlocksOnASingleLine: Always
 AllowShortIfStatementsOnASingleLine: Always
 AllowShortLoopsOnASingleLine: true
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Inline
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterClass: false

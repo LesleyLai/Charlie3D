@@ -57,26 +57,18 @@ auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
           file_path = std::filesystem::canonical(file_path);
 
           const auto name = image.name.empty() ? file_path.string() : image.name;
-          return charlie::load_image_from_file(file_path, name.c_str());
+          return charlie::load_image_from_file(file_path, name);
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
           // TODO: Handle other Mime types
           BEYOND_ENSURE(data.mimeType == fastgltf::MimeType::JPEG ||
                         data.mimeType == fastgltf::MimeType::PNG ||
                         data.mimeType == fastgltf::MimeType::GltfBuffer);
-          return charlie::load_image_from_memory(data.bytes, image.name.c_str());
+          return charlie::load_image_from_memory(data.bytes, image.name);
         } else {
           beyond::panic("Unsupported image data format!");
         }
       },
       image.data);
-}
-
-auto load_raw_image_data_async(charlie::ThreadPool& scheduler, std::filesystem::path gltf_directory,
-                               const fastgltf::Image& image, charlie::CPUImage& output)
-    -> charlie::Task<void>
-{
-  co_await scheduler.schedule();
-  output = load_raw_image_data(gltf_directory, image);
 }
 
 } // anonymous namespace
@@ -164,9 +156,15 @@ namespace charlie {
   }
 
   result.images.resize(parsed_asset->images.size());
+
+  std::vector<Task<>> tasks;
   for (std::size_t i = 0; i < parsed_asset->images.size(); ++i) {
-    io_thread_pool.enqueue(load_raw_image_data_async(io_thread_pool, file_path.parent_path(),
-                                                     parsed_asset->images[i], result.images[i]));
+    tasks.emplace_back([](charlie::ThreadPool& scheduler, std::filesystem::path gltf_directory,
+                          const fastgltf::Image& image, charlie::CPUImage& output) -> Task<> {
+      co_await scheduler.schedule();
+      output = load_raw_image_data(gltf_directory, image);
+    }(io_thread_pool, file_path.parent_path(), parsed_asset->images[i], result.images[i]));
+    io_thread_pool.enqueue(tasks.back());
   }
 
   result.textures.reserve(parsed_asset->textures.size());

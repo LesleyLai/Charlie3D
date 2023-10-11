@@ -7,43 +7,16 @@
 #include <thread>
 #include <vector>
 
-#include <windows.h>
+#include "task.hpp"
 
 #include <fmt/format.h>
 
 namespace charlie {
 
-/**
- * An asynchronous computation that is executed lazily
- */
-template <typename T> struct Task {};
-
-template <> struct Task<void> {
-  // clang-format off
-  struct promise_type {
-    auto initial_suspend() noexcept -> std::suspend_always { return {}; }
-    auto final_suspend() noexcept -> std::suspend_always { return {}; }
-    auto get_return_object() -> Task {
-      return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
-    }
-    void return_void() {}
-    [[noreturn]] void unhandled_exception() { throw; }
-  };
-  using Handle = std::coroutine_handle<promise_type>;
-
-  auto get_coroutine_handle() -> Handle { return handle_;}
-  // clang-format on
-
-private:
-  std::coroutine_handle<promise_type> handle_;
-
-  explicit Task(std::coroutine_handle<promise_type> handle) : handle_{handle} {}
-};
-
 // A queue that maintain tasks in FIFO order
 class TaskQueue {
   std::queue<std::coroutine_handle<>> tasks_;
-  bool done_ = false;
+  bool is_done_ = false;
   std::mutex mutex_;
   std::condition_variable cv_;
 
@@ -57,39 +30,39 @@ public:
     cv_.notify_one();
   }
 
+  [[nodiscard]] auto is_done() const -> bool { return is_done_; }
+
   void done()
   {
     {
       std::unique_lock lock{mutex_};
-      done_ = true;
+      is_done_ = true;
     }
     cv_.notify_all();
   }
 };
 
+/**
+ *
+ * When shutting down. The thread pool will stop accepting new tasks, but will wait for all tasks to
+ * finish
+ */
 class ThreadPool {
 public:
-  explicit ThreadPool(std::string_view name,
+  explicit ThreadPool(std::string_view name = "",
                       size_t thread_count = std::jthread::hardware_concurrency());
+  ~ThreadPool();
+  ThreadPool(const ThreadPool&) = delete;
+  auto operator=(const ThreadPool&) -> ThreadPool& = delete;
 
-  void enqueue(Task<void> task);
+  void enqueue(Task<void>& task);
   void wait();
 
-  [[nodiscard]] auto schedule() noexcept
-  {
-    return std::suspend_always{};
-  }
+  [[nodiscard]] auto schedule() noexcept { return std::suspend_always{}; }
 
 private:
   std::vector<std::jthread> workers_;
   TaskQueue queue_;
-
-  bool stop_{false};
-
-  size_t total_tasks_{0};
-  std::atomic<size_t> finished_{0};
-
-  void process_(std::coroutine_handle<> task);
 };
 
 } // namespace charlie

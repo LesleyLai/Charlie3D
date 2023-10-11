@@ -12,39 +12,21 @@
 
 namespace charlie {
 
-void ThreadPool::enqueue(Task<void> task)
+void ThreadPool::enqueue(Task<void>& task)
 {
-  ++total_tasks_;
   queue_.push(task.get_coroutine_handle());
-}
-
-void ThreadPool::process_(std::coroutine_handle<> task)
-{
-  if (not task.done()) {
-    task.resume();
-    queue_.push(task);
-  } else {
-    task.destroy();
-    ++finished_;
-
-    if (finished_.load() >= total_tasks_) {
-      {
-        queue_.done();
-        stop_ = true;
-      }
-    }
-  }
 }
 
 void ThreadPool::wait()
 {
+  queue_.done();
   for (auto& worker : workers_) { worker.join(); }
 }
 
 auto TaskQueue::pop() -> std::coroutine_handle<>
 {
   std::unique_lock lock{mutex_};
-  while (tasks_.empty() && !done_) cv_.wait(lock);
+  while (tasks_.empty() && !is_done_) cv_.wait(lock);
   if (tasks_.empty()) return nullptr;
   auto result = tasks_.front();
   tasks_.pop();
@@ -59,8 +41,13 @@ ThreadPool::ThreadPool(std::string_view name, size_t thread_count)
     workers_.emplace_back([this]() {
       while (true) {
         std::coroutine_handle<> task = queue_.pop();
-        if (stop_) { return; }
-        if (task) { process_(task); }
+        if (queue_.is_done()) { return; }
+        if (task) {
+          if (not task.done()) {
+            task.resume();
+            queue_.push(task);
+          }
+        }
       }
     });
 #ifdef _WIN32
@@ -71,6 +58,11 @@ ThreadPool::ThreadPool(std::string_view name, size_t thread_count)
     BEYOND_ENSURE(SUCCEEDED(r));
 #endif
   }
+}
+
+ThreadPool::~ThreadPool()
+{
+  queue_.done();
 }
 
 } // namespace charlie

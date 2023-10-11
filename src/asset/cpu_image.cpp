@@ -16,6 +16,7 @@ namespace charlie {
                                         std::string image_name) -> CPUImage
 {
   ZoneScoped;
+
   int width{}, height{}, components{};
   uint8_t* pixels =
       stbi_load(file_path.string().c_str(), &width, &height, &components, STBI_rgb_alpha);
@@ -28,7 +29,7 @@ namespace charlie {
       .compoments = beyond::narrow<uint32_t>(components),
       .data = std::unique_ptr<uint8_t[]>(pixels),
   };
-}
+} // namespace charlie
 
 [[nodiscard]] auto load_image_from_memory(std::span<const uint8_t> bytes, std::string image_name)
     -> CPUImage
