@@ -48,6 +48,9 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   if (ImGui::CollapsingHeader("Environment Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
     auto& scene_parameters = renderer.scene_parameters();
 
+    ImGui::SliderFloat("Ambient Strength", &scene_parameters.sunlight_direction.w, 0.1f, 10, "%.3f",
+                       ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+
     ImGui::Text("Sunlight");
     ImGui::LabelText("Direction", "%f %f %f", scene_parameters.sunlight_direction.x,
                      scene_parameters.sunlight_direction.y, scene_parameters.sunlight_direction.z);

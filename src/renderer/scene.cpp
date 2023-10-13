@@ -78,6 +78,8 @@ namespace charlie {
           material_info.normal_texture_index
               .map([&](uint32_t index) { return texture_indices_map[index]; })
               .value_or(renderer.default_normal_texture_index);
+      material_info.occlusion_texture_index = material_info.occlusion_texture_index.map(
+          [&](uint32_t index) { return texture_indices_map[index]; });
 
       const MaterialHandle material = renderer.create_material(material_info);
 

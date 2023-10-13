@@ -170,15 +170,19 @@ namespace charlie {
   for (const auto& material : parsed_asset->materials) {
     BEYOND_ENSURE(material.pbrData.has_value());
 
-    beyond::optional<uint32_t> albedo_texture_index;
+    beyond::optional<u32> albedo_texture_index;
     if (material.pbrData->baseColorTexture.has_value()) {
-      albedo_texture_index =
-          beyond::narrow<uint32_t>(material.pbrData->baseColorTexture->textureIndex);
+      albedo_texture_index = narrow<u32>(material.pbrData->baseColorTexture->textureIndex);
     }
 
-    beyond::optional<uint32_t> normal_texture_index;
+    beyond::optional<u32> normal_texture_index;
     if (material.normalTexture.has_value()) {
-      normal_texture_index = beyond::narrow<uint32_t>(material.normalTexture->textureIndex);
+      normal_texture_index = narrow<u32>(material.normalTexture->textureIndex);
+    }
+
+    beyond::optional<u32> occlusion_texture_index;
+    if (material.occlusionTexture.has_value()) {
+      occlusion_texture_index = narrow<u32>(material.occlusionTexture->textureIndex);
     }
 
     result.materials.push_back(CPUMaterial{
@@ -188,6 +192,7 @@ namespace charlie {
                               material.pbrData->baseColorFactor[3]},
         .albedo_texture_index = albedo_texture_index,
         .normal_texture_index = normal_texture_index,
+        .occlusion_texture_index = occlusion_texture_index,
     });
   }
 
@@ -198,11 +203,11 @@ namespace charlie {
     const auto& primitive = mesh.primitives.at(0);
     BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
 
-    size_t position_accessor_id = 0;
-    size_t normal_accessor_id = 0;
-    beyond::optional<size_t> tangent_accessor_id;
-    beyond::optional<size_t> texture_coord_accessor_id;
-    size_t index_accessor_id = 0;
+    usize position_accessor_id = 0;
+    usize normal_accessor_id = 0;
+    beyond::optional<usize> tangent_accessor_id;
+    beyond::optional<usize> texture_coord_accessor_id;
+    usize index_accessor_id = 0;
     if (const auto itr = primitive.attributes.find("POSITION"); itr != primitive.attributes.end()) {
       position_accessor_id = itr->second;
     } else {

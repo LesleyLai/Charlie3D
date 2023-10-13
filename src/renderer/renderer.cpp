@@ -347,6 +347,11 @@ void Renderer::init_descriptors()
       {.binding = 1,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      // occlusion
+      {.binding = 2,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
 
   static constexpr VkDescriptorSetLayoutCreateInfo textures_layout_create_info = {
@@ -982,6 +987,7 @@ auto Renderer::create_material(const CPUMaterial& material_info) -> MaterialHand
 {
   const auto albedo_texture = textures_.at(material_info.albedo_texture_index.value());
   const auto normal_texture = textures_.at(material_info.normal_texture_index.value());
+  const auto occlusion_texture = textures_.at(material_info.occlusion_texture_index.value());
 
   // alloc descriptor set for material
   VkDescriptorSet material_descriptor_set =
@@ -999,6 +1005,13 @@ auto Renderer::create_material(const CPUMaterial& material_info) -> MaterialHand
       .imageView = normal_texture.image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
+
+  const VkDescriptorImageInfo occlusion_image_buffer_info = {
+      .sampler = sampler_,
+      .imageView = occlusion_texture.image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
   const VkWriteDescriptorSet albedo_texture_write = VkWriteDescriptorSet{
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
       .dstSet = material_descriptor_set,
@@ -1015,7 +1028,16 @@ auto Renderer::create_material(const CPUMaterial& material_info) -> MaterialHand
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
       .pImageInfo = &normal_image_buffer_info,
   };
-  const VkWriteDescriptorSet texture_write_sets[] = {albedo_texture_write, normal_texture_write};
+  const VkWriteDescriptorSet occlusion_texture_write = VkWriteDescriptorSet{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = material_descriptor_set,
+      .dstBinding = 2,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .pImageInfo = &occlusion_image_buffer_info,
+  };
+  const VkWriteDescriptorSet texture_write_sets[] = {albedo_texture_write, normal_texture_write,
+                                                     occlusion_texture_write};
   vkUpdateDescriptorSets(context_, beyond::size(texture_write_sets), texture_write_sets, 0,
                          nullptr);
 

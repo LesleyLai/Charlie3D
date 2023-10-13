@@ -82,8 +82,8 @@ struct FrameData {
 class Camera;
 
 struct GPUSceneParameters {
-  Vec4 sunlight_direction = {0, 1, 0, 0}; // w unused
-  Vec4 sunlight_color = {1, 1, 1, 1};     // w for intensity
+  Vec4 sunlight_direction = {0, 1, 0, 1}; // w is used for ambient strength
+  Vec4 sunlight_color = {1, 1, 1, 5};     // w for intensity
 };
 
 class Renderer : public InputListener {

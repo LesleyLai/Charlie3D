@@ -5,6 +5,7 @@
 #include <beyond/types/optional.hpp>
 #include <vector>
 
+#include "../utils/prelude.hpp"
 #include "cpu_image.hpp"
 #include "cpu_mesh.hpp"
 
@@ -15,15 +16,16 @@ struct CPURenderObject {
 };
 
 struct CPUMaterial {
-  beyond::Vec4 base_color_factor;
-  beyond::optional<uint32_t> albedo_texture_index;
-  beyond::optional<uint32_t> normal_texture_index;
+  Vec4 base_color_factor;
+  beyond::optional<u32> albedo_texture_index;
+  beyond::optional<u32> normal_texture_index;
+  beyond::optional<u32> occlusion_texture_index;
 };
 
 struct CPUTexture {
   std::string name;
-  uint32_t image_index = 0;
-  uint32_t sampler_index = 0;
+  u32 image_index = 0;
+  u32 sampler_index = 0;
 };
 
 // Mirrors the scene-graph structure but all data here are on CPU
