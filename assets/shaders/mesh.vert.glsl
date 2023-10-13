@@ -33,5 +33,5 @@ void main()
 
     out_normal = normalize(inverse(mat3(model)) * in_normal);
     out_tangent = normalize(mat3(model) * in_tangent.xyz);
-    out_bi_tangent = cross(in_normal, out_tangent) * in_tangent.w;
+    out_bi_tangent = cross(out_normal, out_tangent) * in_tangent.w;
 }

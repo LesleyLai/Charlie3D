@@ -30,6 +30,16 @@ void set_asset_path()
   Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
 }
 
+auto slider_rgb_color(const char* label, float& r, float& g, float& b) -> bool
+{
+  int rgb[3] = {narrow<u8>(r * 255), narrow<u8>(g * 255), narrow<u8>(b * 255)};
+  bool result = ImGui::SliderInt3(label, rgb, 0, 255);
+  r = narrow<f32>(rgb[0]) / 255.f;
+  g = narrow<f32>(rgb[1]) / 255.f;
+  b = narrow<f32>(rgb[2]) / 255.f;
+  return result;
+}
+
 void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charlie::Camera& camera,
               std::chrono::steady_clock::duration delta_time)
 {
@@ -48,22 +58,20 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   if (ImGui::CollapsingHeader("Environment Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
     auto& scene_parameters = renderer.scene_parameters();
 
-    ImGui::SliderFloat("Ambient Strength", &scene_parameters.sunlight_direction.w, 0.1f, 10, "%.3f",
+    ImGui::Text("Ambient");
+    ImGui::SliderFloat("Intensity", &scene_parameters.sunlight_direction.w, 0.1f, 10, "%.3f",
                        ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::Text("Sunlight");
+    ImGui::PushID("Sunlight");
     ImGui::LabelText("Direction", "%f %f %f", scene_parameters.sunlight_direction.x,
                      scene_parameters.sunlight_direction.y, scene_parameters.sunlight_direction.z);
 
-    int rgb[3] = {static_cast<uint8_t>(scene_parameters.sunlight_color.x * 255),
-                  static_cast<uint8_t>(scene_parameters.sunlight_color.y * 255),
-                  static_cast<uint8_t>(scene_parameters.sunlight_color.z * 255)};
-    ImGui::SliderInt3("color", rgb, 0, 255);
-    scene_parameters.sunlight_color.x = static_cast<float>(rgb[0]) / 255.f;
-    scene_parameters.sunlight_color.y = static_cast<float>(rgb[1]) / 255.f;
-    scene_parameters.sunlight_color.z = static_cast<float>(rgb[2]) / 255.f;
-    ImGui::SliderFloat("intensity", &scene_parameters.sunlight_color.w, 0, 10000, "%.3f",
+    slider_rgb_color("Sunlight Color", scene_parameters.sunlight_color.x,
+                     scene_parameters.sunlight_color.y, scene_parameters.sunlight_color.z);
+    ImGui::SliderFloat("Intensity", &scene_parameters.sunlight_color.w, 0, 10000, "%.3f",
                        ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+    ImGui::PopID();
   }
 
   if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) { camera.draw_gui(); }

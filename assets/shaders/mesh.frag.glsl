@@ -52,5 +52,6 @@ void main()
 
     vec3 color = reinhard_tone_mapping(li);
 
+
     out_frag_color = vec4(color, 1.0f);
 }
