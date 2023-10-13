@@ -66,6 +66,8 @@ auto upload_buffer(vkh::Context& context, UploadContext& upload_context,
 {
   const auto size = beyond::narrow<uint32_t>(data.size());
 
+  BEYOND_ENSURE(size > 0);
+
   return vkh::create_buffer(context, {.size = size,
                                       .usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                       .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,

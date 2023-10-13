@@ -14,6 +14,8 @@
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
+#include <imgui_internal.h>
+
 #include <SDL2/SDL.h>
 
 #include <tracy/Tracy.hpp>
@@ -67,6 +69,8 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   framerate_counter.update(delta_time);
   if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
     const auto& scene = renderer.scene();
+
+    ImGui::LabelText("Viewport", "%ux%u", resolution.width, resolution.height);
 
     ImGui::SeparatorText("Scene Data");
     ImGui::LabelText("Nodes", "%zu", scene.local_transforms.size());

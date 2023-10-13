@@ -27,16 +27,16 @@
 namespace {
 
 struct GPUObjectData {
-  beyond::Mat4 model;
+  Mat4 model;
 };
 
 struct GPUCameraData {
-  beyond::Mat4 view;
-  beyond::Mat4 proj;
-  beyond::Mat4 view_proj;
+  Mat4 view;
+  Mat4 proj;
+  Mat4 view_proj;
 };
 
-constexpr std::size_t max_object_count = 10000;
+constexpr usize max_object_count = 10000;
 
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
@@ -77,8 +77,8 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 struct IndirectBatch {
   charlie::MeshHandle mesh;
   charlie::MaterialHandle material;
-  std::uint32_t first = 0;
-  std::uint32_t count = 0;
+  u32 first = 0;
+  u32 count = 0;
 };
 
 [[nodiscard]] auto compact_draws(std::span<const charlie::RenderObject> objects)
@@ -89,7 +89,7 @@ struct IndirectBatch {
   if (objects.empty()) return draws;
 
   beyond::optional<charlie::MeshHandle> last_mesh = beyond::nullopt;
-  for (std::uint32_t i = 0; i < objects.size(); ++i) {
+  for (u32 i = 0; i < objects.size(); ++i) {
     const auto& object = objects[i];
     const bool same_mesh = object.mesh == last_mesh;
     if (same_mesh) {
@@ -130,7 +130,8 @@ Renderer::Renderer(Window& window)
   init_default_texture();
 }
 
-auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
+auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info)
+    -> VkImage
 {
   ZoneScoped;
 
@@ -169,7 +170,7 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image) -> VkImage
   vkh::AllocatedImage allocated_image =
       vkh::create_image(context,
                         vkh::ImageCreateInfo{
-                            .format = VK_FORMAT_R8G8B8A8_SRGB,
+                            .format = upload_info.format,
                             .extent = image_extent,
                             .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                             .debug_name = image_debug_name,
@@ -488,22 +489,22 @@ void Renderer::init_pipelines()
   static constexpr VkVertexInputBindingDescription binding_descriptions[] = {
       {
           .binding = 0,
-          .stride = sizeof(beyond::Vec3),
+          .stride = sizeof(Vec3),
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       },
       {
           .binding = 1,
-          .stride = sizeof(beyond::Vec3),
+          .stride = sizeof(Vec3),
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       },
       {
           .binding = 2,
-          .stride = sizeof(beyond::Vec2),
+          .stride = sizeof(Vec2),
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       },
       {
           .binding = 3,
-          .stride = sizeof(beyond::Vec4),
+          .stride = sizeof(Vec4),
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       }};
 
@@ -567,6 +568,33 @@ void Renderer::init_default_texture()
 
   default_albedo_texture_index =
       add_texture(Texture{.image = default_albedo_image, .image_view = default_albedo_image_view});
+
+  CPUImage cpu_image2{
+      .name = "Default Normal Texture Image",
+      .width = 1,
+      .height = 1,
+      .compoments = 4,
+      .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
+  };
+  cpu_image.data[0] = 127;
+  cpu_image.data[1] = 255;
+  cpu_image.data[2] = 127;
+  cpu_image.data[3] = 255;
+
+  const auto default_normal_image = upload_image(cpu_image2, {
+                                                                 .format = VK_FORMAT_R8G8B8A8_UNORM,
+                                                             });
+  VkImageView default_normal_image_view =
+      vkh::create_image_view(
+          context(),
+          {.image = default_normal_image,
+           .format = VK_FORMAT_R8G8B8A8_UNORM,
+           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
+           .debug_name = "Default Normal Texture Image View"})
+          .value();
+
+  default_normal_texture_index =
+      add_texture(Texture{.image = default_normal_image, .image_view = default_normal_image_view});
 }
 
 void Renderer::render(const charlie::Camera& camera)
@@ -574,9 +602,9 @@ void Renderer::render(const charlie::Camera& camera)
   ZoneScopedN("Render");
 
   const auto& frame = current_frame();
-  constexpr std::uint64_t one_second = 1'000'000'000;
+  constexpr u64 one_second = 1'000'000'000;
 
-  std::uint32_t swapchain_image_index = 0;
+  u32 swapchain_image_index = 0;
   {
     ZoneScopedN("vkAcquireNextImageKHR");
     const VkResult result = vkAcquireNextImageKHR(
@@ -707,7 +735,7 @@ void Renderer::render(const charlie::Camera& camera)
   ++frame_number_;
 }
 
-void Renderer::present(uint32_t& swapchain_image_index)
+void Renderer::present(u32& swapchain_image_index)
 {
   ZoneScopedN("vkQueuePresentKHR");
 
@@ -748,6 +776,7 @@ void Renderer::present(uint32_t& swapchain_image_index)
       upload_buffer(context_, upload_context_, cpu_mesh.uv, buffer_usage,
                     fmt::format("{} Texcoord", cpu_mesh.name))
           .value();
+
   const vkh::AllocatedBuffer tangent_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.tangents, buffer_usage,
                     fmt::format("{} Tangent", cpu_mesh.name))
@@ -758,14 +787,13 @@ void Renderer::present(uint32_t& swapchain_image_index)
                     fmt::format("{} Index", cpu_mesh.name))
           .value();
 
-  return meshes_.insert(
-      Mesh{.position_buffer = position_buffer,
-           .normal_buffer = normal_buffer,
-           .uv_buffer = uv_buffer,
-           .tangent_buffer = tangent_buffer,
-           .index_buffer = index_buffer,
-           .vertices_count = beyond::narrow<std::uint32_t>(cpu_mesh.positions.size()),
-           .index_count = beyond::narrow<std::uint32_t>(cpu_mesh.indices.size())});
+  return meshes_.insert(Mesh{.position_buffer = position_buffer,
+                             .normal_buffer = normal_buffer,
+                             .uv_buffer = uv_buffer,
+                             .tangent_buffer = tangent_buffer,
+                             .index_buffer = index_buffer,
+                             .vertices_count = beyond::narrow<u32>(cpu_mesh.positions.size()),
+                             .index_count = beyond::narrow<u32>(cpu_mesh.indices.size())});
 }
 
 void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
@@ -773,8 +801,8 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
 
   // Camera
 
-  const beyond::Mat4 view = camera.view_matrix();
-  const beyond::Mat4 projection = camera.proj_matrix();
+  const Mat4 view = camera.view_matrix();
+  const Mat4 projection = camera.proj_matrix();
 
   const GPUCameraData cam_data = {
       .view = view,
@@ -813,9 +841,9 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
   auto* object_data =
       beyond::narrow<GPUObjectData*>(context_.map(current_frame().object_buffer).value());
 
-  const std::size_t object_count = render_objects_.size();
+  const usize object_count = render_objects_.size();
   BEYOND_ENSURE(object_count <= max_object_count);
-  for (std::size_t i = 0; i < scene_->global_transforms.size(); ++i) {
+  for (usize i = 0; i < scene_->global_transforms.size(); ++i) {
     object_data[i].model = scene_->global_transforms[i];
   }
 
@@ -829,7 +857,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
         context_.map<VkDrawIndexedIndirectCommand>(current_frame().indirect_buffer).value();
     BEYOND_ENSURE(draw_commands != nullptr);
 
-    for (std::uint32_t i = 0; i < object_count; ++i) {
+    for (u32 i = 0; i < object_count; ++i) {
       const auto mesh_handle = render_objects_[i].mesh;
       const auto& mesh = meshes_.try_get(mesh_handle).expect("Cannot find mesh by handle");
 
@@ -846,9 +874,9 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_);
 
-  const uint32_t uniform_offset =
-      beyond::narrow<uint32_t>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
-      beyond::narrow<uint32_t>(frame_index);
+  const u32 uniform_offset =
+      beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
+      beyond::narrow<u32>(frame_index);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
@@ -858,7 +886,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera)
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
                             &material.value().descriptor_set, 0, nullptr);
 
-    const auto& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
+    const Mesh& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
     constexpr VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
     vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);

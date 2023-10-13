@@ -15,10 +15,10 @@ Window::~Window()
 {
   int width = 0, height = 0;
   SDL_GetWindowSize(window_, &width, &height);
-  return Resolution{beyond::narrow<std::uint32_t>(width), beyond::narrow<std::uint32_t>(height)};
+  return Resolution{beyond::narrow<u32>(width), beyond::narrow<u32>(height)};
 }
 
-[[nodiscard]] auto Window::window_id() const noexcept -> std::uint32_t
+[[nodiscard]] auto Window::window_id() const noexcept -> u32
 {
   return SDL_GetWindowID(window_);
 }

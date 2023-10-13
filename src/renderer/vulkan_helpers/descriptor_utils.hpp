@@ -6,6 +6,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "../../utils/prelude.hpp"
 #include "error_handling.hpp"
 
 namespace vkh {
@@ -15,7 +16,7 @@ class Context;
 class DescriptorAllocator {
 public:
   struct PoolSizes {
-    std::vector<std::pair<VkDescriptorType, float>> sizes = {
+    std::vector<std::pair<VkDescriptorType, f32>> sizes = {
         {VK_DESCRIPTOR_TYPE_SAMPLER, 0.5f},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4.f},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4.f},
@@ -47,10 +48,7 @@ public:
   void reset_pools();
   [[nodiscard]] auto allocate(VkDescriptorSetLayout layout) -> Expected<VkDescriptorSet>;
 
-  [[nodiscard]] auto context() -> Context*
-  {
-    return context_;
-  };
+  [[nodiscard]] auto context() -> Context* { return context_; };
 
 private:
   [[nodiscard]] auto grab_pool() -> VkDescriptorPool;
@@ -73,15 +71,12 @@ public:
 
     [[nodiscard]] auto operator==(const DescriptorLayoutInfo& other) const -> bool;
 
-    [[nodiscard]] auto hash() const -> std::size_t;
+    [[nodiscard]] auto hash() const -> usize;
   };
 
 private:
   struct DescriptorLayoutHash {
-    [[nodiscard]] auto operator()(const DescriptorLayoutInfo& k) const -> std::size_t
-    {
-      return k.hash();
-    }
+    [[nodiscard]] auto operator()(const DescriptorLayoutInfo& k) const -> usize { return k.hash(); }
   };
 
   std::unordered_map<DescriptorLayoutInfo, VkDescriptorSetLayout, DescriptorLayoutHash>
@@ -104,10 +99,10 @@ class DescriptorBuilder {
 public:
   DescriptorBuilder(DescriptorLayoutCache& layout_cache, DescriptorAllocator& allocator);
 
-  auto bind_buffer(uint32_t binding, const VkDescriptorBufferInfo& buffer_info,
-                   VkDescriptorType type, VkShaderStageFlags stage_flags) -> DescriptorBuilder&;
+  auto bind_buffer(u32 binding, const VkDescriptorBufferInfo& buffer_info, VkDescriptorType type,
+                   VkShaderStageFlags stage_flags) -> DescriptorBuilder&;
 
-  auto bind_image(uint32_t binding, const VkDescriptorImageInfo& image_info, VkDescriptorType type,
+  auto bind_image(u32 binding, const VkDescriptorImageInfo& image_info, VkDescriptorType type,
                   VkShaderStageFlags stage_flags) -> DescriptorBuilder&;
 
   auto build() -> Expected<DescriptorBuilderResult>;

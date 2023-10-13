@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../asset//cpu_mesh.hpp"
+#include "../asset/cpu_mesh.hpp"
+#include "../utils/prelude.hpp"
 #include "../window/input_handler.hpp"
 #include "../window/window.hpp"
 #include "vulkan_helpers/buffer.hpp"
@@ -51,7 +52,7 @@ struct Material {
 struct RenderObject {
   MeshHandle mesh;
   MaterialHandle material;
-  beyond::Mat4 model_matrix;
+  Mat4 model_matrix;
 };
 
 constexpr unsigned int frame_overlap = 2;
@@ -81,8 +82,8 @@ struct FrameData {
 class Camera;
 
 struct GPUSceneParameters {
-  beyond::Vec4 sunlight_direction = {0, 1, 0, 0}; // w unused
-  beyond::Vec4 sunlight_color = {1, 1, 1, 1};     // w for intensity
+  Vec4 sunlight_direction = {0, 1, 0, 0}; // w unused
+  Vec4 sunlight_color = {1, 1, 1, 1};     // w for intensity
 };
 
 class Renderer : public InputListener {
@@ -96,47 +97,34 @@ public:
 
   void render(const charlie::Camera& camera);
 
-  [[nodiscard]] auto scene() const -> const Scene&
-  {
-    return *scene_;
-  }
+  [[nodiscard]] auto scene() const -> const Scene& { return *scene_; }
 
-  void set_scene(std::unique_ptr<Scene> scene)
-  {
-    scene_ = std::move(scene);
-  }
+  void set_scene(std::unique_ptr<Scene> scene) { scene_ = std::move(scene); }
 
   // our draw function
   void draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera);
 
-  [[nodiscard]] auto frame_number() const -> std::size_t
-  {
-    return frame_number_;
-  }
+  [[nodiscard]] auto frame_number() const -> usize { return frame_number_; }
 
-  [[nodiscard]] auto resolution() const noexcept -> Resolution
-  {
-    return resolution_;
-  }
+  [[nodiscard]] auto resolution() const noexcept -> Resolution { return resolution_; }
 
   [[nodiscard]] auto current_frame() noexcept -> FrameData&
   {
     return frames_[frame_number_ % frame_overlap];
   }
 
-  [[nodiscard]] auto context() noexcept -> vkh::Context&
-  {
-    return context_;
-  }
+  [[nodiscard]] auto context() noexcept -> vkh::Context& { return context_; }
 
-  [[nodiscard]] auto upload_context() noexcept -> UploadContext&
-  {
-    return upload_context_;
-  }
+  [[nodiscard]] auto upload_context() noexcept -> UploadContext& { return upload_context_; }
 
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
 
-  auto upload_image(const charlie::CPUImage& cpu_image) -> VkImage;
+  struct ImageUploadInfo {
+    VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+  };
+
+  auto upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info = {})
+      -> VkImage;
 
   // Returns texture index
   auto add_texture(Texture texture) -> uint32_t;
@@ -153,6 +141,7 @@ public:
   }
 
   uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
+  uint32_t default_normal_texture_index = static_cast<uint32_t>(~0);
 
 private:
   Window* window_ = nullptr;
@@ -169,7 +158,7 @@ private:
   vkh::AllocatedImage depth_image_;
   VkImageView depth_image_view_ = {};
 
-  std::size_t frame_number_ = 0;
+  usize frame_number_ = 0;
   FrameData frames_[frame_overlap];
 
   std::unique_ptr<vkh::DescriptorAllocator> descriptor_allocator_;
@@ -209,7 +198,7 @@ private:
 
   void on_input_event(const Event& event, const InputStates& states) override;
 
-  void present(uint32_t& swapchain_image_index);
+  void present(u32& swapchain_image_index);
 };
 
 } // namespace charlie

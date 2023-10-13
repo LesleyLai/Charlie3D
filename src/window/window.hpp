@@ -25,14 +25,11 @@ public:
   }
   ~Window();
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto raw_window() noexcept -> SDL_Window*
-  {
-    return window_;
-  }
+  [[nodiscard]] BEYOND_FORCE_INLINE auto raw_window() noexcept -> SDL_Window* { return window_; }
 
   [[nodiscard]] auto resolution() const noexcept -> Resolution;
 
-  [[nodiscard]] auto window_id() const noexcept -> std::uint32_t;
+  [[nodiscard]] auto window_id() const noexcept -> u32;
 
 private:
   friend WindowManager;

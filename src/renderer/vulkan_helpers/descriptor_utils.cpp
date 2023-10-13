@@ -9,9 +9,8 @@
 namespace {
 
 [[nodiscard]] auto create_pool(vkh::Context& context,
-                               const vkh::DescriptorAllocator::PoolSizes& pool_sizes,
-                               std::uint32_t count, VkDescriptorPoolCreateFlags flags)
-    -> vkh::Expected<VkDescriptorPool>
+                               const vkh::DescriptorAllocator::PoolSizes& pool_sizes, u32 count,
+                               VkDescriptorPoolCreateFlags flags) -> vkh::Expected<VkDescriptorPool>
 {
   std::vector<VkDescriptorPoolSize> sizes;
   sizes.reserve(pool_sizes.sizes.size());
@@ -164,20 +163,19 @@ auto DescriptorLayoutCache::DescriptorLayoutInfo::operator==(
       });
 }
 
-auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> std::size_t
+auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> usize
 {
   using std::hash;
-  using std::size_t;
 
-  size_t result = hash<size_t>()(bindings.size());
+  usize result = hash<usize>()(bindings.size());
 
   for (const VkDescriptorSetLayoutBinding& b : bindings) {
     // pack the binding data into a single int64. Not fully correct but it's ok
-    const size_t binding_hash =
+    const usize binding_hash =
         b.binding | b.descriptorType << 8 | b.descriptorCount << 16 | b.stageFlags << 24;
 
     // shuffle the packed binding data and xor it with the main hash
-    result ^= hash<size_t>()(binding_hash);
+    result ^= hash<usize>()(binding_hash);
   }
 
   return result;
@@ -238,7 +236,7 @@ auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
   // build layout first
   const VkDescriptorSetLayoutCreateInfo layout_info{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = beyond::narrow<std::uint32_t>(bindings_.size()),
+      .bindingCount = beyond::narrow<u32>(bindings_.size()),
       .pBindings = bindings_.data(),
   };
 
@@ -250,9 +248,8 @@ auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
         // write descriptor
         for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
 
-        vkUpdateDescriptorSets(alloc_->context()->device(),
-                               beyond::narrow<std::uint32_t>(writes_.size()), writes_.data(), 0,
-                               nullptr);
+        vkUpdateDescriptorSets(alloc_->context()->device(), beyond::narrow<u32>(writes_.size()),
+                               writes_.data(), 0, nullptr);
 
         return DescriptorBuilderResult{layout, set};
       });

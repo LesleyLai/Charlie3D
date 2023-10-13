@@ -44,26 +44,24 @@ namespace charlie {
     return renderer.upload_image(cpu_image);
   });
 
-  const uint32_t texture_index_offset = renderer.texture_count();
-  for (const auto& cpu_textures : cpu_scene.textures) {
-    const VkImage image = images.at(cpu_textures.image_index);
-    const VkImageView image_view =
-        vkh::create_image_view(
-            renderer.context(),
-            {.image = image,
-             .format = VK_FORMAT_R8G8B8A8_SRGB,
-             .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT}})
-            .value();
+  // A map from local index to resource index
+  std::vector<uint32_t> texture_indices_map(cpu_scene.textures.size());
+  std::ranges::transform(
+      cpu_scene.textures, texture_indices_map.begin(), [&](const CPUTexture& cpu_texture) {
+        VkImage image = images.at(cpu_texture.image_index);
+        VkImageView image_view =
+            vkh::create_image_view(
+                renderer.context(),
+                {.image = image,
+                 .format = VK_FORMAT_R8G8B8A8_SRGB,
+                 .subresource_range =
+                     vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT}})
+                .value();
 
-    const Texture texture{.image = image, .image_view = image_view};
-    renderer.add_texture(texture);
-  }
+        return renderer.add_texture(Texture{.image = image, .image_view = image_view});
+      });
 
   std::unordered_map<uint32_t, RenderComponent> render_components;
-
-  auto offset_texture_index = [texture_index_offset](uint32_t index) {
-    return index + texture_index_offset;
-  };
 
   for (uint32_t i = 0; i < cpu_scene.objects.size(); ++i) {
     const auto& object = cpu_scene.objects[i];
@@ -73,11 +71,13 @@ namespace charlie {
       const auto material_index = cpu_scene.meshes.at(object.mesh_index).material_index.value();
       auto material_info = cpu_scene.materials[material_index];
       material_info.albedo_texture_index =
-          material_info.albedo_texture_index.map(offset_texture_index)
+          material_info.albedo_texture_index
+              .map([&](uint32_t index) { return texture_indices_map[index]; })
               .value_or(renderer.default_albedo_texture_index);
-      // TODO: Handle materials without normal textures
       material_info.normal_texture_index =
-          material_info.normal_texture_index.map(offset_texture_index).value();
+          material_info.normal_texture_index
+              .map([&](uint32_t index) { return texture_indices_map[index]; })
+              .value_or(renderer.default_normal_texture_index);
 
       const MaterialHandle material = renderer.create_material(material_info);
 

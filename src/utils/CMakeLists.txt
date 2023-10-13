@@ -1,6 +1,7 @@
 add_library(charlie3d_utils
         configuration.hpp
         framerate_counter.cpp framerate_counter.hpp
+        prelude.hpp
         file.hpp
         thread_pool.hpp thread_pool.cpp task.hpp)
 add_library(charlie3d::utils ALIAS charlie3d_utils)

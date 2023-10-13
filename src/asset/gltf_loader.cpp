@@ -18,18 +18,13 @@
 
 namespace fastgltf {
 
-template <>
-struct ElementTraits<beyond::Vec2> : ElementTraitsBase<beyond::Vec2, AccessorType::Vec2, float> {};
+template <> struct ElementTraits<Vec2> : ElementTraitsBase<Vec2, AccessorType::Vec2, float> {};
 
-template <>
-struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorType::Vec3, float> {};
+template <> struct ElementTraits<Vec3> : ElementTraitsBase<Vec3, AccessorType::Vec3, float> {};
 
-template <>
-struct ElementTraits<beyond::Point3>
-    : ElementTraitsBase<beyond::Point3, AccessorType::Vec3, float> {};
+template <> struct ElementTraits<Point3> : ElementTraitsBase<Point3, AccessorType::Vec3, float> {};
 
-template <>
-struct ElementTraits<beyond::Vec4> : ElementTraitsBase<beyond::Vec4, AccessorType::Vec4, float> {};
+template <> struct ElementTraits<Vec4> : ElementTraitsBase<Vec4, AccessorType::Vec4, float> {};
 
 } // namespace fastgltf
 
@@ -158,7 +153,7 @@ namespace charlie {
   result.images.resize(parsed_asset->images.size());
 
   std::vector<Task<>> tasks;
-  for (std::size_t i = 0; i < parsed_asset->images.size(); ++i) {
+  for (usize i = 0; i < parsed_asset->images.size(); ++i) {
     tasks.emplace_back([](charlie::ThreadPool& scheduler, std::filesystem::path gltf_directory,
                           const fastgltf::Image& image, charlie::CPUImage& output) -> Task<> {
       co_await scheduler.schedule();
@@ -220,8 +215,6 @@ namespace charlie {
     }
     if (const auto itr = primitive.attributes.find("TANGENT"); itr != primitive.attributes.end()) {
       tangent_accessor_id = itr->second;
-    } else {
-      beyond::panic("Mesh misses TANGENT attribute!");
     }
 
     if (const auto itr = primitive.attributes.find("TEXCOORD_0");
@@ -262,25 +255,22 @@ namespace charlie {
         .or_else([&] { tex_coords.resize(positions.size()); });
 
     std::vector<beyond::Vec4> tangents;
-    tangent_accessor_id
-        .map([&](size_t id) {
-          const auto& tangent_accessor = parsed_asset->accessors.at(id);
-          BEYOND_ENSURE(tangent_accessor.type == AccessorType::Vec4);
+    tangent_accessor_id.map([&](size_t id) {
+      const auto& tangent_accessor = parsed_asset->accessors.at(id);
+      BEYOND_ENSURE(tangent_accessor.type == AccessorType::Vec4);
 
-          tangents.resize(tangent_accessor.count);
-          fastgltf::copyFromAccessor<beyond::Vec4>(*parsed_asset, tangent_accessor,
-                                                   tangents.data());
-        })
-        .or_else([&] { tangents.resize(positions.size()); });
+      tangents.resize(tangent_accessor.count);
+      fastgltf::copyFromAccessor<beyond::Vec4>(*parsed_asset, tangent_accessor, tangents.data());
+    });
 
-    std::vector<std::uint32_t> indices;
+    std::vector<u32> indices;
     indices.resize(index_accessor.count);
-    fastgltf::copyFromAccessor<std::uint32_t>(*parsed_asset, index_accessor, indices.data());
+    fastgltf::copyFromAccessor<u32>(*parsed_asset, index_accessor, indices.data());
 
     BEYOND_ENSURE(primitive.materialIndex.has_value());
-    beyond::optional<uint32_t> material_index;
+    beyond::optional<u32> material_index;
     if (mesh.primitives[0].materialIndex.has_value()) {
-      material_index = beyond::narrow<uint32_t>(mesh.primitives[0].materialIndex.value());
+      material_index = beyond::narrow<u32>(mesh.primitives[0].materialIndex.value());
     }
 
     result.meshes.push_back(CPUMesh{.name = mesh.name,

@@ -30,9 +30,9 @@ class Context {
   VkQueue compute_queue_{};
   VkQueue transfer_queue_{};
   VkQueue present_queue_{};
-  std::uint32_t graphics_queue_family_index_ = 0;
-  std::uint32_t compute_queue_family_index_ = 0;
-  std::uint32_t transfer_queue_family_index_ = 0;
+  u32 graphics_queue_family_index_ = 0;
+  u32 compute_queue_family_index_ = 0;
+  u32 transfer_queue_family_index_ = 0;
 
   VulkanFunctions functions_{};
   VmaAllocator allocator_{};
@@ -47,35 +47,23 @@ public:
   Context(Context&& other) noexcept;
   auto operator=(Context&& other) & noexcept -> Context&;
 
-  BEYOND_FORCE_INLINE void wait_idle() noexcept
-  {
-    vkDeviceWaitIdle(device_);
-  }
+  BEYOND_FORCE_INLINE void wait_idle() noexcept { vkDeviceWaitIdle(device_); }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto instance() noexcept -> VkInstance
-  {
-    return instance_;
-  }
+  [[nodiscard]] BEYOND_FORCE_INLINE auto instance() noexcept -> VkInstance { return instance_; }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto debug_messenger() noexcept -> VkDebugUtilsMessengerEXT
   {
     return debug_messenger_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto surface() noexcept -> VkSurfaceKHR
-  {
-    return surface_;
-  }
+  [[nodiscard]] BEYOND_FORCE_INLINE auto surface() noexcept -> VkSurfaceKHR { return surface_; }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto physical_device() noexcept -> VkPhysicalDevice
   {
     return physical_device_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto device() noexcept -> VkDevice
-  {
-    return device_;
-  }
+  [[nodiscard]] BEYOND_FORCE_INLINE auto device() noexcept -> VkDevice { return device_; }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue() noexcept -> VkQueue
   {
@@ -97,28 +85,22 @@ public:
     return transfer_queue_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue_family_index() const noexcept
-      -> std::uint32_t
+  [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue_family_index() const noexcept -> u32
   {
     return graphics_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue_family_index() const noexcept
-      -> std::uint32_t
+  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue_family_index() const noexcept -> u32
   {
     return compute_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue_family_index() const noexcept
-      -> std::uint32_t
+  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue_family_index() const noexcept -> u32
   {
     return transfer_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto allocator() noexcept -> VmaAllocator
-  {
-    return allocator_;
-  }
+  [[nodiscard]] BEYOND_FORCE_INLINE auto allocator() noexcept -> VmaAllocator { return allocator_; }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto functions() const noexcept -> VulkanFunctions
   {
@@ -143,15 +125,9 @@ public:
     return aligned_size;
   }
 
-  BEYOND_FORCE_INLINE explicit operator bool()
-  {
-    return instance_ != nullptr;
-  }
+  BEYOND_FORCE_INLINE explicit operator bool() { return instance_ != nullptr; }
 
-  BEYOND_FORCE_INLINE explicit(false) operator VkDevice()
-  {
-    return device_;
-  }
+  BEYOND_FORCE_INLINE explicit(false) operator VkDevice() { return device_; }
 
   template <typename T = void> auto map(AllocatedBuffer& buffer) -> Expected<T*>
   {

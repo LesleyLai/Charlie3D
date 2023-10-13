@@ -82,11 +82,11 @@ auto index_mesh(charlie::CPUMesh& mesh)
     std::vector<beyond::Vec3> normals;
     std::vector<beyond::Vec2> uv;
 
-    std::size_t index_offset = 0;
-    for (std::size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
-      const auto fv = std::size_t(shape.mesh.num_face_vertices[f]);
+    usize index_offset = 0;
+    for (usize f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
+      const auto fv = usize(shape.mesh.num_face_vertices[f]);
       BEYOND_ENSURE(fv == 3);
-      for (std::size_t v = 0; v < fv; v++) {
+      for (usize v = 0; v < fv; v++) {
         const tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
 
         const auto vx = attrib.vertices[3 * idx.vertex_index + 0];

@@ -5,6 +5,7 @@
 #include <beyond/math/matrix.hpp>
 #include <beyond/math/point.hpp>
 
+#include "../utils/prelude.hpp"
 #include "../window/input_handler.hpp"
 
 namespace charlie {
@@ -14,9 +15,9 @@ struct CameraController;
 class Camera : public InputListener {
 public:
   beyond::Radian fovy = beyond::Degree{70};
-  float aspect_ratio = 1.0f;
-  float z_near = 0.1f;
-  float z_far = 200.f;
+  f32 aspect_ratio = 1.0f;
+  f32 z_near = 0.1f;
+  f32 z_far = 200.f;
 
 private:
   CameraController* controller_ = nullptr;
@@ -37,31 +38,30 @@ struct CameraController {
   CameraController() = default;
   virtual ~CameraController() = default;
   CameraController(const CameraController&) = delete;
-  CameraController& operator=(const CameraController&) = delete;
+  auto operator=(const CameraController&) -> CameraController& = delete;
 
   virtual void draw_gui() {}
   virtual void update() {}
   virtual void fixed_update() {}
-  [[nodiscard]] virtual auto view_matrix() const -> beyond::Mat4 = 0;
+  [[nodiscard]] virtual auto view_matrix() const -> Mat4 = 0;
 
   virtual void on_input_event(const Event&, const InputStates&) {}
   virtual void reset() {}
 };
 
 class FirstPersonCameraController : public CameraController {
-  beyond::Point3 position_{0.f, 0.f, 0.f};
-  beyond::Vec3 input_axis_{0.f, 0.f, 0.f};
+  Point3 position_{0.f, 0.f, 0.f};
+  Vec3 input_axis_{0.f, 0.f, 0.f};
 
   void fixed_update() override;
-  [[nodiscard]] auto view_matrix() const -> beyond::Mat4 override;
+  [[nodiscard]] auto view_matrix() const -> Mat4 override;
   void on_key_input(int key, int scancode, int action, int mods);
 };
 
 class ArcballCameraController : public CameraController {
 public:
-  explicit ArcballCameraController(Window& window,
-                                   beyond::Point3 initial_eye = beyond::Point3{0, 0, -1},
-                                   beyond::Point3 initial_lookat = beyond::Point3{0, 0, 0})
+  explicit ArcballCameraController(Window& window, Point3 initial_eye = Point3{0, 0, -1},
+                                   Point3 initial_lookat = Point3{0, 0, 0})
       : window_{&window},
 
         initial_lookat_{initial_lookat}, desired_lookat_{initial_lookat}, lookat_{initial_lookat_},
@@ -80,31 +80,31 @@ private:
   bool smooth_movement_ = true;
 
   // the point look at
-  const beyond::Point3 initial_lookat_;
-  beyond::Point3 desired_lookat_;
-  beyond::Point3 lookat_;
+  const Point3 initial_lookat_;
+  Point3 desired_lookat_;
+  Point3 lookat_;
 
   // The direction from camera to the lookat point
-  const beyond::Vec3 initial_forward_axis_;
-  beyond::Vec3 forward_axis_;
+  const Vec3 initial_forward_axis_;
+  Vec3 forward_axis_;
 
-  static constexpr beyond::Vec3 up_ = beyond::Vec3{0, 1, 0};
+  static constexpr Vec3 up_ = beyond::Vec3{0, 1, 0};
 
-  beyond::IPoint2 old_mouse_pos_;
+  IPoint2 old_mouse_pos_;
 
-  static constexpr float initial_pan_speed = 1.0f;
-  static constexpr float initial_zoom_speed = 0.1f;
+  static constexpr f32 initial_pan_speed = 1.0f;
+  static constexpr f32 initial_zoom_speed = 0.1f;
 
-  float pan_speed_ = initial_pan_speed;
-  float zoom_speed_ = initial_zoom_speed;
+  f32 pan_speed_ = initial_pan_speed;
+  f32 zoom_speed_ = initial_zoom_speed;
 
-  const float initial_zooming_;
-  float desired_zooming_;
-  float zooming_;
+  const f32 initial_zooming_;
+  f32 desired_zooming_;
+  f32 zooming_;
 
   void fixed_update() override;
 
-  [[nodiscard]] auto view_matrix() const -> beyond::Mat4 override;
+  [[nodiscard]] auto view_matrix() const -> Mat4 override;
 
   void on_input_event(const Event& e, const InputStates& states) override;
   void on_mouse_move(MouseMoveEvent event, const InputStates& states);
@@ -112,9 +112,9 @@ private:
 
   void draw_gui() override;
 
-  [[nodiscard]] auto right_axis() const -> beyond::Vec3;
+  [[nodiscard]] auto right_axis() const -> Vec3;
 
-  [[nodiscard]] auto eye_position_from_zooming(float zooming) const -> beyond::Point3;
+  [[nodiscard]] auto eye_position_from_zooming(f32 zooming) const -> Point3;
 
   void reset() override;
 };

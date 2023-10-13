@@ -11,7 +11,7 @@ namespace charlie {
 enum class WindowEventType { resize };
 
 struct WindowEvent {
-  std::uint32_t window_id{};
+  u32 window_id{};
   WindowEventType type;
 };
 
