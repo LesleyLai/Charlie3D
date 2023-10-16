@@ -9,6 +9,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <beyond/math/matrix.hpp>
+#include <beyond/math/transform.hpp>
 #include <beyond/types/optional.hpp>
 #include <beyond/utils/narrowing.hpp>
 
@@ -293,6 +294,28 @@ namespace charlie {
   }
 
   io_thread_pool.wait();
+
+  // floor
+  result.materials.emplace_back();
+  result.meshes.push_back(CPUMesh{
+      .name = "floor",
+      .material_index = result.materials.size() - 1,
+      .positions =
+          {
+              Point3{0.5f, 0.0f, 0.5f},   // top right
+              Point3{0.5f, 0.0f, -0.5f},  // bottom right
+              Point3{-0.5f, 0.0f, -0.5f}, // bottom left
+              Point3{-0.5f, 0.0f, 0.5f}   // top left
+          },
+      .normals = {Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}},
+      .uv = {Vec2{0, 0}, Vec2{0, 1}, Vec2{1, 0}, Vec2{1, 1}},
+      .tangents = {Vec4{1, 0, 0, 1}, Vec4{1, 0, 0, 1}, Vec4{1, 0, 0, 1}, Vec4{1, 0, 0, 1}},
+      .indices = {0, 1, 3, 1, 2, 3},
+  });
+  result.objects.push_back(CPURenderObject{
+      .mesh_index = narrow<i32>(result.meshes.size() - 1),
+  });
+  result.local_transforms.push_back(beyond::scale(3.0f, 1.0f, 3.0f));
 
   SPDLOG_INFO("GLTF loaded from {}", file_path.string().c_str());
   return result;

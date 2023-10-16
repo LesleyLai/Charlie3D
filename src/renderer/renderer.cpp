@@ -533,7 +533,7 @@ void Renderer::init_pipelines()
            .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
                                               .attribute_descriptions = attribute_descriptions},
            .shader_stages = triangle_shader_stages,
-           .cull_mode = vkh::CullMode::none})
+           .cull_mode = vkh::CullMode::back})
           .value();
 }
 
