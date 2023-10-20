@@ -82,7 +82,8 @@ auto compile_shader_impl(charlie::ShaderCompilerImpl& shader_compiler_impl,
 {
   const shaderc::Compiler& compiler = shader_compiler_impl.compiler;
   shaderc::CompileOptions compile_options{};
-  compile_options.SetOptimizationLevel(shaderc_optimization_level_performance);
+  compile_options.SetGenerateDebugInfo();
+  // compile_options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
   const auto shader_kind = to_shaderc_shader_kind(stage);
 

@@ -11,7 +11,7 @@ struct FrameGraphRenderPass {
   virtual ~FrameGraphRenderPass() = default;
 
   FrameGraphRenderPass(const FrameGraphRenderPass&) = delete;
-  FrameGraphRenderPass& operator=(const FrameGraphRenderPass&) = delete;
+  auto operator=(const FrameGraphRenderPass&) -> FrameGraphRenderPass& = delete;
 };
 
 } // namespace charlie

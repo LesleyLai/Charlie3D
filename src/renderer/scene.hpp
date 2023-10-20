@@ -19,11 +19,11 @@ namespace charlie {
 
 class Renderer;
 
-struct MeshHandle : beyond::GenerationalHandle<MeshHandle, uint32_t, 16> {
+struct MeshHandle : beyond::GenerationalHandle<MeshHandle, u32, 16> {
   using GenerationalHandle::GenerationalHandle;
 };
 
-struct MaterialHandle : beyond::GenerationalHandle<MaterialHandle, uint32_t, 16> {
+struct MaterialHandle : beyond::GenerationalHandle<MaterialHandle, u32, 16> {
   using GenerationalHandle::GenerationalHandle;
 };
 
@@ -33,9 +33,9 @@ struct RenderComponent {
 };
 
 struct Scene {
-  std::vector<beyond::Mat4> local_transforms; // Cached local transformation for each nodes
-  std::vector<beyond::Mat4> global_transforms;
-  std::unordered_map<uint32_t, RenderComponent> render_components;
+  std::vector<Mat4> local_transforms; // Cached local transformation for each nodes
+  std::vector<Mat4> global_transforms;
+  std::unordered_map<u32, RenderComponent> render_components;
 };
 
 [[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene;

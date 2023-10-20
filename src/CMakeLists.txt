@@ -6,4 +6,4 @@ add_subdirectory(asset)
 add_subdirectory(renderer)
 
 add_executable(charlie3d "main.cpp")
-target_link_libraries(charlie3d PRIVATE charlie3d::window charlie3d::renderer)
+target_link_libraries(charlie3d PRIVATE charlie3d::window charlie3d::renderer charlie3d::compiler_options)

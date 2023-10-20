@@ -34,7 +34,7 @@ struct PipelineVertexInputStateCreateInfo {
 
 struct PipelineRenderingCreateInfo {
   uint32_t view_mask = 0;
-  std::span<const VkFormat> color_attachment_formats;
+  std::span<const VkFormat> color_attachment_formats = {};
   VkFormat depth_attachment_format = VK_FORMAT_UNDEFINED;
   VkFormat stencil_attachment_format = VK_FORMAT_UNDEFINED;
 };

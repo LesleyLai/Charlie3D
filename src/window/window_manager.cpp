@@ -43,6 +43,7 @@ auto WindowManager::create(int width, int height, beyond::ZStringView title,
 {
   uint32_t window_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_ALLOW_HIGHDPI;
   if (options.resizable) { window_flags |= SDL_WINDOW_RESIZABLE; }
+  if (options.maximized) { window_flags |= SDL_WINDOW_MAXIMIZED; }
 
   auto* window = [&]() {
     ZoneScopedN("SDL_CreateWindow");

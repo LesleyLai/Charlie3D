@@ -25,14 +25,17 @@ No goals
 
 ### Rendering
 
-- Runtime shader compilation
+- Shadow mapping with Percentage-Closer Filtering
+- Normal map support
+- Occlusion map support
 
 ### Asset
 
+- Runtime shader compilation
 - GLTF and Obj file loading
 
 ### Utilities
 
-- A versatile camera implementation that support both arcball and first-person controll
+- A versatile camera implementation that support both arcball and first-person control
 - [Dear Imgui](https://github.com/ocornut/imgui) integration
 - [Tracy](https://github.com/wolfpld/tracy) Profiler integration

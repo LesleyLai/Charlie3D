@@ -9,6 +9,7 @@ class Window;
 
 struct WindowOptions {
   bool resizable = false;
+  bool maximized = false;
 };
 
 class WindowManager {

@@ -41,12 +41,14 @@ ThreadPool::ThreadPool(std::string_view name, size_t thread_count)
     workers_.emplace_back([this]() {
       while (true) {
         std::coroutine_handle<> task = queue_.pop();
-        if (queue_.is_done()) { return; }
         if (task) {
           if (not task.done()) {
             task.resume();
             queue_.push(task);
           }
+        } else {
+          // No task in queue
+          return;
         }
       }
     });

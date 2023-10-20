@@ -26,6 +26,7 @@ target_link_libraries(charlie3d_renderer
         third-party::imgui_bindings
         PRIVATE
         SDL2::SDL2-static
+        charlie3d::compiler_options
         )
 
 #include(../../cmake/CompileShader.cmake)

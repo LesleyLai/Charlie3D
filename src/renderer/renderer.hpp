@@ -82,8 +82,9 @@ struct FrameData {
 class Camera;
 
 struct GPUSceneParameters {
-  Vec4 sunlight_direction = {0, 1, 0, 1}; // w is used for ambient strength
-  Vec4 sunlight_color = {1, 1, 1, 5};     // w for intensity
+  Vec4 sunlight_direction = {0, -1, -1, 1}; // w is used for ambient strength
+  Vec4 sunlight_color = {1, 1, 1, 5};       // w for sunlight intensity
+  Mat4 sunlight_view_proj;
 };
 
 class Renderer : public InputListener {
@@ -101,8 +102,8 @@ public:
 
   void set_scene(std::unique_ptr<Scene> scene) { scene_ = std::move(scene); }
 
-  // our draw function
-  void draw_scene(VkCommandBuffer cmd, const charlie::Camera& camera);
+  void draw_shadow(VkCommandBuffer cmd);
+  void draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view);
 
   [[nodiscard]] auto frame_number() const -> usize { return frame_number_; }
 
@@ -143,6 +144,8 @@ public:
   uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
   uint32_t default_normal_texture_index = static_cast<uint32_t>(~0);
 
+  bool enable_shadow_mapping = true;
+
 private:
   Window* window_ = nullptr;
   Resolution resolution_;
@@ -154,9 +157,15 @@ private:
 
   UploadContext upload_context_;
 
-  VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
+  static constexpr VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
   vkh::AllocatedImage depth_image_;
   VkImageView depth_image_view_ = {};
+
+  static constexpr uint32_t shadow_map_width_ = 4096;
+  static constexpr uint32_t shadow_map_height_ = 4096;
+  vkh::AllocatedImage shadow_map_image_;
+  VkImageView shadow_map_image_view_ = VK_NULL_HANDLE;
+  VkSampler shadow_map_sampler_ = VK_NULL_HANDLE;
 
   usize frame_number_ = 0;
   FrameData frames_[frame_overlap];
@@ -169,7 +178,11 @@ private:
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
 
+  VkPipelineLayout shadow_map_pipeline_layout_ = {};
+  VkPipeline shadow_map_pipeline_ = {};
+
   VkPipelineLayout mesh_pipeline_layout_ = {};
+  VkPipeline mesh_pipeline_without_shadow_ = {};
   VkPipeline mesh_pipeline_ = {};
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
@@ -189,6 +202,7 @@ private:
 
   void init_frame_data();
   void init_depth_image();
+  void init_shadow_map();
   void init_descriptors();
   void init_pipelines();
   void init_sampler();
