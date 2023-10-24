@@ -15,6 +15,7 @@
 #include <imgui_impl_vulkan.h>
 
 #include <SDL2/SDL.h>
+#include <spdlog/spdlog.h>
 
 #include <tracy/Tracy.hpp>
 
@@ -42,6 +43,14 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   ImGui::SetNextWindowPos(ImVec2(narrow<float>(resolution.width) - control_panel_width, 0));
   ImGui::SetNextWindowSize(ImVec2(control_panel_width, narrow<float>(resolution.height)));
   ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
+
+  if (ImGui::CollapsingHeader("Shaders", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::Button("Reload")) {
+
+      SPDLOG_INFO("Reload all shaders");
+      renderer.reload_all_shaders();
+    }
+  }
 
   if (ImGui::CollapsingHeader("Environment Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
     auto& scene_parameters = renderer.scene_parameters();

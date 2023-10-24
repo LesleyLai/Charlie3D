@@ -141,6 +141,8 @@ public:
     return scene_parameters_;
   }
 
+  void reload_all_shaders();
+
   uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
   uint32_t default_normal_texture_index = static_cast<uint32_t>(~0);
 
@@ -205,6 +207,8 @@ private:
   void init_shadow_map();
   void init_descriptors();
   void init_pipelines();
+  void init_shadow_pipeline();
+  void init_mesh_pipeline();
   void init_sampler();
   void init_default_texture();
 

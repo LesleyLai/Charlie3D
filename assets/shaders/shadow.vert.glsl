@@ -21,7 +21,6 @@ out gl_PerVertex
     vec4 gl_Position;
 };
 
-
 void main()
 {
     mat4 model = object_buffer.objects[gl_BaseInstance].model;

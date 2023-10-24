@@ -1,5 +1,7 @@
 #include "shader_compiler.hpp"
 
+#include "../../utils/prelude.hpp"
+
 #include <beyond/utils/assert.hpp>
 #include <beyond/utils/narrowing.hpp>
 #include <beyond/utils/utils.hpp>
@@ -78,7 +80,7 @@ namespace {
 
 auto compile_shader_impl(charlie::ShaderCompilerImpl& shader_compiler_impl,
                          beyond::ZStringView filename, const std::string& src,
-                         charlie::ShaderStage stage) -> beyond::optional<std::vector<uint32_t>>
+                         charlie::ShaderStage stage) -> beyond::optional<std::vector<u32>>
 {
   const shaderc::Compiler& compiler = shader_compiler_impl.compiler;
   shaderc::CompileOptions compile_options{};
@@ -107,8 +109,9 @@ namespace charlie {
 ShaderCompiler::ShaderCompiler() : impl_{std::make_unique<ShaderCompilerImpl>()} {}
 ShaderCompiler::~ShaderCompiler() = default;
 
-auto ShaderCompiler::compile_shader(const char* filename, ShaderStage stage)
-    -> beyond::optional<std::vector<uint32_t>>
+auto ShaderCompiler::compile_shader_from_file(const char* filename,
+                                              ShaderCompilationOptions options)
+    -> beyond::optional<ShaderCompilationResult>
 {
   const auto shader_path = canonical(impl_->shader_directory / filename);
 
@@ -117,12 +120,15 @@ auto ShaderCompiler::compile_shader(const char* filename, ShaderStage stage)
 
   const bool has_old_version = exists(spirv_path);
   if (has_old_version && last_write_time(spirv_path) > last_write_time(shader_path)) {
-    SPDLOG_INFO("Load {}", spirv_path.string());
-    return read_spirv_binary(spirv_path.string());
+    SPDLOG_DEBUG("load {}", spirv_path.string());
+    return ShaderCompilationResult{
+        .spirv = read_spirv_binary(spirv_path.string()),
+        .reuse_existing_spirv = true,
+    };
   } else {
     const auto shader_filename = shader_path.string();
     const auto shader_src = read_text_file(shader_filename.c_str());
-    auto data = compile_shader_impl(*impl_, shader_filename, shader_src, stage);
+    auto data = compile_shader_impl(*impl_, shader_filename, shader_src, options.stage);
     if (data) {
       std::ofstream spirv_file{spirv_path, std::ios::out | std::ios::binary};
       if (!spirv_file.is_open()) {
@@ -132,10 +138,18 @@ auto ShaderCompiler::compile_shader(const char* filename, ShaderStage stage)
                        beyond::narrow<std::streamsize>(data.value().size() * sizeof(uint32_t)));
     } else if (has_old_version) {
       SPDLOG_INFO("Fallback to old version {}", spirv_path.string());
-      return read_spirv_binary(spirv_path.string());
+      return ShaderCompilationResult{
+          .spirv = read_spirv_binary(spirv_path.string()),
+          .reuse_existing_spirv = true,
+      };
     }
 
-    return data;
+    return BEYOND_MOV(data).map([&](std::vector<u32>&& data) {
+      return ShaderCompilationResult{
+          .spirv = BEYOND_MOV(data),
+          .reuse_existing_spirv = false,
+      };
+    });
   }
 }
 

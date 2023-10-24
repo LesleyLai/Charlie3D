@@ -31,7 +31,7 @@ No goals
 
 ### Asset
 
-- Runtime shader compilation
+- Runtime shader reloading
 - GLTF and Obj file loading
 
 ### Utilities
