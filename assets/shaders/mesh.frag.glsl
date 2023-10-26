@@ -21,6 +21,8 @@ layout (set = 2, binding = 0) uniform sampler2D albedo_texture;
 layout (set = 2, binding = 1) uniform sampler2D normal_texture;
 layout (set = 2, binding = 2) uniform sampler2D occlusion_texture;
 
+//#define VISUALIZE_SHADOW_MAP
+
 vec3 calculate_pixel_normal() {
     mat3 TNB = mat3(normalize(in_tangent), normalize(in_bi_tangent), normalize(in_normal));
 
@@ -81,10 +83,13 @@ void main()
     const bool is_shadow_map_enabled = shadow_mode == 1;
     float visibility = is_shadow_map_enabled ? PCF(in_shadow_coord / in_shadow_coord.w) : 1.0;
 
-    // Visualize projected shadow map
-    //    vec4 shadow_coord = in_shadow_coord / in_shadow_coord.w;
-    //    float color = texture(shadow_map, shadow_coord.xy).r;
-    //    out_frag_color = vec4(color, color, color, 1.0);
+    #ifdef VISUALIZE_SHADOW_MAP
+
+    vec4 shadow_coord = in_shadow_coord / in_shadow_coord.w;
+    float color = texture(shadow_map, shadow_coord.xy).r;
+    out_frag_color = vec4(color, color, color, 1.0);
+
+    #else
 
     float ambient_occlusion = texture(occlusion_texture, in_tex_coord).r;
 
@@ -104,4 +109,7 @@ void main()
     vec3 color = reinhard_tone_mapping(li);
 
     out_frag_color = vec4(color, 1.0f);
+
+    #endif
+
 }

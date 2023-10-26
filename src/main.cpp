@@ -9,6 +9,7 @@
 
 #include "utils/configuration.hpp"
 #include "utils/file.hpp"
+#include "utils/file_watcher.hpp"
 #include "utils/framerate_counter.hpp"
 
 #include <imgui_impl_sdl2.h>
@@ -38,19 +39,10 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
 
   // ImGui::ShowDemoWindow();
 
-  bool show_control_panel = true;
   const float control_panel_width = ImGui::GetFontSize() * 30.f;
   ImGui::SetNextWindowPos(ImVec2(narrow<float>(resolution.width) - control_panel_width, 0));
   ImGui::SetNextWindowSize(ImVec2(control_panel_width, narrow<float>(resolution.height)));
-  ImGui::Begin("Control Panel", &show_control_panel, ImGuiWindowFlags_NoDecoration);
-
-  if (ImGui::CollapsingHeader("Shaders", ImGuiTreeNodeFlags_DefaultOpen)) {
-    if (ImGui::Button("Reload")) {
-
-      SPDLOG_INFO("Reload all shaders");
-      renderer.reload_all_shaders();
-    }
-  }
+  ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_NoDecoration);
 
   if (ImGui::CollapsingHeader("Environment Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
     auto& scene_parameters = renderer.scene_parameters();
@@ -141,6 +133,8 @@ int main(int argc, const char** argv)
 
   set_asset_path();
 
+  const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+
   auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D",
                                                           {.resizable = true, .maximized = true});
 
@@ -163,6 +157,12 @@ int main(int argc, const char** argv)
 
   renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
 
+  charlie::FileWatcher file_watcher;
+  file_watcher.add_watch({.directory = (asset_path / "shaders"),
+                          .callback = [&](const std::filesystem::path& file_path) {
+                            if (file_path.extension() == ".glsl") { renderer.reload_all_shaders(); }
+                          }});
+
   using Clock = std::chrono::steady_clock;
   using namespace std::literals::chrono_literals;
   auto previous_time = Clock::now();
@@ -173,6 +173,8 @@ int main(int argc, const char** argv)
     const auto delta_time = current_time - previous_time;
     previous_time = current_time;
     lag += delta_time;
+
+    file_watcher.poll_notifications();
 
     input_handler.handle_events();
 

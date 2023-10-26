@@ -13,10 +13,14 @@ Goals
 
 No goals
 
-- Having elegant and well-designed code. This is a more hacking/prototyping thing.
+- Having elegant and well-designed code. This is a more hacking/prototyping thing
 - Support GPUs and old drivers that miss critical features
 
 ## Features
+
+### Main Features
+
+- **Shader hot reloading**
 
 ### Vulkan-related
 
@@ -31,8 +35,8 @@ No goals
 
 ### Asset
 
-- Runtime shader reloading
-- GLTF and Obj file loading
+- GLTF and Obj file loading: Wrapping around [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader)
+  and [fastgltf](https://github.com/spnda/fastgltf)
 
 ### Utilities
 
