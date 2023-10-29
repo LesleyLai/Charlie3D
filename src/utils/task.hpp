@@ -4,6 +4,7 @@
 #include <coroutine>
 
 #include <beyond/types/optional.hpp>
+#include <beyond/utils/panic.hpp>
 
 namespace charlie {
 
@@ -36,7 +37,7 @@ struct TaskPromiseBase {
 
 template <typename T> struct TaskPromise : detail::TaskPromiseBase {
 private:
-  beyond::optional<T> value_;
+  std::optional<T> value_;
 
 public:
   void return_value(T value) { value_ = std::move(value); }
@@ -44,11 +45,8 @@ public:
 
   auto value() -> T
   {
-    if (value_.has_value()) {
-      return *value_;
-    } else {
-      beyond::panic("The coroutine value is never set");
-    }
+    BEYOND_ENSURE(value_.has_value());
+    return *value_;
   }
 };
 

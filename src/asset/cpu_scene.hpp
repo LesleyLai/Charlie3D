@@ -30,7 +30,7 @@ struct CPUTexture {
 
 // Mirrors the scene-graph structure but all data here are on CPU
 struct CPUScene {
-  std::vector<beyond::Mat4> local_transforms;
+  std::vector<Mat4> local_transforms;
   std::vector<CPURenderObject> objects;
 
   std::vector<CPUMesh> meshes;

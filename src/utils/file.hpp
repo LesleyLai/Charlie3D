@@ -1,8 +1,8 @@
 #ifndef CHARLIE3D_FILE_HPP
 #define CHARLIE3D_FILE_HPP
 
-#include <beyond/types/optional.hpp>
 #include <filesystem>
+#include <optional>
 #include <type_traits>
 
 // filesystem related utilities

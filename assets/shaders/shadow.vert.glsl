@@ -2,19 +2,8 @@
 
 layout (location = 0) in vec3 in_pos;
 
-layout (std140, set = 0, binding = 1) uniform SceneData {
-    vec4 sunlight_direction; // w is used for ambient strength
-    vec4 sunlight_color;
-    mat4 sunlight_view_proj;
-} scene_data;
-
-struct ObjectData {
-    mat4 model;
-};
-
-layout (std140, set = 1, binding = 0) readonly buffer ObjectBuffer {
-    ObjectData objects[];
-} object_buffer;
+#include "scene_data.h.glsl"
+#include "object_data.h.glsl"
 
 out gl_PerVertex
 {

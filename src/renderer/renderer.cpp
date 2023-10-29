@@ -535,21 +535,36 @@ void Renderer::init_pipelines()
 
 void Renderer::init_mesh_pipeline()
 {
-  const auto [vertex_shader_buffer, reused_existing_spirv_vert] =
-      shader_compiler_->compile_shader_from_file("mesh.vert.glsl", {.stage = ShaderStage::vertex})
-          .value();
+  auto vertex_shader_compilation_result =
+      shader_compiler_->compile_shader_from_file("mesh.vert.glsl", {.stage = ShaderStage::vertex});
 
-  const auto [fragment_shader_buffer, reused_existing_spirv_frag] =
-      shader_compiler_->compile_shader_from_file("mesh.frag.glsl", {.stage = ShaderStage::fragment})
-          .value();
+  auto fragment_shader_compilation_result = shader_compiler_->compile_shader_from_file(
+      "mesh.frag.glsl", {.stage = ShaderStage::fragment});
 
-  if (reused_existing_spirv_vert && reused_existing_spirv_frag && mesh_pipeline_) {
+  std::vector<uint32_t> vertex_shader_spirv;
+  bool use_old_vertex_shader = false;
+  if (vertex_shader_compilation_result.has_value()) {
+    vertex_shader_spirv = BEYOND_MOV(vertex_shader_compilation_result.value().spirv);
+  } else {
+    use_old_vertex_shader = true;
+    vertex_shader_spirv = read_spirv_binary(R"(E:\Dev\Charlie3D\assets\shaders\mesh.vert.spv)");
+  }
+
+  std::vector<uint32_t> fragment_shader_spirv;
+  bool use_old_fragment_shader = false;
+  if (fragment_shader_compilation_result.has_value()) {
+    fragment_shader_spirv = BEYOND_MOV(fragment_shader_compilation_result.value().spirv);
+  } else {
+    use_old_fragment_shader = true;
+    fragment_shader_spirv = read_spirv_binary(R"(E:\Dev\Charlie3D\assets\shaders\mesh.frag.spv)");
+  }
+
+  if (use_old_vertex_shader && use_old_fragment_shader && mesh_pipeline_) {
     return;
   } else if (mesh_pipeline_) {
     vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
     vkDestroyPipeline(context_, mesh_pipeline_, nullptr);
     vkDestroyPipeline(context_, mesh_pipeline_without_shadow_, nullptr);
-
     SPDLOG_DEBUG("Rebuild mesh pipeline");
   } else {
     SPDLOG_DEBUG("Build mesh pipeline");
@@ -567,10 +582,10 @@ void Renderer::init_mesh_pipeline()
                                   &mesh_pipeline_layout_));
 
   VkShaderModule triangle_vert_shader =
-      vkh::load_shader_module(context_, vertex_shader_buffer, {.debug_name = "Mesh Vertex Shader"})
+      vkh::load_shader_module(context_, vertex_shader_spirv, {.debug_name = "Mesh Vertex Shader"})
           .value();
   VkShaderModule triangle_frag_shader =
-      vkh::load_shader_module(context_, fragment_shader_buffer,
+      vkh::load_shader_module(context_, fragment_shader_spirv,
                               {.debug_name = "Mesh Fragment Shader"})
           .value();
   BEYOND_DEFER({
@@ -659,16 +674,22 @@ void Renderer::init_mesh_pipeline()
 
 void Renderer::init_shadow_pipeline()
 {
-  const auto [shadow_vertex_shader_data, reused_existing_spirv] =
-      shader_compiler_->compile_shader_from_file("shadow.vert.glsl", {.stage = ShaderStage::vertex})
-          .value();
+  auto shadow_vertex_shader_compilation_result = shader_compiler_->compile_shader_from_file(
+      "shadow.vert.glsl", {.stage = ShaderStage::vertex});
 
-  if (shadow_map_pipeline_ && reused_existing_spirv) {
-    return;
-  } else if (shadow_map_pipeline_) {
+  std::vector<uint32_t> shadow_shader_spirv;
+  if (shadow_vertex_shader_compilation_result.has_value()) {
+    shadow_shader_spirv = BEYOND_MOV(shadow_vertex_shader_compilation_result.value().spirv);
+  } else {
+    beyond::panic("Failed to compile shadow.vert.glsl");
+  }
+
+  //  if (shadow_map_pipeline_ && reused_existing_spirv) {
+  //    return;
+  //  } else
+  if (shadow_map_pipeline_) {
     vkDestroyPipelineLayout(context_, shadow_map_pipeline_layout_, nullptr);
     vkDestroyPipeline(context_, shadow_map_pipeline_, nullptr);
-
     SPDLOG_DEBUG("Rebuild shadow mapping pipeline");
   } else {
     SPDLOG_DEBUG("Build shadow mapping pipeline");
@@ -685,9 +706,9 @@ void Renderer::init_shadow_pipeline()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &shadow_map_pipeline_layout_));
 
-  BEYOND_ENSURE(not shadow_vertex_shader_data.empty());
+  BEYOND_ENSURE(not shadow_shader_spirv.empty());
   VkShaderModule shadow_vert_shader =
-      vkh::load_shader_module(context_, shadow_vertex_shader_data,
+      vkh::load_shader_module(context_, shadow_shader_spirv,
                               {.debug_name = "Shadow Mapping Vertex Shader"})
           .value();
   BEYOND_DEFER({ vkDestroyShaderModule(context_, shadow_vert_shader, nullptr); });

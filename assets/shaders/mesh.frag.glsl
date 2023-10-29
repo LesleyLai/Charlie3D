@@ -10,11 +10,8 @@ layout (constant_id = 0) const int shadow_mode = 0;
 
 layout (location = 0) out vec4 out_frag_color;
 
-layout (std140, set = 0, binding = 1) uniform SceneData {
-    vec4 sunlight_direction; // w is used for ambient strength
-    vec4 sunlight_color;
-    mat4 sunlight_view_proj;
-} scene_data;
+#include "scene_data.h.glsl"
+
 layout (set = 0, binding = 2) uniform sampler2D shadow_map;
 
 layout (set = 2, binding = 0) uniform sampler2D albedo_texture;

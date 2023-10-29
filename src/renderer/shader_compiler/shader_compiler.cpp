@@ -14,6 +14,9 @@
 #include <shaderc/shaderc.hpp>
 #include <source_location>
 
+#include <array>
+#include <string>
+
 #include "../../utils/configuration.hpp"
 
 namespace charlie {
@@ -34,36 +37,16 @@ struct ShaderCompilerImpl {
 
 namespace {
 
-[[nodiscard]] auto read_text_file(const char* filename) -> std::string
+[[nodiscard]] auto read_text_file(beyond::ZStringView filename) -> std::string
 {
-  const std::ifstream file(filename);
-  if (!file.is_open()) beyond::panic(fmt::format("Cannot open file {}\n", filename));
+  const std::ifstream file(filename.c_str());
+  BEYOND_ENSURE_MSG(file.is_open(), fmt::format("Cannot open file {}\n", filename));
   std::stringstream buffer;
   buffer << file.rdbuf();
 
-  if (!file.good()) { beyond::panic(fmt::format("Error when reading {}\n", filename)); }
+  BEYOND_ENSURE_MSG(file.good(), fmt::format("Error when reading {}\n", filename));
 
   return buffer.str();
-}
-
-[[nodiscard]] auto read_spirv_binary(const std::string& filename) -> std::vector<uint32_t>
-{
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-  if (!file.is_open()) { beyond::panic(fmt::format("Failed to open file {}", filename)); }
-
-  const auto file_size = beyond::narrow<size_t>(file.tellg());
-  BEYOND_ENSURE(file_size % sizeof(uint32_t) == 0);
-
-  std::vector<uint32_t> buffer;
-  buffer.resize(file_size / 4);
-
-  file.seekg(0);
-  file.read(std::bit_cast<char*>(buffer.data()), beyond::narrow<std::streamsize>(file_size));
-
-  if (!file.good()) { beyond::panic("Failed to read spirv binary"); }
-
-  return buffer;
 }
 
 [[nodiscard]] auto to_shaderc_shader_kind(charlie::ShaderStage stage)
@@ -78,13 +61,56 @@ namespace {
   BEYOND_UNREACHABLE();
 }
 
+class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
+  struct IncludeData {
+    std::unique_ptr<shaderc_include_result> include_result;
+    std::string filename;
+    std::string content;
+  };
+  std::vector<IncludeData> includes_;
+
+  auto GetInclude(const char* requested_source, shaderc_include_type type,
+                  const char* requesting_source, size_t /*include_depth*/)
+      -> shaderc_include_result* override
+  {
+
+    std::filesystem::path requesting_directory = requesting_source;
+    requesting_directory.remove_filename();
+
+    // TODO: handle #include <>
+    BEYOND_ENSURE(type == shaderc_include_type_relative);
+    const auto requested_path = canonical(requesting_directory / requested_source);
+
+    std::string name = requested_path.string();
+    std::string contents = read_text_file(name);
+
+    auto& result = includes_.emplace_back(std::make_unique_for_overwrite<shaderc_include_result>(),
+                                          name, contents);
+    *result.include_result = shaderc_include_result{
+        .source_name = result.filename.data(),
+        .source_name_length = result.filename.size(),
+        .content = result.content.data(),
+        .content_length = result.content.size(),
+    };
+
+    // fmt::print("{} includes {}\n", requesting_source, name);
+
+    return result.include_result.get();
+  }
+
+  void ReleaseInclude(shaderc_include_result*) override {}
+};
+
 auto compile_shader_impl(charlie::ShaderCompilerImpl& shader_compiler_impl,
                          beyond::ZStringView filename, const std::string& src,
                          charlie::ShaderStage stage) -> beyond::optional<std::vector<u32>>
 {
   const shaderc::Compiler& compiler = shader_compiler_impl.compiler;
+
   shaderc::CompileOptions compile_options{};
   compile_options.SetGenerateDebugInfo();
+  compile_options.SetIncluder(std::make_unique<ShaderIncluder>());
+
   // compile_options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
   const auto shader_kind = to_shaderc_shader_kind(stage);
@@ -109,6 +135,26 @@ namespace charlie {
 ShaderCompiler::ShaderCompiler() : impl_{std::make_unique<ShaderCompilerImpl>()} {}
 ShaderCompiler::~ShaderCompiler() = default;
 
+[[nodiscard]] auto read_spirv_binary(beyond::ZStringView filename) -> std::vector<uint32_t>
+{
+  std::ifstream file(filename.c_str(), std::ios::ate | std::ios::binary);
+
+  BEYOND_ENSURE_MSG(file.is_open(), fmt::format("Cannot open file {}\n", filename));
+
+  const auto file_size = beyond::narrow<size_t>(file.tellg());
+  BEYOND_ENSURE(file_size % sizeof(uint32_t) == 0);
+
+  std::vector<uint32_t> buffer;
+  buffer.resize(file_size / 4);
+
+  file.seekg(0);
+  file.read(bit_cast<char*>(buffer.data()), narrow<std::streamsize>(file_size));
+
+  BEYOND_ENSURE_MSG(file.good(), fmt::format("Error when reading {}\n", filename));
+
+  return buffer;
+}
+
 auto ShaderCompiler::compile_shader_from_file(const char* filename,
                                               ShaderCompilationOptions options)
     -> beyond::optional<ShaderCompilationResult>
@@ -118,39 +164,21 @@ auto ShaderCompiler::compile_shader_from_file(const char* filename,
   auto spirv_path = shader_path;
   spirv_path.replace_extension("spv");
 
-  const bool has_old_version = exists(spirv_path);
-  if (has_old_version && last_write_time(spirv_path) > last_write_time(shader_path)) {
-    SPDLOG_DEBUG("load {}", spirv_path.string());
-    return ShaderCompilationResult{
-        .spirv = read_spirv_binary(spirv_path.string()),
-        .reuse_existing_spirv = true,
-    };
-  } else {
-    const auto shader_filename = shader_path.string();
-    const auto shader_src = read_text_file(shader_filename.c_str());
-    auto data = compile_shader_impl(*impl_, shader_filename, shader_src, options.stage);
-    if (data) {
-      std::ofstream spirv_file{spirv_path, std::ios::out | std::ios::binary};
-      if (!spirv_file.is_open()) {
-        beyond::panic(fmt::format("Failed to open {}", spirv_path.string()));
-      }
-      spirv_file.write(std::bit_cast<const char*>(data.value().data()),
-                       beyond::narrow<std::streamsize>(data.value().size() * sizeof(uint32_t)));
-    } else if (has_old_version) {
-      SPDLOG_INFO("Fallback to old version {}", spirv_path.string());
-      return ShaderCompilationResult{
-          .spirv = read_spirv_binary(spirv_path.string()),
-          .reuse_existing_spirv = true,
-      };
-    }
+  // const bool has_old_version = exists(spirv_path);
+  const auto shader_filename = shader_path.string();
+  const auto shader_src = read_text_file(shader_filename);
+  return compile_shader_impl(*impl_, shader_filename, shader_src, options.stage)
+      .map([&](std::vector<u32>&& data) {
+        std::ofstream spirv_file{spirv_path, std::ios::out | std::ios::binary};
+        BEYOND_ENSURE_MSG(spirv_file.is_open(),
+                          fmt::format("Failed to open {}", spirv_path.string()));
+        spirv_file.write(std::bit_cast<const char*>(data.data()),
+                         narrow<std::streamsize>(data.size() * sizeof(uint32_t)));
 
-    return BEYOND_MOV(data).map([&](std::vector<u32>&& data) {
-      return ShaderCompilationResult{
-          .spirv = BEYOND_MOV(data),
-          .reuse_existing_spirv = false,
-      };
-    });
-  }
+        return ShaderCompilationResult{
+            .spirv = BEYOND_MOV(data),
+        };
+      });
 }
 
 } // namespace charlie

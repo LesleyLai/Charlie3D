@@ -2,6 +2,7 @@
 #define CHARLIE3D_SHADER_COMPILER_HPP
 
 #include <beyond/types/optional.hpp>
+#include <beyond/utils/zstring_view.hpp>
 #include <memory>
 #include <vector>
 
@@ -18,7 +19,9 @@ struct ShaderCompilationOptions {
 
 struct [[nodiscard]] ShaderCompilationResult {
   std::vector<uint32_t> spirv;
-  bool reuse_existing_spirv = false; // Whether we loaded an existing spirv or performed compilation
+  // TODO
+  // std::vector<std::string> include_files; // paths for all #include files (including indirect
+  // ones)
 };
 
 class ShaderCompiler {
@@ -32,8 +35,11 @@ public:
   ShaderCompiler();
   ~ShaderCompiler();
   ShaderCompiler(const ShaderCompiler&) = delete;
-  ShaderCompiler& operator=(const ShaderCompiler&) = delete;
+  auto operator=(const ShaderCompiler&) -> ShaderCompiler& = delete;
 };
+
+// Read existing spirv binary from a file
+[[nodiscard]] auto read_spirv_binary(beyond::ZStringView filename) -> std::vector<uint32_t>;
 
 } // namespace charlie
 
