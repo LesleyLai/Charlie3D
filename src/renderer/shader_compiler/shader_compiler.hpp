@@ -28,7 +28,7 @@ class ShaderCompiler {
   std::unique_ptr<struct ShaderCompilerImpl> impl_;
 
 public:
-  [[nodiscard]] auto compile_shader_from_file(const char* filename,
+  [[nodiscard]] auto compile_shader_from_file(beyond::ZStringView shader_path,
                                               ShaderCompilationOptions options)
       -> beyond::optional<ShaderCompilationResult>;
 

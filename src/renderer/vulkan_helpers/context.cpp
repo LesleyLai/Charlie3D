@@ -92,8 +92,6 @@ Context::Context(charlie::Window& window)
   gpu_properties_ = vkb_physical_device.properties;
 
   SPDLOG_INFO("Physical device name {}", vkb_physical_device.name);
-  SPDLOG_INFO("The GPU has a minimum buffer alignment of {}",
-              gpu_properties_.limits.minUniformBufferOffsetAlignment);
 
   const vkb::DeviceBuilder device_builder{vkb_physical_device};
   const auto device_ret = [&]() {

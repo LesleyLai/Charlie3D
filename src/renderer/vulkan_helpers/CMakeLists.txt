@@ -18,7 +18,6 @@ add_library(vulkan_helper
         descriptor_pool.cpp
         error_handling.hpp
         graphics_pipeline.hpp
-        graphics_pipeline.cpp
         shader_module.hpp
         shader_module.cpp
         swapchain.hpp

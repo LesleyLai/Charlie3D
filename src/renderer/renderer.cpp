@@ -8,6 +8,7 @@
 #include "vulkan_helpers/shader_module.hpp"
 #include "vulkan_helpers/sync.hpp"
 
+#include "pipeline_manager.hpp"
 #include "shader_compiler/shader_compiler.hpp"
 
 #include <beyond/math/transform.hpp>
@@ -17,6 +18,7 @@
 #include "camera.hpp"
 #include "mesh.hpp"
 
+#include "../utils/configuration.hpp"
 #include "imgui_render_pass.hpp"
 
 #include <spdlog/spdlog.h>
@@ -123,6 +125,8 @@ Renderer::Renderer(Window& window)
   init_descriptors();
 
   shader_compiler_ = std::make_unique<ShaderCompiler>();
+  pipeline_manager_ = std::make_unique<PipelineManager>(context_);
+
   init_pipelines();
 
   upload_context_ = init_upload_context(context_).expect("Failed to create upload context");
@@ -516,15 +520,6 @@ void Renderer::init_descriptors()
   }
 }
 
-void Renderer::reload_all_shaders()
-{
-  ZoneScoped;
-
-  context_.wait_idle();
-
-  init_pipelines();
-}
-
 void Renderer::init_pipelines()
 {
   ZoneScoped;
@@ -535,40 +530,13 @@ void Renderer::init_pipelines()
 
 void Renderer::init_mesh_pipeline()
 {
-  auto vertex_shader_compilation_result =
-      shader_compiler_->compile_shader_from_file("mesh.vert.glsl", {.stage = ShaderStage::vertex});
+  const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+  const std::filesystem::path shader_directory = asset_path / "shaders";
 
-  auto fragment_shader_compilation_result = shader_compiler_->compile_shader_from_file(
-      "mesh.frag.glsl", {.stage = ShaderStage::fragment});
-
-  std::vector<uint32_t> vertex_shader_spirv;
-  bool use_old_vertex_shader = false;
-  if (vertex_shader_compilation_result.has_value()) {
-    vertex_shader_spirv = BEYOND_MOV(vertex_shader_compilation_result.value().spirv);
-  } else {
-    use_old_vertex_shader = true;
-    vertex_shader_spirv = read_spirv_binary(R"(E:\Dev\Charlie3D\assets\shaders\mesh.vert.spv)");
-  }
-
-  std::vector<uint32_t> fragment_shader_spirv;
-  bool use_old_fragment_shader = false;
-  if (fragment_shader_compilation_result.has_value()) {
-    fragment_shader_spirv = BEYOND_MOV(fragment_shader_compilation_result.value().spirv);
-  } else {
-    use_old_fragment_shader = true;
-    fragment_shader_spirv = read_spirv_binary(R"(E:\Dev\Charlie3D\assets\shaders\mesh.frag.spv)");
-  }
-
-  if (use_old_vertex_shader && use_old_fragment_shader && mesh_pipeline_) {
-    return;
-  } else if (mesh_pipeline_) {
-    vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
-    vkDestroyPipeline(context_, mesh_pipeline_, nullptr);
-    vkDestroyPipeline(context_, mesh_pipeline_without_shadow_, nullptr);
-    SPDLOG_DEBUG("Rebuild mesh pipeline");
-  } else {
-    SPDLOG_DEBUG("Build mesh pipeline");
-  }
+  const ShaderHandle vertex_shader =
+      pipeline_manager_->add_shader("mesh.vert.glsl", ShaderStage::vertex);
+  const ShaderHandle fragment_shader =
+      pipeline_manager_->add_shader("mesh.frag.glsl", ShaderStage::fragment);
 
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
                                                object_descriptor_set_layout_, material_set_layout_};
@@ -581,49 +549,38 @@ void Renderer::init_mesh_pipeline()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &mesh_pipeline_layout_));
 
-  VkShaderModule triangle_vert_shader =
-      vkh::load_shader_module(context_, vertex_shader_spirv, {.debug_name = "Mesh Vertex Shader"})
-          .value();
-  VkShaderModule triangle_frag_shader =
-      vkh::load_shader_module(context_, fragment_shader_spirv,
-                              {.debug_name = "Mesh Fragment Shader"})
-          .value();
-  BEYOND_DEFER({
-    vkDestroyShaderModule(context_, triangle_vert_shader, nullptr);
-    vkDestroyShaderModule(context_, triangle_frag_shader, nullptr);
-  });
+  // TODO: how to deal with specialized constant?
+  //  struct ConstantData {
+  //    int shadow_mode = 0;
+  //  } constant_data;
+  //
+  //  VkSpecializationMapEntry map_entry = {
+  //      .constantID = 0,
+  //      .offset = 0,
+  //      .size = sizeof(int),
+  //  };
+  //
+  //  VkSpecializationInfo specialization_info = {
+  //      .mapEntryCount = 1,
+  //      .pMapEntries = &map_entry,
+  //      .dataSize = sizeof(constant_data),
+  //      .pData = &constant_data,
+  //  };
 
-  struct ConstantData {
-    int shadow_mode = 0;
-  } constant_data;
+  //  const VkPipelineShaderStageCreateInfo triangle_shader_stages[] = {
+  //      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+  //       .stage = VK_SHADER_STAGE_VERTEX_BIT,
+  //       .module = triangle_vert_shader,
+  //       .pName = "main"},
+  //      {
+  //          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+  //          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+  //          .module = triangle_frag_shader,
+  //          .pName = "main",
+  //          .pSpecializationInfo = &specialization_info,
+  //      }};
 
-  VkSpecializationMapEntry map_entry = {
-      .constantID = 0,
-      .offset = 0,
-      .size = sizeof(int),
-  };
-
-  VkSpecializationInfo specialization_info = {
-      .mapEntryCount = 1,
-      .pMapEntries = &map_entry,
-      .dataSize = sizeof(constant_data),
-      .pData = &constant_data,
-  };
-
-  const VkPipelineShaderStageCreateInfo triangle_shader_stages[] = {
-      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-       .stage = VK_SHADER_STAGE_VERTEX_BIT,
-       .module = triangle_vert_shader,
-       .pName = "main"},
-      {
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = triangle_frag_shader,
-          .pName = "main",
-          .pSpecializationInfo = &specialization_info,
-      }};
-
-  static constexpr VkVertexInputBindingDescription binding_descriptions[] = {
+  std::vector<VkVertexInputBindingDescription> binding_descriptions = {
       {
           .binding = 0,
           .stride = sizeof(Vec3),
@@ -645,55 +602,36 @@ void Renderer::init_mesh_pipeline()
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       }};
 
-  static constexpr VkVertexInputAttributeDescription attribute_descriptions[] = {
+  std::vector<VkVertexInputAttributeDescription> attribute_descriptions = {
       {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
       {.location = 1, .binding = 1, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
       {.location = 2, .binding = 2, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0},
       {.location = 3, .binding = 3, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = 0}};
 
-  const VkFormat color_attachment_formats[] = {swapchain_.image_format()};
-
-  const auto create_info = vkh::GraphicsPipelineCreateInfo{
+  auto create_info = charlie::GraphicsPipelineCreateInfo{
       .layout = mesh_pipeline_layout_,
       .pipeline_rendering_create_info =
           vkh::PipelineRenderingCreateInfo{
-              .color_attachment_formats = color_attachment_formats,
+              .color_attachment_formats = {swapchain_.image_format()},
               .depth_attachment_format = depth_format_,
           },
       .debug_name = "Mesh Graphics Pipeline",
       .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
                                          .attribute_descriptions = attribute_descriptions},
-      .shader_stages = triangle_shader_stages,
-      .cull_mode = vkh::CullMode::back};
+      .shaders = {vertex_shader, fragment_shader},
+      .cull_mode = VK_CULL_MODE_BACK_BIT};
 
-  constant_data.shadow_mode = 1;
-  mesh_pipeline_ = vkh::create_graphics_pipeline(context_, create_info).value();
-  constant_data.shadow_mode = 0;
-  mesh_pipeline_without_shadow_ = vkh::create_graphics_pipeline(context_, create_info).value();
+  // constant_data.shadow_mode = 1;
+  mesh_pipeline_ = pipeline_manager_->create_graphics_pipeline(create_info);
+  // constant_data.shadow_mode = 0;
+  create_info.debug_name = "Mesh Graphics Pipeline (without shadow)";
+  mesh_pipeline_without_shadow_ = pipeline_manager_->create_graphics_pipeline(create_info);
 }
 
 void Renderer::init_shadow_pipeline()
 {
-  auto shadow_vertex_shader_compilation_result = shader_compiler_->compile_shader_from_file(
-      "shadow.vert.glsl", {.stage = ShaderStage::vertex});
-
-  std::vector<uint32_t> shadow_shader_spirv;
-  if (shadow_vertex_shader_compilation_result.has_value()) {
-    shadow_shader_spirv = BEYOND_MOV(shadow_vertex_shader_compilation_result.value().spirv);
-  } else {
-    beyond::panic("Failed to compile shadow.vert.glsl");
-  }
-
-  //  if (shadow_map_pipeline_ && reused_existing_spirv) {
-  //    return;
-  //  } else
-  if (shadow_map_pipeline_) {
-    vkDestroyPipelineLayout(context_, shadow_map_pipeline_layout_, nullptr);
-    vkDestroyPipeline(context_, shadow_map_pipeline_, nullptr);
-    SPDLOG_DEBUG("Rebuild shadow mapping pipeline");
-  } else {
-    SPDLOG_DEBUG("Build shadow mapping pipeline");
-  }
+  const ShaderHandle vertex_shader =
+      pipeline_manager_->add_shader("shadow.vert.glsl", ShaderStage::vertex);
 
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
                                                object_descriptor_set_layout_};
@@ -706,46 +644,27 @@ void Renderer::init_shadow_pipeline()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &shadow_map_pipeline_layout_));
 
-  BEYOND_ENSURE(not shadow_shader_spirv.empty());
-  VkShaderModule shadow_vert_shader =
-      vkh::load_shader_module(context_, shadow_shader_spirv,
-                              {.debug_name = "Shadow Mapping Vertex Shader"})
-          .value();
-  BEYOND_DEFER({ vkDestroyShaderModule(context_, shadow_vert_shader, nullptr); });
-
-  const VkPipelineShaderStageCreateInfo shadow_shader_stages[] = {
-      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-       .stage = VK_SHADER_STAGE_VERTEX_BIT,
-       .module = shadow_vert_shader,
-       .pName = "main"},
-  };
-
-  static constexpr VkVertexInputBindingDescription binding_descriptions[] = {{
+  std::vector<VkVertexInputBindingDescription> binding_descriptions = {{
       .binding = 0,
       .stride = sizeof(Vec3),
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   }}; // Vertex input
 
-  static constexpr VkVertexInputAttributeDescription attribute_descriptions[] = {
+  std::vector<VkVertexInputAttributeDescription> attribute_descriptions = {
       {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0}};
 
-  // Need the following line to supress MSVC linker error for some reason :-(
-  const auto color_attachment_formats = std::span<const VkFormat>{};
-  shadow_map_pipeline_ =
-      vkh::create_graphics_pipeline(
-          context_,
-          {.layout = shadow_map_pipeline_layout_,
-           .pipeline_rendering_create_info =
-               vkh::PipelineRenderingCreateInfo{
-                   .color_attachment_formats = color_attachment_formats,
-                   .depth_attachment_format = depth_format_,
-               },
-           .debug_name = "Shadow Mapping Graphics Pipeline",
-           .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
-                                              .attribute_descriptions = attribute_descriptions},
-           .shader_stages = shadow_shader_stages,
-           .cull_mode = vkh::CullMode::front})
-          .value();
+  shadow_map_pipeline_ = pipeline_manager_->create_graphics_pipeline(
+      {.layout = shadow_map_pipeline_layout_,
+       .pipeline_rendering_create_info =
+           vkh::PipelineRenderingCreateInfo{
+               .color_attachment_formats = {},
+               .depth_attachment_format = depth_format_,
+           },
+       .debug_name = "Shadow Mapping Graphics Pipeline",
+       .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
+                                          .attribute_descriptions = attribute_descriptions},
+       .shaders = {vertex_shader},
+       .cull_mode = VK_CULL_MODE_FRONT_BIT});
 }
 
 void Renderer::init_sampler()
@@ -816,6 +735,8 @@ void Renderer::init_default_texture()
 void Renderer::render(const charlie::Camera& camera)
 {
   ZoneScopedN("Render");
+
+  pipeline_manager_->update();
 
   const auto& frame = current_frame();
   constexpr u64 one_second = 1'000'000'000;
@@ -1059,7 +980,8 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 0, 1,
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipeline_manager_->get_pipeline(shadow_map_pipeline_));
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
 
@@ -1203,9 +1125,11 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   }
 
   if (enable_shadow_mapping) {
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      pipeline_manager_->get_pipeline(mesh_pipeline_));
   } else {
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_without_shadow_);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      pipeline_manager_->get_pipeline(mesh_pipeline_without_shadow_));
   }
 
   const u32 uniform_offset =
@@ -1254,7 +1178,6 @@ Renderer::~Renderer()
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);
 
-  vkDestroyPipeline(context_, mesh_pipeline_, nullptr);
   vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
 
   vkDestroyImageView(context_, depth_image_view_, nullptr);

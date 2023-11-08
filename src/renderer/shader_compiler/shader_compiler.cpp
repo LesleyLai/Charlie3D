@@ -155,25 +155,24 @@ ShaderCompiler::~ShaderCompiler() = default;
   return buffer;
 }
 
-auto ShaderCompiler::compile_shader_from_file(const char* filename,
+auto ShaderCompiler::compile_shader_from_file(beyond::ZStringView shader_path,
                                               ShaderCompilationOptions options)
     -> beyond::optional<ShaderCompilationResult>
 {
-  const auto shader_path = canonical(impl_->shader_directory / filename);
+  // const auto shader_path = canonical(impl_->shader_directory / filename);
 
-  auto spirv_path = shader_path;
-  spirv_path.replace_extension("spv");
+  //  auto spirv_path = shader_path;
+  //  spirv_path.replace_extension("spv");
 
   // const bool has_old_version = exists(spirv_path);
-  const auto shader_filename = shader_path.string();
-  const auto shader_src = read_text_file(shader_filename);
-  return compile_shader_impl(*impl_, shader_filename, shader_src, options.stage)
+  const auto shader_src = read_text_file(shader_path);
+  return compile_shader_impl(*impl_, shader_path, shader_src, options.stage)
       .map([&](std::vector<u32>&& data) {
-        std::ofstream spirv_file{spirv_path, std::ios::out | std::ios::binary};
-        BEYOND_ENSURE_MSG(spirv_file.is_open(),
-                          fmt::format("Failed to open {}", spirv_path.string()));
-        spirv_file.write(std::bit_cast<const char*>(data.data()),
-                         narrow<std::streamsize>(data.size() * sizeof(uint32_t)));
+        //        std::ofstream spirv_file{spirv_path, std::ios::out | std::ios::binary};
+        //        BEYOND_ENSURE_MSG(spirv_file.is_open(),
+        //                          fmt::format("Failed to open {}", spirv_path.string()));
+        //        spirv_file.write(std::bit_cast<const char*>(data.data()),
+        //                         narrow<std::streamsize>(data.size() * sizeof(uint32_t)));
 
         return ShaderCompilationResult{
             .spirv = BEYOND_MOV(data),

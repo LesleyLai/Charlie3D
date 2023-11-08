@@ -105,9 +105,8 @@ void FileWatcher::add_watch(FileWatchInfo&& info)
   BEYOND_ENSURE(exists(directory));
   BEYOND_ENSURE(is_directory(directory));
 
-  if (auto itr = impl_->entries.find(directory); itr != impl_->entries.end()) {
-    // TODO
-    fmt::print("A watcher already exist!");
+  if (impl_->entries.contains(directory)) {
+    // A watcher already exist for this directory
     return;
   }
 

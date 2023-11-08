@@ -317,7 +317,7 @@ namespace charlie {
 
   io_thread_pool.wait();
 
-  SPDLOG_INFO("GLTF loaded from {}", file_path.string().c_str());
+  SPDLOG_INFO("GLTF loaded from {}", file_path.string());
   return result;
 }
 

@@ -5,7 +5,12 @@ layout (location = 1) in vec3 in_normal;
 layout (location = 2) in vec2 in_tex_coord;
 layout (location = 3) in vec4 in_tangent;
 
-#include "camera.h.glsl"
+layout (set = 0, binding = 0) uniform CameraBuffer {
+    mat4 view;
+    mat4 proj;
+    mat4 view_proj;
+} camera;
+
 #include "scene_data.h.glsl"
 #include "object_data.h.glsl"
 

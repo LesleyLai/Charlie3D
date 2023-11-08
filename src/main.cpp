@@ -157,12 +157,6 @@ int main(int argc, const char** argv)
 
   renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
 
-  charlie::FileWatcher file_watcher;
-  file_watcher.add_watch({.directory = (asset_path / "shaders"),
-                          .callback = [&](const std::filesystem::path& file_path) {
-                            if (file_path.extension() == ".glsl") { renderer.reload_all_shaders(); }
-                          }});
-
   using Clock = std::chrono::steady_clock;
   using namespace std::literals::chrono_literals;
   auto previous_time = Clock::now();
@@ -173,8 +167,6 @@ int main(int argc, const char** argv)
     const auto delta_time = current_time - previous_time;
     previous_time = current_time;
     lag += delta_time;
-
-    file_watcher.poll_notifications();
 
     input_handler.handle_events();
 

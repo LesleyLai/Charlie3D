@@ -6,7 +6,7 @@ layout (location = 2) in vec3 in_tangent;
 layout (location = 3) in vec3 in_bi_tangent;
 layout (location = 4) in vec4 in_shadow_coord;
 
-layout (constant_id = 0) const int shadow_mode = 0;
+//layout (constant_id = 0) const int shadow_mode = 0;
 
 layout (location = 0) out vec4 out_frag_color;
 
@@ -18,7 +18,7 @@ layout (set = 2, binding = 0) uniform sampler2D albedo_texture;
 layout (set = 2, binding = 1) uniform sampler2D normal_texture;
 layout (set = 2, binding = 2) uniform sampler2D occlusion_texture;
 
-//#define VISUALIZE_SHADOW_MAP
+// #define VISUALIZE_SHADOW_MAP
 
 vec3 calculate_pixel_normal() {
     mat3 TNB = mat3(normalize(in_tangent), normalize(in_bi_tangent), normalize(in_normal));
@@ -77,8 +77,9 @@ float PCF(vec4 shadow_coord) {
 
 void main()
 {
-    const bool is_shadow_map_enabled = shadow_mode == 1;
-    float visibility = is_shadow_map_enabled ? PCF(in_shadow_coord / in_shadow_coord.w) : 1.0;
+    //const bool is_shadow_map_enabled = shadow_mode == 1;
+    //float visibility = is_shadow_map_enabled ? PCF(in_shadow_coord / in_shadow_coord.w) : 1.0;
+    float visibility = PCF(in_shadow_coord / in_shadow_coord.w);
 
     #ifdef VISUALIZE_SHADOW_MAP
 

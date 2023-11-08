@@ -15,6 +15,7 @@
 
 #include "../asset/cpu_scene.hpp"
 #include "mesh.hpp"
+#include "pipeline_manager.hpp"
 #include "render_pass.hpp"
 #include "scene.hpp"
 #include "uploader.hpp"
@@ -141,8 +142,6 @@ public:
     return scene_parameters_;
   }
 
-  void reload_all_shaders();
-
   uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
   uint32_t default_normal_texture_index = static_cast<uint32_t>(~0);
 
@@ -180,12 +179,14 @@ private:
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
 
+  std::unique_ptr<PipelineManager> pipeline_manager_;
+
   VkPipelineLayout shadow_map_pipeline_layout_ = {};
-  VkPipeline shadow_map_pipeline_ = {};
+  PipelineHandle shadow_map_pipeline_;
 
   VkPipelineLayout mesh_pipeline_layout_ = {};
-  VkPipeline mesh_pipeline_without_shadow_ = {};
-  VkPipeline mesh_pipeline_ = {};
+  PipelineHandle mesh_pipeline_without_shadow_;
+  PipelineHandle mesh_pipeline_;
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   beyond::SlotMap<MaterialHandle, Material> materials_;

@@ -10,7 +10,7 @@ add_library(charlie3d_renderer
         imgui_render_pass.hpp
         uploader.cpp uploader.hpp
         scene.cpp scene.hpp
-        )
+        pipeline_manager.cpp pipeline_manager.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(SDL2 REQUIRED)
