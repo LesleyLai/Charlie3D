@@ -3,7 +3,7 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_core.h>
 
-#include <beyond/utils/assert.hpp>
+#include "beyond/utils/assert.hpp"
 
 #include "error_handling.hpp"
 
@@ -22,10 +22,7 @@ struct [[nodiscard]] AllocatedBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
 
-  explicit(false) operator VkBuffer()
-  {
-    return buffer;
-  }
+  explicit(false) operator VkBuffer() { return buffer; }
 };
 
 auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)

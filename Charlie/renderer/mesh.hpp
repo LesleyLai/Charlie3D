@@ -2,12 +2,12 @@
 #define CHARLIE3D_MESH_HPP
 
 #include "../utils/prelude.hpp"
+#include "../vulkan_helpers/buffer.hpp"
+
 #include <beyond/math/vector.hpp>
 
 #include <array>
 #include <span>
-
-#include "vulkan_helpers/buffer.hpp"
 
 namespace vkh {
 

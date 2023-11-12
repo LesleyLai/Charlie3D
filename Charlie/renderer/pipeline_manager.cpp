@@ -1,8 +1,8 @@
 #include "pipeline_manager.hpp"
 #include "../utils/configuration.hpp"
 
-#include "vulkan_helpers/context.hpp"
-#include "vulkan_helpers/debug_utils.hpp"
+#include "../vulkan_helpers/context.hpp"
+#include "../vulkan_helpers/debug_utils.hpp"
 
 #include <beyond/utils/assert.hpp>
 #include <spdlog/spdlog.h>

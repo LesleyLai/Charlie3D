@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../utils/prelude.hpp"
+#include "../utils/prelude.hpp"
 #include "error_handling.hpp"
 #include "vulkan/vulkan_core.h"
 

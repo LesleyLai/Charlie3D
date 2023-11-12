@@ -3,8 +3,8 @@
 #include "context.hpp"
 #include "descriptor_pool.hpp"
 
+#include "beyond/utils/assert.hpp"
 #include <algorithm>
-#include <beyond/utils/assert.hpp>
 
 namespace {
 

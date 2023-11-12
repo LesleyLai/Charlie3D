@@ -1,23 +1,23 @@
 #include "shader_compiler.hpp"
 
-#include "../../utils/prelude.hpp"
+#include "../utils/prelude.hpp"
 
-#include <beyond/utils/assert.hpp>
-#include <beyond/utils/narrowing.hpp>
-#include <beyond/utils/utils.hpp>
-#include <beyond/utils/zstring_view.hpp>
+#include "beyond/utils/assert.hpp"
+#include "beyond/utils/narrowing.hpp"
+#include "beyond/utils/utils.hpp"
+#include "beyond/utils/zstring_view.hpp"
 
 #include <spdlog/spdlog.h>
 
+#include "shaderc/shaderc.hpp"
 #include <filesystem>
 #include <fstream>
-#include <shaderc/shaderc.hpp>
 #include <source_location>
 
 #include <array>
 #include <string>
 
-#include "../../utils/configuration.hpp"
+#include "../utils/configuration.hpp"
 
 namespace charlie {
 

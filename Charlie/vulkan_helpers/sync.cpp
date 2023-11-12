@@ -2,7 +2,7 @@
 #include "debug_utils.hpp"
 #include "error_handling.hpp"
 
-#include "../../utils/prelude.hpp"
+#include "../utils/prelude.hpp"
 #include <volk.h>
 
 namespace vkh {

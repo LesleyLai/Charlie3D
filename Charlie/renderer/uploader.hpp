@@ -1,7 +1,7 @@
 #ifndef CHARLIE3D_UPLOADER_HPP
 #define CHARLIE3D_UPLOADER_HPP
 
-#include "vulkan_helpers/context.hpp"
+#include "../vulkan_helpers/context.hpp"
 #include <beyond/utils/function_ref.hpp>
 #include <iterator>
 #include <span>

@@ -1,8 +1,8 @@
 #include "uploader.hpp"
 
-#include "vulkan_helpers/buffer.hpp"
-#include "vulkan_helpers/commands.hpp"
-#include "vulkan_helpers/sync.hpp"
+#include "../vulkan_helpers/buffer.hpp"
+#include "../vulkan_helpers/commands.hpp"
+#include "../vulkan_helpers/sync.hpp"
 
 #include <beyond/utils/defer.hpp>
 

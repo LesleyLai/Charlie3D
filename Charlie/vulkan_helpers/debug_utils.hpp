@@ -1,7 +1,7 @@
 #pragma once
 
-#include <beyond/utils/utils.hpp>
-#include <beyond/utils/zstring_view.hpp>
+#include "beyond/utils/utils.hpp"
+#include "beyond/utils/zstring_view.hpp"
 
 #include <vulkan/vulkan_core.h>
 

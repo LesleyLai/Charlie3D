@@ -25,7 +25,7 @@ No goals
 
 ### Vulkan-related
 
-- [Vulkan helpers](src/renderer/vulkan_helpers) that simplifies object creation and debug name setting
+- [Vulkan helpers](Charlie/vulkan_helpers) that simplifies object creation and debug name setting
 
 ### Rendering
 

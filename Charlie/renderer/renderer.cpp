@@ -1,15 +1,15 @@
 #include "renderer.hpp"
 
-#include "vulkan_helpers/commands.hpp"
-#include "vulkan_helpers/descriptor_pool.hpp"
-#include "vulkan_helpers/descriptor_utils.hpp"
-#include "vulkan_helpers/graphics_pipeline.hpp"
-#include "vulkan_helpers/image_view.hpp"
-#include "vulkan_helpers/shader_module.hpp"
-#include "vulkan_helpers/sync.hpp"
+#include "../vulkan_helpers/commands.hpp"
+#include "../vulkan_helpers/descriptor_pool.hpp"
+#include "../vulkan_helpers/descriptor_utils.hpp"
+#include "../vulkan_helpers/graphics_pipeline.hpp"
+#include "../vulkan_helpers/image_view.hpp"
+#include "../vulkan_helpers/shader_module.hpp"
+#include "../vulkan_helpers/sync.hpp"
 
+#include "../shader_compiler/shader_compiler.hpp"
 #include "pipeline_manager.hpp"
-#include "shader_compiler/shader_compiler.hpp"
 
 #include <beyond/math/transform.hpp>
 #include <beyond/types/optional.hpp>

@@ -1,8 +1,8 @@
 #ifndef CHARLIE3D_SHADER_COMPILER_HPP
 #define CHARLIE3D_SHADER_COMPILER_HPP
 
-#include <beyond/types/optional.hpp>
-#include <beyond/utils/zstring_view.hpp>
+#include "beyond/types/optional.hpp"
+#include "beyond/utils/zstring_view.hpp"
 #include <memory>
 #include <vector>
 

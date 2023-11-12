@@ -1,6 +1,3 @@
-add_subdirectory(vulkan_helpers)
-add_subdirectory(shader_compiler)
-
 add_library(charlie3d_renderer
         renderer.hpp renderer.cpp
         mesh.hpp mesh.cpp

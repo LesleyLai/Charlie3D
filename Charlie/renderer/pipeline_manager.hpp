@@ -8,14 +8,14 @@
 #include "../utils/file_watcher.hpp"
 #include "../utils/prelude.hpp"
 
-#include "shader_compiler/shader_compiler.hpp"
+#include "../shader_compiler/shader_compiler.hpp"
 
 #include <beyond/container/static_vector.hpp>
 #include <beyond/utils/assert.hpp>
 #include <beyond/utils/handle.hpp>
 
-#include "vulkan_helpers/graphics_pipeline.hpp"
-#include "vulkan_helpers/shader_module.hpp"
+#include "../vulkan_helpers/graphics_pipeline.hpp"
+#include "../vulkan_helpers/shader_module.hpp"
 
 #include <vulkan/vulkan.h>
 

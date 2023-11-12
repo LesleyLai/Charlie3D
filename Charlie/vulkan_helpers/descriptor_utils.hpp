@@ -6,7 +6,7 @@
 
 #include <vulkan/vulkan.h>
 
-#include "../../utils/prelude.hpp"
+#include "../utils/prelude.hpp"
 #include "error_handling.hpp"
 
 namespace vkh {

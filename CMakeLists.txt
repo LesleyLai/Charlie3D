@@ -12,7 +12,7 @@ include("cmake/StaticAnalyzers.cmake")
 
 add_subdirectory(third-party)
 
-add_subdirectory(src)
+add_subdirectory(Charlie)
 
 option(CHARLIE3D_BUILD_TESTS "Build tests" ON)
 if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME AND CHARLIE3D_BUILD_TESTS)

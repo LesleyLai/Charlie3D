@@ -4,7 +4,7 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
-#include <beyond/utils/utils.hpp>
+#include "beyond/utils/utils.hpp"
 
 namespace vkh {
 
@@ -38,10 +38,7 @@ public:
     return swapchain_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto get() noexcept -> VkSwapchainKHR
-  {
-    return swapchain_;
-  }
+  [[nodiscard]] BEYOND_FORCE_INLINE auto get() noexcept -> VkSwapchainKHR { return swapchain_; }
   [[nodiscard]] BEYOND_FORCE_INLINE auto images() const noexcept -> std::span<const VkImage>
   {
     return images_;
