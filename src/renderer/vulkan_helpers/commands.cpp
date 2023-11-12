@@ -4,7 +4,7 @@
 
 namespace vkh {
 
-[[nodiscard]] auto allocate_command_buffer(Context& context, CommandBufferAllocInfo alloc_info)
+[[nodiscard]] auto allocate_command_buffer(VkDevice device, CommandBufferAllocInfo alloc_info)
     -> Expected<VkCommandBuffer>
 {
   const VkCommandBufferAllocateInfo command_buffer_allocate_info = {
@@ -12,9 +12,8 @@ namespace vkh {
       alloc_info.level, 1};
 
   VkCommandBuffer command_buffer{};
-  VKH_TRY(
-      vkAllocateCommandBuffers(context.device(), &command_buffer_allocate_info, &command_buffer));
-  VKH_TRY(vkh::set_debug_name(context, command_buffer, alloc_info.debug_name));
+  VKH_TRY(vkAllocateCommandBuffers(device, &command_buffer_allocate_info, &command_buffer));
+  VKH_TRY(vkh::set_debug_name(device, command_buffer, alloc_info.debug_name));
   return command_buffer;
 }
 

@@ -13,9 +13,12 @@ add_library(imgui_bindings
 target_link_libraries(imgui_bindings
         PUBLIC
         imgui::imgui
+        Vulkan::Headers
         PRIVATE
-        SDL2::SDL2-static
-        Vulkan::Vulkan)
+        SDL2::SDL2-static)
+target_compile_definitions(imgui_bindings
+        PUBLIC
+        VK_NO_PROTOTYPES)
 
 target_include_directories(imgui_bindings
         PUBLIC

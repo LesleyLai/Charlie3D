@@ -33,7 +33,7 @@ namespace {
                                          .pName = "main"};
 }
 
-auto create_graphics_pipeline_impl(vkh::Context& context,
+auto create_graphics_pipeline_impl(VkDevice device,
                                    const charlie::GraphicsPipelineCreateInfo& create_info)
     -> VkPipeline
 {
@@ -153,9 +153,9 @@ auto create_graphics_pipeline_impl(vkh::Context& context,
   };
 
   VkPipeline pipeline{};
-  VK_CHECK(vkCreateGraphicsPipelines(context.device(), VK_NULL_HANDLE, 1, &pipeline_create_info,
-                                     nullptr, &pipeline));
-  VK_CHECK(vkh::set_debug_name(context, pipeline, create_info.debug_name));
+  VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
+                                     &pipeline));
+  VK_CHECK(vkh::set_debug_name(device, pipeline, create_info.debug_name));
 
   return pipeline;
 }
@@ -186,14 +186,14 @@ struct Shaders {
   }
 };
 
-PipelineManager::PipelineManager(vkh::Context& context)
-    : context_{&context}, shaders_{std::make_unique<Shaders>()}
+PipelineManager::PipelineManager(VkDevice device)
+    : device_{device}, shaders_{std::make_unique<Shaders>()}
 {
 }
 
 PipelineManager::~PipelineManager()
 {
-  for (auto pipeline : pipelines_) { vkDestroyPipeline(context_->device(), pipeline, nullptr); }
+  for (auto pipeline : pipelines_) { vkDestroyPipeline(device_, pipeline, nullptr); }
 }
 
 [[nodiscard]] auto PipelineManager::add_shader(beyond::ZStringView filename, ShaderStage stage)
@@ -214,7 +214,7 @@ PipelineManager::~PipelineManager()
            if (not compilation_res.has_value()) return; // has compilation error
 
            VkShaderModule new_shader_module =
-               vkh::load_shader_module(*context_, compilation_res.value().spirv,
+               vkh::load_shader_module(device_, compilation_res.value().spirv,
                                        {.debug_name = shader_path_str})
                    .value();
 
@@ -234,8 +234,8 @@ PipelineManager::~PipelineManager()
                const auto& create_info = this->pipeline_create_infos_.at(pipeline_handle.value());
 
                VkPipeline& pipeline = pipelines_.at(pipeline_handle.value());
-               vkDestroyPipeline(context_->device(), pipeline, nullptr);
-               pipeline = create_graphics_pipeline_impl(*context_, create_info);
+               vkDestroyPipeline(device_, pipeline, nullptr);
+               pipeline = create_graphics_pipeline_impl(device_, create_info);
 
                SPDLOG_INFO("Recreate {}!", create_info.debug_name);
              }
@@ -248,7 +248,7 @@ PipelineManager::~PipelineManager()
   auto compilation_res = compiler.compile_shader_from_file(shader_path_str, {.stage = stage});
   BEYOND_ENSURE(compilation_res.has_value());
 
-  VkShaderModule shader_module = vkh::load_shader_module(*context_, compilation_res.value().spirv,
+  VkShaderModule shader_module = vkh::load_shader_module(device_, compilation_res.value().spirv,
                                                          {.debug_name = shader_path_str})
                                      .value();
 
@@ -272,7 +272,7 @@ void PipelineManager::update()
 auto PipelineManager::create_graphics_pipeline(const GraphicsPipelineCreateInfo& create_info)
     -> PipelineHandle
 {
-  VkPipeline pipeline = create_graphics_pipeline_impl(*context_, create_info);
+  VkPipeline pipeline = create_graphics_pipeline_impl(device_, create_info);
 
   pipelines_.push_back(pipeline);
   pipeline_create_infos_.push_back(create_info);

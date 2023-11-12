@@ -53,7 +53,7 @@ struct GraphicsPipelineCreateInfo {
 };
 
 class PipelineManager {
-  vkh::Context* context_ = nullptr;
+  VkDevice device_ = VK_NULL_HANDLE;
   std::unique_ptr<struct Shaders> shaders_;
   FileWatcher shader_file_watcher_;
 
@@ -65,7 +65,7 @@ class PipelineManager {
   std::unordered_map<ShaderHandle, std::vector<PipelineHandle>> pipeline_dependency_map_;
 
 public:
-  explicit PipelineManager(vkh::Context& context);
+  explicit PipelineManager(VkDevice device);
   ~PipelineManager();
 
   PipelineManager(const PipelineManager&) = delete;

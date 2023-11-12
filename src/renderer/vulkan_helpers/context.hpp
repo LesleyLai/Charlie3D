@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vk_mem_alloc.h>
+#include <volk.h>
 #include <vulkan/vulkan.h>
 
 #include <beyond/types/expected.hpp>
@@ -14,10 +15,6 @@
 namespace vkh {
 
 struct AllocatedBuffer;
-
-struct VulkanFunctions {
-  PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameEXT = nullptr;
-};
 
 class Context {
   VkInstance instance_{};
@@ -34,7 +31,6 @@ class Context {
   u32 compute_queue_family_index_ = 0;
   u32 transfer_queue_family_index_ = 0;
 
-  VulkanFunctions functions_{};
   VmaAllocator allocator_{};
 
 public:
@@ -101,11 +97,6 @@ public:
   }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto allocator() noexcept -> VmaAllocator { return allocator_; }
-
-  [[nodiscard]] BEYOND_FORCE_INLINE auto functions() const noexcept -> VulkanFunctions
-  {
-    return functions_;
-  }
 
   [[nodiscard]] BEYOND_FORCE_INLINE auto gpu_properties() const noexcept
       -> const VkPhysicalDeviceProperties&

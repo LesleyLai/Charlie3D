@@ -9,8 +9,6 @@
 
 namespace vkh {
 
-class Context;
-
 struct FenceCreateInfo {
   VkFenceCreateFlags flags = {};
   beyond::ZStringView debug_name;
@@ -20,10 +18,10 @@ struct SemaphoreCreateInfo {
   beyond::ZStringView debug_name;
 };
 
-[[nodiscard]] auto create_fence(Context& context, const FenceCreateInfo& create_info)
+[[nodiscard]] auto create_fence(VkDevice device, const FenceCreateInfo& create_info)
     -> Expected<VkFence>;
 
-[[nodiscard]] auto create_semaphore(Context& context, const SemaphoreCreateInfo& create_info)
+[[nodiscard]] auto create_semaphore(VkDevice device, const SemaphoreCreateInfo& create_info)
     -> Expected<VkSemaphore>;
 
 template <typename T> struct Transition {

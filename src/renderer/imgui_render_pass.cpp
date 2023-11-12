@@ -59,6 +59,13 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, SDL_Window* window,
 
   ImGui_ImplSDL2_InitForVulkan(window);
 
+  VkInstance instance = context.instance();
+  ImGui_ImplVulkan_LoadFunctions(
+      [](const char* function_name, void* vulkan_instance) {
+        return vkGetInstanceProcAddr(*(static_cast<VkInstance*>(vulkan_instance)), function_name);
+      },
+      &instance);
+
   ImGui_ImplVulkan_InitInfo init_info = {
       .Instance = context.instance(),
       .PhysicalDevice = context.physical_device(),

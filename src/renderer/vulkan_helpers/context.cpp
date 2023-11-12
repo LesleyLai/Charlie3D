@@ -46,6 +46,8 @@ Context::Context(charlie::Window& window)
 {
   ZoneScoped;
 
+  VK_CHECK(volkInitialize());
+
   auto instance_ret = []() {
     ZoneScopedN("vkCreateInstance");
     return vkb::InstanceBuilder{}
@@ -60,6 +62,8 @@ Context::Context(charlie::Window& window)
   if (!instance_ret) { beyond::panic(instance_ret.error().message()); }
   instance_ = instance_ret->instance;
   debug_messenger_ = instance_ret->debug_messenger;
+
+  volkLoadInstance(instance_);
 
   {
     ZoneScopedN("SDL_Vulkan_CreateSurface");
@@ -102,6 +106,8 @@ Context::Context(charlie::Window& window)
   auto vkb_device = device_ret.value();
   device_ = vkb_device.device;
 
+  volkLoadDevice(device_);
+
   graphics_queue_ = vkb_device.get_queue(vkb::QueueType::graphics).value();
   graphics_queue_family_index_ = vkb_device.get_queue_index(vkb::QueueType::graphics).value();
   compute_queue_ = vkb_device.get_queue(vkb::QueueType::compute).value();
@@ -113,14 +119,30 @@ Context::Context(charlie::Window& window)
 
   present_queue_ = vkb_device.get_queue(vkb::QueueType::present).value();
 
-  functions_ = {
-      .setDebugUtilsObjectNameEXT = std::bit_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
-          vkGetDeviceProcAddr(device_, "vkSetDebugUtilsObjectNameEXT")),
+  const VmaVulkanFunctions vma_vulkan_func{
+      .vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties,
+      .vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties,
+      .vkAllocateMemory = vkAllocateMemory,
+      .vkFreeMemory = vkFreeMemory,
+      .vkMapMemory = vkMapMemory,
+      .vkUnmapMemory = vkUnmapMemory,
+      .vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges,
+      .vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges,
+      .vkBindBufferMemory = vkBindBufferMemory,
+      .vkBindImageMemory = vkBindImageMemory,
+      .vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements,
+      .vkGetImageMemoryRequirements = vkGetImageMemoryRequirements,
+      .vkCreateBuffer = vkCreateBuffer,
+      .vkDestroyBuffer = vkDestroyBuffer,
+      .vkCreateImage = vkCreateImage,
+      .vkDestroyImage = vkDestroyImage,
+      .vkCmdCopyBuffer = vkCmdCopyBuffer,
   };
 
   const VmaAllocatorCreateInfo allocator_create_info{
       .physicalDevice = physical_device_,
       .device = device_,
+      .pVulkanFunctions = &vma_vulkan_func,
       .instance = instance_,
   };
 
@@ -155,7 +177,6 @@ Context::Context(vkh::Context&& other) noexcept
       graphics_queue_family_index_{std::exchange(other.graphics_queue_family_index_, {})},
       compute_queue_family_index_{std::exchange(other.compute_queue_family_index_, {})},
       transfer_queue_family_index_{std::exchange(other.transfer_queue_family_index_, {})},
-      functions_{std::exchange(other.functions_, {})},
       allocator_{std::exchange(other.allocator_, {})}
 {
 }
@@ -176,7 +197,6 @@ auto Context::operator=(Context&& other) & noexcept -> Context&
     graphics_queue_family_index_ = std::exchange(other.graphics_queue_family_index_, {});
     compute_queue_family_index_ = std::exchange(other.compute_queue_family_index_, {});
     transfer_queue_family_index_ = std::exchange(other.transfer_queue_family_index_, {});
-    functions_ = std::exchange(other.functions_, {});
     allocator_ = std::exchange(other.allocator_, {});
   }
   return *this;

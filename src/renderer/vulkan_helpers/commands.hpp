@@ -14,7 +14,7 @@ struct CommandBufferAllocInfo {
   beyond::ZStringView debug_name;
 };
 
-[[nodiscard]] auto allocate_command_buffer(Context& context, CommandBufferAllocInfo alloc_info)
+[[nodiscard]] auto allocate_command_buffer(VkDevice device, CommandBufferAllocInfo alloc_info)
     -> Expected<VkCommandBuffer>;
 
 } // namespace vkh

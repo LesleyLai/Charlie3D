@@ -1,11 +1,11 @@
 #include "image_view.hpp"
-
-#include "context.hpp"
 #include "debug_utils.hpp"
+
+#include <volk.h>
 
 namespace vkh {
 
-auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_view_create_info)
+auto create_image_view(VkDevice device, const ImageViewCreateInfo& image_view_create_info)
     -> Expected<VkImageView>
 {
   const VkImageViewCreateInfo create_info{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -19,9 +19,9 @@ auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_v
                                               image_view_create_info.subresource_range.value};
 
   VkImageView image_view = VK_NULL_HANDLE;
-  VKH_TRY(vkCreateImageView(context, &create_info, nullptr, &image_view));
+  VKH_TRY(vkCreateImageView(device, &create_info, nullptr, &image_view));
 
-  if (set_debug_name(context, image_view, image_view_create_info.debug_name)) {
+  if (set_debug_name(device, image_view, image_view_create_info.debug_name)) {
     report_fail_to_set_debug_name(image_view_create_info.debug_name);
   }
 

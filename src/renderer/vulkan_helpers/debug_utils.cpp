@@ -6,9 +6,8 @@
 
 namespace vkh {
 
-[[nodiscard]] auto set_debug_name(Context& context, uint64_t object_handle,
-                                  VkObjectType object_type, beyond::ZStringView name) noexcept
-    -> VkResult
+[[nodiscard]] auto set_debug_name(VkDevice device, uint64_t object_handle, VkObjectType object_type,
+                                  beyond::ZStringView name) noexcept -> VkResult
 {
   if (name.empty()) { return VK_SUCCESS; }
 
@@ -18,7 +17,7 @@ namespace vkh {
       .objectType = object_type,
       .objectHandle = object_handle,
       .pObjectName = name.c_str()};
-  return context.functions().setDebugUtilsObjectNameEXT(context.device(), &name_info);
+  return vkSetDebugUtilsObjectNameEXT(device, &name_info);
 }
 
 void report_fail_to_set_debug_name(beyond::ZStringView name) noexcept

@@ -20,7 +20,7 @@ class CompressorRecipe(ConanFile):
         self.requires("fastgltf/0.5.0")
         self.requires("imgui/1.89.8-docking")
         self.requires("meshoptimizer/0.17")
-
+        self.requires("volk/1.3.243.0")
         self.requires("tracy/0.9.1")
         self.requires("catch2/3.4.0")
 

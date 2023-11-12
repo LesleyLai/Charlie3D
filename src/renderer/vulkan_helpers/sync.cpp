@@ -1,12 +1,13 @@
 #include "sync.hpp"
-
-#include "context.hpp"
 #include "debug_utils.hpp"
 #include "error_handling.hpp"
 
+#include "../../utils/prelude.hpp"
+#include <volk.h>
+
 namespace vkh {
 
-[[nodiscard]] auto create_fence(Context& context, const FenceCreateInfo& create_info)
+[[nodiscard]] auto create_fence(VkDevice device, const FenceCreateInfo& create_info)
     -> Expected<VkFence>
 {
   const VkFenceCreateInfo fence_create_info{
@@ -16,16 +17,16 @@ namespace vkh {
   };
 
   VkFence fence = {};
-  VKH_TRY(vkCreateFence(context, &fence_create_info, nullptr, &fence));
+  VKH_TRY(vkCreateFence(device, &fence_create_info, nullptr, &fence));
 
-  if (set_debug_name(context, fence, create_info.debug_name)) {
+  if (set_debug_name(device, fence, create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }
 
   return fence;
 }
 
-[[nodiscard]] auto create_semaphore(Context& context, const SemaphoreCreateInfo& create_info)
+[[nodiscard]] auto create_semaphore(VkDevice device, const SemaphoreCreateInfo& create_info)
     -> Expected<VkSemaphore>
 {
   const VkSemaphoreCreateInfo semaphore_create_info{
@@ -35,9 +36,9 @@ namespace vkh {
   };
 
   VkSemaphore semaphore = {};
-  VKH_TRY(vkCreateSemaphore(context, &semaphore_create_info, nullptr, &semaphore));
+  VKH_TRY(vkCreateSemaphore(device, &semaphore_create_info, nullptr, &semaphore));
 
-  if (set_debug_name(context, semaphore, create_info.debug_name)) {
+  if (set_debug_name(device, semaphore, create_info.debug_name)) {
     report_fail_to_set_debug_name(create_info.debug_name);
   }
 
@@ -65,7 +66,7 @@ void cmd_pipeline_barrier2(VkCommandBuffer command, const DependencyInfo& depend
   const VkDependencyInfo vk_dependency_info{
       .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
       .dependencyFlags = dependency_info.dependency_flags,
-      .imageMemoryBarrierCount = beyond::narrow<uint32_t>(dependency_info.image_barriers.size()),
+      .imageMemoryBarrierCount = narrow<u32>(dependency_info.image_barriers.size()),
       .pImageMemoryBarriers = dependency_info.image_barriers.data(),
   };
 

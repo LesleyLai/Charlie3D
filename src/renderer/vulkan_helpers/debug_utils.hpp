@@ -9,11 +9,8 @@
 
 namespace vkh {
 
-class Context;
-
-[[nodiscard]] auto set_debug_name(Context& context, uint64_t object_handle,
-                                  VkObjectType object_type, beyond::ZStringView name) noexcept
-    -> VkResult;
+[[nodiscard]] auto set_debug_name(VkDevice device, uint64_t object_handle, VkObjectType object_type,
+                                  beyond::ZStringView name) noexcept -> VkResult;
 
 template <typename VkHandle> [[nodiscard]] consteval auto get_object_type() -> VkObjectType
 {
@@ -53,11 +50,10 @@ template <typename VkHandle> [[nodiscard]] consteval auto get_object_type() -> V
 }
 
 template <typename VkHandle>
-[[nodiscard]] BEYOND_FORCE_INLINE auto set_debug_name(Context& context, VkHandle handle,
+[[nodiscard]] BEYOND_FORCE_INLINE auto set_debug_name(VkDevice device, VkHandle handle,
                                                       beyond::ZStringView name) noexcept -> VkResult
 {
-  return set_debug_name(context, std::bit_cast<uint64_t>(handle), get_object_type<VkHandle>(),
-                        name);
+  return set_debug_name(device, std::bit_cast<uint64_t>(handle), get_object_type<VkHandle>(), name);
 }
 
 void report_fail_to_set_debug_name(beyond::ZStringView name) noexcept;

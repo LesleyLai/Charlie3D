@@ -8,11 +8,8 @@
 
 #include "error_handling.hpp"
 #include "required_field.hpp"
-#include "unique_resource.hpp"
 
 namespace vkh {
-
-class Context;
 
 struct PipelineVertexInputStateCreateInfo {
   std::vector<VkVertexInputBindingDescription> binding_descriptions;

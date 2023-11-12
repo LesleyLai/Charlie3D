@@ -12,8 +12,6 @@
 
 namespace vkh {
 
-class Context;
-
 // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 struct SubresourceRange {
   RequiredField<VkImageAspectFlags> aspect_mask;
@@ -46,7 +44,7 @@ struct ImageViewCreateInfo {
   beyond::ZStringView debug_name;
 };
 
-auto create_image_view(vkh::Context& context, const ImageViewCreateInfo& image_view_create_info)
+auto create_image_view(VkDevice device, const ImageViewCreateInfo& image_view_create_info)
     -> Expected<VkImageView>;
 
 } // namespace vkh

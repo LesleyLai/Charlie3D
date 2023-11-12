@@ -20,12 +20,12 @@ No goals
 
 ### Main Features
 
-- **Shader hot reloading**
+- **Shader hot reloading**: Set up shader modules and pipeline like normal and shader files will be automatically
+  watched for changes.
 
 ### Vulkan-related
 
 - [Vulkan helpers](src/renderer/vulkan_helpers) that simplifies object creation and debug name setting
-- [A descriptor allocator and layout cache](src/renderer/vulkan_helpers/descriptor_utils.hpp)
 
 ### Rendering
 

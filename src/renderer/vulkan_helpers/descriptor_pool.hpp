@@ -8,8 +8,6 @@
 
 namespace vkh {
 
-class Context;
-
 struct DescriptorPoolCreateInfo {
   VkDescriptorPoolCreateFlags flags = 0;
   u32 max_sets = 0;
@@ -17,7 +15,7 @@ struct DescriptorPoolCreateInfo {
   beyond::ZStringView debug_name;
 };
 
-auto create_descriptor_pool(Context& context, const DescriptorPoolCreateInfo& create_info)
+auto create_descriptor_pool(VkDevice device, const DescriptorPoolCreateInfo& create_info)
     -> Expected<VkDescriptorPool>;
 
 } // namespace vkh
