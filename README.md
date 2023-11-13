@@ -29,7 +29,8 @@ No goals
 
 ### Rendering
 
-- Shadow mapping with Percentage-Closer Filtering
+- Shadow mapping with Percentage-Closer Filtering (PCF)
+  and [Percentage-Closer Soft Shadows (PCSS)](https://developer.download.nvidia.cn/shaderlibrary/docs/shadow_PCSS.pdf)
 - Normal map support
 - Occlusion map support
 

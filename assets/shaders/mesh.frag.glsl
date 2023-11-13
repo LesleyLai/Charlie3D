@@ -19,22 +19,8 @@ layout (set = 2, binding = 1) uniform sampler2D normal_texture;
 layout (set = 2, binding = 2) uniform sampler2D occlusion_texture;
 
 // #define VISUALIZE_SHADOW_MAP
-
-
-#define PI 3.141592653589793
-
-float rand_2to1(vec2 uv) {
-    // 0 - 1
-    const float a = 12.9898;
-    const float b = 78.233;
-    const float c = 43758.5453;
-    float dt = dot(uv.xy, vec2(a, b));
-    float sn = mod(dt, PI);
-    return fract(sin(sn) * c);
-}
-
 #define NUM_SAMPLES 16
-const vec2 poisson_disk[NUM_SAMPLES] = vec2[](
+const vec2 poisson_disk_16[NUM_SAMPLES] = vec2[](
     vec2(-0.680088, -0.731923),
     vec2(-0.957909, -0.247622),
     vec2(0.0948045, -0.992508),
@@ -89,29 +75,60 @@ float shadow_map_proj(vec4 shadow_coord)
 }
 
 // percentage closer filter
-float PCF(vec4 shadow_coord) {
-    const float scale = 1.0;
-    const int filter_range = 1;
-    const int filter_size = filter_range * 2 + 1;
-    const int filer_size_square = filter_size * filter_size;
-
+float PCF(vec4 shadow_coord, float scale) {
     ivec2 tex_dim = textureSize(shadow_map, 0);
     vec2 delta = scale * vec2(1.0) / tex_dim;
 
     float visibility = 0.0;
 
     for (int i = 0; i < NUM_SAMPLES; ++i) {
-        vec2 offset = poisson_disk[i] * delta;
+        vec2 offset = poisson_disk_16[i] * delta;
         visibility += shadow_map_proj(shadow_coord + vec4(offset, 0.0, 0.0));
     }
-    return visibility / float(filer_size_square);
+    return visibility / float(NUM_SAMPLES);
+}
+
+// Calculate the average depth of occluders
+// return false if no blocker
+bool estimate_blocker_depth(vec2 uv, float z_receiver, out float blocker_depth) {
+    int blocker_count = 0;
+    float blocker_depth_sum = 0.0;
+
+    ivec2 tex_dim = textureSize(shadow_map, 0);
+    vec2 delta = vec2(1.0) / tex_dim * 20.0;
+
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        vec2 sample_uv = uv + poisson_disk_16[i] * delta;
+        float depth_on_shadow_map = texture(shadow_map, sample_uv).r;
+        if (depth_on_shadow_map /**+ 1e-3*/ < z_receiver) {
+            blocker_count++;
+            blocker_depth_sum += depth_on_shadow_map;
+        }
+    }
+
+    // No blockers
+    if (blocker_count == 0)  return false;
+
+    blocker_depth = blocker_depth_sum / float(blocker_count);
+    return true;
+}
+
+const float light_width = 50.0f;
+float PCSS(vec4 shadow_coord) {
+    float blocker_depth;
+    bool has_blocker = estimate_blocker_depth(shadow_coord.xy, shadow_coord.z, blocker_depth);
+    if (!has_blocker) { return 1.0; } // Fully visible if no blockers
+
+    float penumbra_size = (shadow_coord.z - blocker_depth) * light_width / blocker_depth;
+    return PCF(shadow_coord, penumbra_size);
 }
 
 void main()
 {
     //const bool is_shadow_map_enabled = shadow_mode == 1;
     //float visibility = is_shadow_map_enabled ? PCF(in_shadow_coord / in_shadow_coord.w) : 1.0;
-    float visibility = PCF(in_shadow_coord / in_shadow_coord.w);
+    //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
+    float visibility = PCSS(in_shadow_coord / in_shadow_coord.w);
 
     #ifdef VISUALIZE_SHADOW_MAP
 
