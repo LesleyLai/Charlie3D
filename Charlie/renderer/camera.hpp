@@ -12,7 +12,7 @@ namespace charlie {
 
 struct CameraController;
 
-class Camera : public InputListener {
+class Camera {
 public:
   beyond::Radian fovy = beyond::Degree{70};
   f32 aspect_ratio = 1.0f;
@@ -29,7 +29,7 @@ public:
   [[nodiscard]] auto proj_matrix() const -> beyond::Mat4;
 
   void draw_gui();
-  void on_input_event(const Event& event, const InputStates& states) override;
+  void on_input_event(const Event& event, const InputStates& states);
 
   void fixed_update();
 };

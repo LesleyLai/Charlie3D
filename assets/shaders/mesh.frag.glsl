@@ -113,20 +113,19 @@ bool estimate_blocker_depth(vec2 uv, float z_receiver, out float blocker_depth) 
     return true;
 }
 
-const float light_width = 50.0f;
+const float light_size = 50.0f;
 float PCSS(vec4 shadow_coord) {
     float blocker_depth;
     bool has_blocker = estimate_blocker_depth(shadow_coord.xy, shadow_coord.z, blocker_depth);
     if (!has_blocker) { return 1.0; } // Fully visible if no blockers
 
-    float penumbra_size = (shadow_coord.z - blocker_depth) * light_width / blocker_depth;
+    float penumbra_size = (shadow_coord.z - blocker_depth) * light_size / blocker_depth;
     return PCF(shadow_coord, penumbra_size);
 }
 
 void main()
 {
     //const bool is_shadow_map_enabled = shadow_mode == 1;
-    //float visibility = is_shadow_map_enabled ? PCF(in_shadow_coord / in_shadow_coord.w) : 1.0;
     //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
     float visibility = PCSS(in_shadow_coord / in_shadow_coord.w);
 

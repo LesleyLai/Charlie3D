@@ -30,6 +30,8 @@ void set_asset_path()
   Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
 }
 
+static bool hide_control_panel = false;
+
 void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charlie::Camera& camera,
               std::chrono::steady_clock::duration delta_time)
 {
@@ -38,6 +40,8 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   ImGui::NewFrame();
 
   // ImGui::ShowDemoWindow();
+
+  if (hide_control_panel) { return; }
 
   const float control_panel_width = ImGui::GetFontSize() * 30.f;
   ImGui::SetNextWindowPos(ImVec2(narrow<float>(resolution.width) - control_panel_width, 0));
@@ -142,9 +146,8 @@ int main(int argc, const char** argv)
 
   auto renderer = [&]() {
     ZoneScopedN("Renderer Constructor");
-    return charlie::Renderer{window};
+    return charlie::Renderer{window, input_handler};
   }();
-  input_handler.register_listener(renderer);
 
   charlie::ArcballCameraController arcball_controller{window, beyond::Point3{0, 0, -2},
                                                       beyond::Point3{0, 0, 0}};
@@ -153,7 +156,31 @@ int main(int argc, const char** argv)
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = beyond::narrow<float>(width) / beyond::narrow<float>(height);
   }
-  input_handler.register_listener(camera);
+  input_handler.register_listener(
+      [&](const charlie::Event& event, const charlie::InputStates& states) {
+        camera.on_input_event(event, states);
+      });
+
+  input_handler.register_listener([](const charlie::Event& event,
+                                     const charlie::InputStates& /*states*/) {
+    std::visit(
+        [](auto e) {
+          if constexpr (std::is_same_v<decltype(e), charlie::KeyboardEvent>) {
+            fmt::println("is key {} {}!", std::to_underlying(e.keycode),
+                         e.state == charlie::PressReleaseState::pressed ? "pressed" : "released");
+
+            if (e.state == charlie::PressReleaseState::pressed &&
+                e.keycode == charlie::KeyCode::h) {
+              fmt::println("is space!");
+              hide_control_panel = not hide_control_panel;
+
+              ImGui::SetNextFrameWantCaptureKeyboard(false);
+            }
+            std::fflush(stdout);
+          }
+        },
+        event);
+  });
 
   renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
 

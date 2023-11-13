@@ -114,7 +114,7 @@ struct IndirectBatch {
 
 namespace charlie {
 
-Renderer::Renderer(Window& window)
+Renderer::Renderer(Window& window, InputHandler& input_handler)
     : window_{&window}, resolution_{window.resolution()}, context_{window},
       graphics_queue_{context_.graphics_queue()},
       swapchain_{context_, {.extent = to_extent2d(resolution_)}}
@@ -136,6 +136,11 @@ Renderer::Renderer(Window& window)
 
   init_sampler();
   init_default_texture();
+
+  input_handler.register_listener(
+      [&](const charlie::Event& event, const charlie::InputStates& states) {
+        this->on_input_event(event, states);
+      });
 }
 
 auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info)

@@ -88,10 +88,10 @@ struct GPUSceneParameters {
   Mat4 sunlight_view_proj;
 };
 
-class Renderer : public InputListener {
+class Renderer {
 public:
-  explicit Renderer(Window& window);
-  ~Renderer() override;
+  explicit Renderer(Window& window, InputHandler& input_handler);
+  ~Renderer();
   Renderer(const Renderer&) = delete;
   auto operator=(const Renderer&) & -> Renderer& = delete;
   Renderer(Renderer&&) noexcept = delete;
@@ -105,8 +105,6 @@ public:
 
   void draw_shadow(VkCommandBuffer cmd);
   void draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view);
-
-  [[nodiscard]] auto frame_number() const -> usize { return frame_number_; }
 
   [[nodiscard]] auto resolution() const noexcept -> Resolution { return resolution_; }
 
@@ -141,6 +139,8 @@ public:
   {
     return scene_parameters_;
   }
+
+  void resize();
 
   uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
   uint32_t default_normal_texture_index = static_cast<uint32_t>(~0);
@@ -213,9 +213,7 @@ private:
   void init_sampler();
   void init_default_texture();
 
-  void resize();
-
-  void on_input_event(const Event& event, const InputStates& states) override;
+  void on_input_event(const Event& event, const InputStates& states);
 
   void present(u32& swapchain_image_index);
 };
