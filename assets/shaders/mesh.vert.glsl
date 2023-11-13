@@ -20,7 +20,7 @@ layout (location = 2) out vec3 out_tangent;
 layout (location = 3) out vec3 out_bi_tangent;
 layout (location = 4) out vec4 out_shadow_coord;
 
-const mat4 bias_mat = mat4(
+const mat4 light_space_to_NDC = mat4(
     0.5, 0.0, 0.0, 0.0,
     0.0, 0.5, 0.0, 0.0,
     0.0, 0.0, 1.0, 0.0,
@@ -37,5 +37,5 @@ void main()
     out_tangent = normalize(mat3(model) * in_tangent.xyz);
     out_bi_tangent = cross(out_normal, out_tangent) * in_tangent.w;
 
-    out_shadow_coord = bias_mat * scene_data.sunlight_view_proj * model * vec4(in_position, 1.0);
+    out_shadow_coord = light_space_to_NDC * scene_data.sunlight_view_proj * model * vec4(in_position, 1.0);
 }

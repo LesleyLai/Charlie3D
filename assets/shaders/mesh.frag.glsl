@@ -20,6 +20,39 @@ layout (set = 2, binding = 2) uniform sampler2D occlusion_texture;
 
 // #define VISUALIZE_SHADOW_MAP
 
+
+#define PI 3.141592653589793
+
+float rand_2to1(vec2 uv) {
+    // 0 - 1
+    const float a = 12.9898;
+    const float b = 78.233;
+    const float c = 43758.5453;
+    float dt = dot(uv.xy, vec2(a, b));
+    float sn = mod(dt, PI);
+    return fract(sin(sn) * c);
+}
+
+#define NUM_SAMPLES 16
+const vec2 poisson_disk[NUM_SAMPLES] = vec2[](
+    vec2(-0.680088, -0.731923),
+    vec2(-0.957909, -0.247622),
+    vec2(0.0948045, -0.992508),
+    vec2(-0.316418, -0.93561),
+    vec2(0.508091, -0.270309),
+    vec2(0.986855, -0.161122),
+    vec2(-0.0783372, -0.377044),
+    vec2(0.678299, -0.730012),
+    vec2(0.264303, 0.150586),
+    vec2(0.375585, 0.926198),
+    vec2(0.869216, 0.485342),
+    vec2(-0.0303609, 0.582547),
+    vec2(-0.456659, 0.886469),
+    vec2(-0.0502123, 0.998242),
+    vec2(-0.522737, 0.0698312),
+    vec2(-0.857891, 0.512805)
+);
+
 vec3 calculate_pixel_normal() {
     mat3 TNB = mat3(normalize(in_tangent), normalize(in_bi_tangent), normalize(in_normal));
 
@@ -41,13 +74,13 @@ float shadow_map_proj(vec4 shadow_coord)
 {
     // Need larger z bias when the light is more parallel to the surface
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
-    //float bias = 3e-2 * (1.1 - max(dot(-sunlight_direction, in_normal), 0.0));
+    //float bias = 1e-3 * (1.1 - max(dot(-sunlight_direction, in_normal), 0.0));
 
     float visibility = 1.0;
     if (0.0 < shadow_coord.z && shadow_coord.z < 1.0)
     {
         float z = texture(shadow_map, shadow_coord.xy).r;
-        if (shadow_coord.w > 0.0 && z < shadow_coord.z /**- bias*/)
+        if (shadow_coord.w > 0.0 && z < shadow_coord.z/** - bias*/)
         {
             visibility = 0.0;
         }
@@ -57,8 +90,8 @@ float shadow_map_proj(vec4 shadow_coord)
 
 // percentage closer filter
 float PCF(vec4 shadow_coord) {
-    const float scale = 0.5;
-    const int filter_range = 4;
+    const float scale = 1.0;
+    const int filter_range = 1;
     const int filter_size = filter_range * 2 + 1;
     const int filer_size_square = filter_size * filter_size;
 
@@ -66,13 +99,12 @@ float PCF(vec4 shadow_coord) {
     vec2 delta = scale * vec2(1.0) / tex_dim;
 
     float visibility = 0.0;
-    for (int x = -filter_range; x <= filter_range; ++x) {
-        for (int y = -filter_range; y <= filter_range; ++y) {
-            vec2 offset = vec2(x, y) * delta;
-            visibility += shadow_map_proj(shadow_coord + vec4(offset, 0.0, 0.0));
-        }
+
+    for (int i = 0; i < NUM_SAMPLES; ++i) {
+        vec2 offset = poisson_disk[i] * delta;
+        visibility += shadow_map_proj(shadow_coord + vec4(offset, 0.0, 0.0));
     }
-    return visibility / filer_size_square;
+    return visibility / float(filer_size_square);
 }
 
 void main()
