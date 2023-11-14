@@ -137,10 +137,7 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
   init_sampler();
   init_default_texture();
 
-  input_handler.register_listener(
-      [&](const charlie::Event& event, const charlie::InputStates& states) {
-        this->on_input_event(event, states);
-      });
+  input_handler.add_listener(std::bind_front(&Renderer::on_input_event, std::ref(*this)));
 }
 
 auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info)

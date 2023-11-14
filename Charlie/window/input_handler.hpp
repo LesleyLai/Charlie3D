@@ -1,6 +1,7 @@
 #ifndef CHARLIE3D_INPUT_HANDLER_HPP
 #define CHARLIE3D_INPUT_HANDLER_HPP
 
+#include <beyond/container/slot_map.hpp>
 #include <beyond/utils/unique_function.hpp>
 #include <variant>
 #include <vector>
@@ -169,16 +170,48 @@ public:
   }
 };
 
+using InputListener = beyond::unique_function<void(const Event&, const InputStates&)>;
+
+// A handle for InputListener callback. Used to remove an InputListener from the InputHandler
+struct InputListenerHandle : beyond::GenerationalHandle<InputListenerHandle, u32, 16> {
+  using GenerationalHandle::GenerationalHandle;
+};
+
 class InputHandler {
   InputStates states_;
-  std::vector<beyond::unique_function<void(const Event&, const InputStates&)>> listeners_;
+  beyond::SlotMap<InputListenerHandle, InputListener> listeners_;
 
 public:
   void handle_events();
-  void register_listener(beyond::unique_function<void(const Event&, const InputStates&)> listener)
+
+  auto add_listener(InputListener listener) -> InputListenerHandle
   {
-    listeners_.push_back(BEYOND_MOV(listener));
+    return listeners_.insert(BEYOND_MOV(listener));
   }
+
+  void remove_listener(InputListenerHandle handle) { listeners_.erase(handle); }
+
+  // Helper functions to add listeners that only care about specific types of input events
+  auto add_keyboard_event_listener(
+      beyond::unique_function<void(const KeyboardEvent&, const InputStates&)> listener)
+      -> InputListenerHandle;
+};
+
+// An RAII guard for InputListener
+class [[nodiscard]] ScopedInputListener {
+  InputHandler& handler_;
+  InputListenerHandle handle_;
+
+public:
+  ScopedInputListener(InputHandler& handler, InputListenerHandle handle)
+      : handler_{handler}, handle_{handle}
+  {
+  }
+
+  ~ScopedInputListener() { handler_.remove_listener(handle_); }
+
+  ScopedInputListener(ScopedInputListener&) = delete;
+  ScopedInputListener operator=(ScopedInputListener&) = delete;
 };
 
 } // namespace charlie

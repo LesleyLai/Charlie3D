@@ -130,6 +130,10 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   ImGui::End();
 }
 
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
+};
+
 int main(int argc, const char** argv)
 {
   std::string_view scene_file = "models/gltf_box/box.gltf";
@@ -156,31 +160,19 @@ int main(int argc, const char** argv)
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = beyond::narrow<float>(width) / beyond::narrow<float>(height);
   }
-  input_handler.register_listener(
-      [&](const charlie::Event& event, const charlie::InputStates& states) {
-        camera.on_input_event(event, states);
+  auto camera_input_listener = charlie::ScopedInputListener(
+      input_handler,
+      input_handler.add_listener(std::bind_front(&charlie::Camera::on_input_event, camera)));
+
+  input_handler.add_keyboard_event_listener(
+      [](const charlie::KeyboardEvent& event, const charlie::InputStates& /*states*/) {
+        if (event.state == charlie::PressReleaseState::pressed &&
+            event.keycode == charlie::KeyCode::f4) {
+          hide_control_panel = not hide_control_panel;
+
+          ImGui::SetNextFrameWantCaptureKeyboard(false);
+        }
       });
-
-  input_handler.register_listener([](const charlie::Event& event,
-                                     const charlie::InputStates& /*states*/) {
-    std::visit(
-        [](auto e) {
-          if constexpr (std::is_same_v<decltype(e), charlie::KeyboardEvent>) {
-            fmt::println("is key {} {}!", std::to_underlying(e.keycode),
-                         e.state == charlie::PressReleaseState::pressed ? "pressed" : "released");
-
-            if (e.state == charlie::PressReleaseState::pressed &&
-                e.keycode == charlie::KeyCode::h) {
-              fmt::println("is space!");
-              hide_control_panel = not hide_control_panel;
-
-              ImGui::SetNextFrameWantCaptureKeyboard(false);
-            }
-            std::fflush(stdout);
-          }
-        },
-        event);
-  });
 
   renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
 

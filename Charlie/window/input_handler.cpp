@@ -235,25 +235,25 @@ namespace {
   case SDLK_KP_ENTER:
     break;
   case SDLK_KP_1:
-    break;
+    return kp_1;
   case SDLK_KP_2:
-    break;
+    return kp_2;
   case SDLK_KP_3:
-    break;
+    return kp_3;
   case SDLK_KP_4:
-    break;
+    return kp_4;
   case SDLK_KP_5:
-    break;
+    return kp_5;
   case SDLK_KP_6:
-    break;
+    return kp_6;
   case SDLK_KP_7:
-    break;
+    return kp_7;
   case SDLK_KP_8:
-    break;
+    return kp_8;
   case SDLK_KP_9:
-    break;
+    return kp_9;
   case SDLK_KP_0:
-    break;
+    return kp_0;
   case SDLK_KP_PERIOD:
     break;
   case SDLK_APPLICATION:
@@ -580,6 +580,20 @@ namespace {
 
 namespace charlie {
 
+template <typename EventType>
+auto add_listener_impl(InputHandler& input_handler,
+                       beyond::unique_function<void(const EventType&, const InputStates&)> callback)
+{
+  return input_handler.add_listener(
+      [callback = BEYOND_MOV(callback)](const Event& event, const InputStates& states) mutable {
+        std::visit(
+            [&](auto e) {
+              if constexpr (std::is_same_v<decltype(e), EventType>) { callback(e, states); }
+            },
+            event);
+      });
+}
+
 void InputHandler::handle_events()
 {
   SDL_Event sdl_event;
@@ -611,9 +625,15 @@ void InputHandler::handle_events()
     }
 
     to_charlie_event(sdl_event).map([this](const Event& event) {
-      for (auto& listener : listeners_) { listener(event, states_); }
+      for (auto& listener : listeners_.values()) { listener(event, states_); }
     });
   }
+}
+auto InputHandler::add_keyboard_event_listener(
+    beyond::unique_function<void(const KeyboardEvent&, const InputStates&)> listener)
+    -> InputListenerHandle
+{
+  return add_listener_impl(*this, BEYOND_MOV(listener));
 }
 
 } // namespace charlie

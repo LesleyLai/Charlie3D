@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "../src/utils/thread_pool.hpp"
+#include "../Charlie/utils/thread_pool.hpp"
 
 namespace charlie {
 

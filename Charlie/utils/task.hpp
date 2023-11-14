@@ -4,6 +4,7 @@
 #include <coroutine>
 
 #include <beyond/types/optional.hpp>
+#include <beyond/utils/assert.hpp>
 #include <beyond/utils/panic.hpp>
 
 namespace charlie {

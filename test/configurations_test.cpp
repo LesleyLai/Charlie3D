@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "../src/utils/configuration.hpp"
+#include "../Charlie/utils/configuration.hpp"
 
 TEST_CASE("Configurations Test")
 {
