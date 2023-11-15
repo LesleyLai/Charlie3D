@@ -18,7 +18,6 @@ namespace charlie {
 [[nodiscard]] auto Camera::proj_matrix() const -> Mat4
 {
   return beyond::perspective(fovy, aspect_ratio, z_near, z_far);
-  // return beyond::ortho(-1.f, 1.f, -1.f, 1.f, 0.f, 100.f);
 }
 
 static void imgui_slider_degree(const char* label, beyond::Radian* v, beyond::Degree v_min,
@@ -64,7 +63,7 @@ void Camera::on_input_event(const Event& event, const InputStates& states)
             SDL_Window* window = SDL_GetWindowFromID(e.window_id);
             int width, height;
             SDL_GetWindowSize(window, &width, &height);
-            this->aspect_ratio = beyond::narrow<f32>(width) / beyond::narrow<f32>(height);
+            aspect_ratio = beyond::narrow<f32>(width) / beyond::narrow<f32>(height);
           }
         }
       },

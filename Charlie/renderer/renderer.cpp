@@ -1227,9 +1227,9 @@ void Renderer::resize()
   resolution_ = window_->resolution();
 
   // recreate swapchain
-  swapchain_ = vkh::Swapchain(context_,
-                              vkh::SwapchainCreateInfo{.extent = charlie::to_extent2d(resolution()),
-                                                       .old_swapchain = swapchain_.get()});
+  swapchain_ =
+      vkh::Swapchain(context_, vkh::SwapchainCreateInfo{.extent = charlie::to_extent2d(resolution_),
+                                                        .old_swapchain = swapchain_.get()});
 
   // recreate depth image
   vkDestroyImageView(context_, depth_image_view_, nullptr);

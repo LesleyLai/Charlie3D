@@ -160,9 +160,10 @@ int main(int argc, const char** argv)
     const auto [width, height] = window.resolution();
     camera.aspect_ratio = beyond::narrow<float>(width) / beyond::narrow<float>(height);
   }
+
   auto camera_input_listener = charlie::ScopedInputListener(
-      input_handler,
-      input_handler.add_listener(std::bind_front(&charlie::Camera::on_input_event, camera)));
+      input_handler, input_handler.add_listener(
+                         std::bind_front(&charlie::Camera::on_input_event, std::ref(camera))));
 
   input_handler.add_keyboard_event_listener(
       [](const charlie::KeyboardEvent& event, const charlie::InputStates& /*states*/) {

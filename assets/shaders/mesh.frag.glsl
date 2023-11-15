@@ -98,8 +98,8 @@ bool estimate_blocker_depth(vec2 uv, float z_receiver, out float blocker_depth) 
     vec2 delta = vec2(1.0) / tex_dim * 20.0;
 
     for (int i = 0; i < NUM_SAMPLES; i++) {
-        vec2 sample_uv = uv + poisson_disk_16[i] * delta;
-        float depth_on_shadow_map = texture(shadow_map, sample_uv).r;
+        vec2 offset = poisson_disk_16[i] * delta;
+        float depth_on_shadow_map = texture(shadow_map, uv + offset).r;
         if (depth_on_shadow_map /**+ 1e-3*/ < z_receiver) {
             blocker_count++;
             blocker_depth_sum += depth_on_shadow_map;
