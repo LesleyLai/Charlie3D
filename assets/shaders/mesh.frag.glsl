@@ -19,8 +19,8 @@ layout (set = 2, binding = 1) uniform sampler2D normal_texture;
 layout (set = 2, binding = 2) uniform sampler2D occlusion_texture;
 
 // #define VISUALIZE_SHADOW_MAP
-#define NUM_SAMPLES 16
-const vec2 poisson_disk_16[NUM_SAMPLES] = vec2[](
+#define SHADOW_SAMPLE_COUNT 16
+const vec2 poisson_disk_16[SHADOW_SAMPLE_COUNT] = vec2[](
     vec2(-0.680088, -0.731923),
     vec2(-0.957909, -0.247622),
     vec2(0.0948045, -0.992508),
@@ -75,29 +75,25 @@ float shadow_map_proj(vec4 shadow_coord)
 }
 
 // percentage closer filter
-float PCF(vec4 shadow_coord, float scale) {
-    ivec2 tex_dim = textureSize(shadow_map, 0);
-    vec2 delta = scale * vec2(1.0) / tex_dim;
-
+float shadow_PCF(vec4 shadow_coord, vec2 texel_size, float scale) {
     float visibility = 0.0;
-
-    for (int i = 0; i < NUM_SAMPLES; ++i) {
-        vec2 offset = poisson_disk_16[i] * delta;
+    for (int i = 0; i < SHADOW_SAMPLE_COUNT; ++i) {
+        vec2 offset = poisson_disk_16[i] * scale * texel_size;
         visibility += shadow_map_proj(shadow_coord + vec4(offset, 0.0, 0.0));
     }
-    return visibility / float(NUM_SAMPLES);
+    return visibility / float(SHADOW_SAMPLE_COUNT);
 }
 
 // Calculate the average depth of occluders
 // return false if no blocker
-bool estimate_blocker_depth(vec2 uv, float z_receiver, out float blocker_depth) {
+bool estimate_blocker_depth(vec2 uv, float z_receiver, out float z_blocker) {
     int blocker_count = 0;
     float blocker_depth_sum = 0.0;
 
     ivec2 tex_dim = textureSize(shadow_map, 0);
-    vec2 delta = vec2(1.0) / tex_dim * 20.0;
+    vec2 delta = vec2(1.0) / tex_dim * 10.0;
 
-    for (int i = 0; i < NUM_SAMPLES; i++) {
+    for (int i = 0; i < SHADOW_SAMPLE_COUNT; i++) {
         vec2 offset = poisson_disk_16[i] * delta;
         float depth_on_shadow_map = texture(shadow_map, uv + offset).r;
         if (depth_on_shadow_map /**+ 1e-3*/ < z_receiver) {
@@ -109,30 +105,36 @@ bool estimate_blocker_depth(vec2 uv, float z_receiver, out float blocker_depth) 
     // No blockers
     if (blocker_count == 0)  return false;
 
-    blocker_depth = blocker_depth_sum / float(blocker_count);
+    z_blocker = blocker_depth_sum / float(blocker_count);
     return true;
 }
 
-const float light_size = 50.0f;
-float PCSS(vec4 shadow_coord) {
-    float blocker_depth;
-    bool has_blocker = estimate_blocker_depth(shadow_coord.xy, shadow_coord.z, blocker_depth);
+float shadow_PCSS(vec4 shadow_coord, vec2 texel_size, float light_size) {
+    float z_receiver = shadow_coord.z;
+
+    float z_blocker;
+    bool has_blocker = estimate_blocker_depth(shadow_coord.xy, z_receiver, z_blocker);
     if (!has_blocker) { return 1.0; } // Fully visible if no blockers
 
-    float penumbra_size = (shadow_coord.z - blocker_depth) * light_size / blocker_depth;
-    return PCF(shadow_coord, penumbra_size);
+    float penumbra_size = (z_receiver - z_blocker) * light_size / z_blocker;
+    return shadow_PCF(shadow_coord, texel_size, penumbra_size);
+}
+
+// Returns a visibility between [0, 1]
+float shadow_mapping() {
+    ivec2 shadow_map_size = textureSize(shadow_map, 0);
+    vec2 shadow_texel_size = vec2(1.0) / shadow_map_size;
+
+    //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
+    const float light_size = 50.0f;
+    return shadow_PCSS(in_shadow_coord, shadow_texel_size, light_size);
 }
 
 void main()
 {
-    //const bool is_shadow_map_enabled = shadow_mode == 1;
-    //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
-    float visibility = PCSS(in_shadow_coord / in_shadow_coord.w);
-
     #ifdef VISUALIZE_SHADOW_MAP
 
-    vec4 shadow_coord = in_shadow_coord / in_shadow_coord.w;
-    float color = texture(shadow_map, shadow_coord.xy).r;
+    float color = texture(shadow_map, in_shadow_coord.xy).r;
     out_frag_color = vec4(color, color, color, 1.0);
 
     #else
@@ -149,6 +151,8 @@ void main()
     float ambient_strength = scene_data.sunlight_direction.w;
     vec3 ambient = albedo * ambient_occlusion * ambient_strength;
     vec3 diffuse = albedo * sunlight_color * max(dot(-sunlight_direction, in_normal), 0.0);
+
+    float visibility = shadow_mapping();
 
     vec3 li = ambient + diffuse * visibility;
 
