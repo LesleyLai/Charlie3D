@@ -20,6 +20,8 @@ layout (location = 2) out vec3 out_tangent;
 layout (location = 3) out vec3 out_bi_tangent;
 layout (location = 4) out vec4 out_shadow_coord;
 
+layout (location = 5) out flat int out_material_index;
+
 const mat4 light_space_to_NDC = mat4(
     0.5, 0.0, 0.0, 0.0,
     0.0, 0.5, 0.0, 0.0,
@@ -38,4 +40,6 @@ void main()
     out_bi_tangent = cross(out_normal, out_tangent) * in_tangent.w;
 
     out_shadow_coord = light_space_to_NDC * scene_data.sunlight_view_proj * model * vec4(in_position, 1.0);
+
+    out_material_index = material_index_buffer.material_ids[gl_BaseInstance];
 }

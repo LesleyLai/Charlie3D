@@ -28,9 +28,8 @@
 
 namespace {
 
-struct GPUObjectData {
-  Mat4 model;
-};
+static constexpr u32 max_bindless_texture_count = 1024;
+static constexpr u32 bindless_texture_binding = 10;
 
 struct GPUCameraData {
   Mat4 view;
@@ -78,7 +77,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 
 struct IndirectBatch {
   charlie::MeshHandle mesh;
-  charlie::MaterialHandle material;
+  u32 material_index = 0;
   u32 first = 0;
   u32 count = 0;
 };
@@ -100,7 +99,7 @@ struct IndirectBatch {
     } else {
       draws.push_back(IndirectBatch{
           .mesh = object.mesh,
-          .material = object.material,
+          .material_index = object.material_index,
           .first = i,
           .count = 1,
       });
@@ -348,25 +347,69 @@ void Renderer::init_descriptors()
   descriptor_allocator_ = std::make_unique<DescriptorAllocator>(context_);
   descriptor_layout_cache_ = std::make_unique<DescriptorLayoutCache>(context_.device());
 
-  static constexpr VkDescriptorSetLayoutBinding material_bindings[] = {
-      // albedo
-      {.binding = 0,
+  static constexpr VkDescriptorSetLayoutBinding texture_bindings[] = {
+      // Image sampler binding
+      {.binding = bindless_texture_binding,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-      // normal
-      {.binding = 1,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-      // occlusion
-      {.binding = 2,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
+       .descriptorCount = max_bindless_texture_count,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
-  material_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_set_layout({.bindings = material_bindings})
-          .value();
+
+  static constexpr VkDescriptorBindingFlags bindless_flags =
+      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT; // VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+  static constexpr VkDescriptorBindingFlags binding_flags[] = {bindless_flags};
+
+  VkDescriptorSetLayoutBindingFlagsCreateInfo layout_binding_flags_create_info{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindingFlags = binding_flags,
+  };
+
+  static constexpr VkDescriptorSetLayoutBinding material_bindings[] = {
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+  };
+  material_set_layout_ = descriptor_layout_cache_
+                             ->create_descriptor_set_layout({
+                                 .p_next = nullptr,
+                                 .bindings = material_bindings,
+                             })
+                             .value();
+
+  {
+    vkh::DescriptorSetLayoutCreateInfo bindless_texture_descriptor_set_layout_create_info{
+        .p_next = &layout_binding_flags_create_info,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+        .bindings = texture_bindings,
+        .debug_name = "Material Descriptor Set Layout",
+    };
+
+    static constexpr VkDescriptorPoolSize pool_sizes_bindless[] = {
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, max_bindless_texture_count},
+    };
+    bindless_texture_set_layout_ = vkh::create_descriptor_set_layout(
+                                       context_, bindless_texture_descriptor_set_layout_create_info)
+                                       .value();
+    VkDescriptorPoolCreateInfo descriptor_pool_create_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+        .maxSets = max_bindless_texture_count * beyond::size(pool_sizes_bindless),
+        .poolSizeCount = beyond::size(pool_sizes_bindless),
+        .pPoolSizes = pool_sizes_bindless,
+    };
+    VK_CHECK(vkCreateDescriptorPool(context_, &descriptor_pool_create_info, nullptr,
+                                    &bindless_texture_descriptor_pool_));
+
+    const VkDescriptorSetAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = bindless_texture_descriptor_pool_,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &bindless_texture_set_layout_};
+
+    VK_CHECK(vkAllocateDescriptorSets(context_, &alloc_info, &bindless_texture_descriptor_set_));
+  }
 
   const size_t scene_param_buffer_size =
       frame_overlap * context_.align_uniform_buffer_size(sizeof(GPUSceneParameters));
@@ -390,14 +433,25 @@ void Renderer::init_descriptors()
                                              })
                               .value();
 
-    frame.object_buffer = vkh::create_buffer(context_,
-                                             vkh::BufferCreateInfo{
-                                                 .size = sizeof(GPUObjectData) * max_object_count,
-                                                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                                 .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                                 .debug_name = fmt::format("Objects Buffer {}", i),
-                                             })
-                              .value();
+    frame.model_matrix_buffer =
+        vkh::create_buffer(context_,
+                           vkh::BufferCreateInfo{
+                               .size = sizeof(Mat4) * max_object_count,
+                               .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                               .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                               .debug_name = fmt::format("Objects Buffer {}", i),
+                           })
+            .value();
+
+    frame.material_index_buffer =
+        vkh::create_buffer(context_,
+                           vkh::BufferCreateInfo{
+                               .size = sizeof(int) * max_object_count,
+                               .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                               .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                               .debug_name = fmt::format("Material Index Buffer {}", i),
+                           })
+            .value();
 
     frame.indirect_buffer =
         vkh::create_buffer(context_,
@@ -437,14 +491,20 @@ void Renderer::init_descriptors()
     frame.global_descriptor_set = global_descriptor_build_result.set;
 
     // Objects
-    const VkDescriptorBufferInfo object_buffer_info = {.buffer = frame.object_buffer.buffer,
-                                                       .offset = 0,
-                                                       .range = sizeof(GPUObjectData) *
-                                                                max_object_count};
+    const VkDescriptorBufferInfo model_matrix_buffer_info = {
+        .buffer = frame.model_matrix_buffer.buffer,
+        .offset = 0,
+        .range = sizeof(Mat4) * max_object_count};
+    const VkDescriptorBufferInfo material_index_buffer_info = {
+        .buffer = frame.material_index_buffer.buffer,
+        .offset = 0,
+        .range = sizeof(int) * max_object_count};
 
     auto objects_descriptor_build_result =
         DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
-            .bind_buffer(0, object_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .bind_buffer(0, model_matrix_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                         VK_SHADER_STAGE_VERTEX_BIT)
+            .bind_buffer(1, material_index_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                          VK_SHADER_STAGE_VERTEX_BIT)
             .build()
             .value();
@@ -472,7 +532,8 @@ void Renderer::init_mesh_pipeline()
       pipeline_manager_->add_shader("mesh.frag.glsl", ShaderStage::fragment);
 
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
-                                               object_descriptor_set_layout_, material_set_layout_};
+                                               object_descriptor_set_layout_, material_set_layout_,
+                                               bindless_texture_set_layout_};
 
   const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -645,8 +706,8 @@ void Renderer::init_default_texture()
       .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
   };
   cpu_image2.data[0] = 127;
-  cpu_image2.data[1] = 255;
-  cpu_image2.data[2] = 127;
+  cpu_image2.data[1] = 127;
+  cpu_image2.data[2] = 255;
   cpu_image2.data[3] = 255;
 
   const auto default_normal_image = upload_image(cpu_image2, {
@@ -919,12 +980,11 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
                           &current_frame().object_descriptor_set, 0, nullptr);
 
   auto* object_data =
-      beyond::narrow<GPUObjectData*>(context_.map(current_frame().object_buffer).value());
+      beyond::narrow<Mat4*>(context_.map(current_frame().model_matrix_buffer).value());
   const usize object_count = scene_->global_transforms.size();
   BEYOND_ENSURE(object_count <= max_object_count);
-  for (usize i = 0; i < object_count; ++i) { object_data[i].model = scene_->global_transforms[i]; }
-
-  context_.unmap(current_frame().object_buffer);
+  for (usize i = 0; i < object_count; ++i) { object_data[i] = scene_->global_transforms[i]; }
+  context_.unmap(current_frame().model_matrix_buffer);
 
   for (const auto [node_index, render_component] : scene_->render_components) {
     const MeshHandle mesh_handle = render_component.mesh;
@@ -1016,22 +1076,27 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   for (const auto [node_index, render_component] : scene_->render_components) {
     render_objects_.push_back(RenderObject{
         .mesh = render_component.mesh,
-        .material = render_component.material,
+        .material_index = render_component.material_index,
         .model_matrix = scene_->global_transforms[node_index],
     });
   }
 
   // Copy to object buffer
-  auto* object_data =
-      beyond::narrow<GPUObjectData*>(context_.map(current_frame().object_buffer).value());
+  auto* object_model_matrix_data =
+      beyond::narrow<Mat4*>(context_.map(current_frame().model_matrix_buffer).value());
+  auto* object_material_index_data =
+      beyond::narrow<i32*>(context_.map(current_frame().material_index_buffer).value());
 
   const usize object_count = render_objects_.size();
   BEYOND_ENSURE(object_count <= max_object_count);
   for (usize i = 0; i < scene_->global_transforms.size(); ++i) {
-    object_data[i].model = scene_->global_transforms[i];
+    object_model_matrix_data[i] = scene_->global_transforms[i];
+    const auto material_index = render_objects_[i].material_index;
+    object_material_index_data[i] = material_index;
   }
 
-  context_.unmap(current_frame().object_buffer);
+  context_.unmap(current_frame().model_matrix_buffer);
+  context_.unmap(current_frame().material_index_buffer);
 
   // Generate draws
   const auto draws = compact_draws(render_objects_);
@@ -1071,11 +1136,14 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
-  for (const IndirectBatch& draw : draws) {
-    const auto& material = materials_.try_get(draw.material);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
-                            &material.value().descriptor_set, 0, nullptr);
 
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
+                          &bindless_texture_descriptor_set_, 0, nullptr);
+
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
+                          &material_descriptor_set_, 0, nullptr);
+
+  for (const IndirectBatch& draw : draws) {
     const Mesh& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
     constexpr VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
@@ -1127,7 +1195,7 @@ Renderer::~Renderer()
     TracyVkDestroy(frame.tracy_vk_ctx);
 
     vkh::destroy_buffer(context_, frame.indirect_buffer);
-    vkh::destroy_buffer(context_, frame.object_buffer);
+    vkh::destroy_buffer(context_, frame.model_matrix_buffer);
     vkh::destroy_buffer(context_, frame.camera_buffer);
 
     vkDestroyFence(context_, frame.render_fence, nullptr);
@@ -1167,50 +1235,67 @@ void Renderer::resize()
   init_depth_image();
 }
 
-auto Renderer::add_texture(Texture texture) -> uint32_t
+auto Renderer::add_texture(Texture texture) -> u32
 {
   textures_.push_back(texture);
-  return beyond::narrow<uint32_t>(textures_.size() - 1);
+  const u32 texture_index = narrow<u32>(textures_.size() - 1);
+
+  VkDescriptorImageInfo image_info{.sampler = sampler_,
+                                   .imageView = texture.image_view,
+                                   .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+
+  VkWriteDescriptorSet descriptor_write = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = bindless_texture_descriptor_set_,
+      .dstBinding = bindless_texture_binding,
+      .dstArrayElement = texture_index,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .pImageInfo = &image_info,
+  };
+  vkUpdateDescriptorSets(context_, 1, &descriptor_write, 0, nullptr);
+
+  return texture_index;
 }
 
-auto Renderer::create_material(const CPUMaterial& material_info) -> MaterialHandle
+auto Renderer::create_material(const CPUMaterial& material_info) -> u32
 {
-  const auto albedo_texture = textures_.at(material_info.albedo_texture_index.value());
-  const auto normal_texture = textures_.at(material_info.normal_texture_index.value());
-  const auto occlusion_texture = textures_.at(material_info.occlusion_texture_index.value());
+  const u32 albedo_texture_index = material_info.albedo_texture_index.value();
+  const u32 normal_texture_index = material_info.normal_texture_index.value();
+  const u32 occlusion_texture_index = material_info.occlusion_texture_index.value();
 
-  // write to the descriptor set so that it points to diffuse texture
-  const VkDescriptorImageInfo albedo_image_info = {
-      .sampler = sampler_,
-      .imageView = albedo_texture.image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  materials_.push_back(Material{.albedo_texture_index = albedo_texture_index,
+                                .normal_texture_index = normal_texture_index,
+                                .occlusion_texture_index = occlusion_texture_index});
+
+  return narrow<u32>(materials_.size() - 1);
+}
+
+void Renderer::upload_materials()
+{
+  material_buffer_ = vkh::create_buffer_from_data(context_,
+                                                  vkh::BufferCreateInfo{
+                                                      .size = sizeof(Material) * materials_.size(),
+                                                      .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                                      .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                                      .debug_name = fmt::format("Material Buffer"),
+                                                  },
+                                                  materials_.data())
+                         .value();
+
+  const VkDescriptorBufferInfo material_buffer_info = {
+      .buffer = material_buffer_,
+      .offset = 0,
+      .range = materials_.size() * sizeof(Material),
   };
 
-  const VkDescriptorImageInfo normal_image_info = {
-      .sampler = sampler_,
-      .imageView = normal_texture.image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  };
-
-  const VkDescriptorImageInfo occlusion_image_info = {
-      .sampler = sampler_,
-      .imageView = occlusion_texture.image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  };
-
-  // alloc descriptor set for material
   auto result = DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
-                    .bind_image(0, albedo_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                VK_SHADER_STAGE_FRAGMENT_BIT)
-                    .bind_image(1, normal_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                VK_SHADER_STAGE_FRAGMENT_BIT)
-                    .bind_image(2, occlusion_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .bind_buffer(0, material_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                 VK_SHADER_STAGE_FRAGMENT_BIT)
                     .build()
                     .value();
   BEYOND_ENSURE(material_set_layout_ == result.layout);
-
-  return materials_.insert(Material{.descriptor_set = result.set});
+  material_descriptor_set_ = result.set;
 }
 
 } // namespace charlie

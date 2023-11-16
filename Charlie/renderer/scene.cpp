@@ -83,11 +83,12 @@ namespace charlie {
               .map([&](uint32_t index) { return texture_indices_map[index]; })
               .value_or(renderer.default_albedo_texture_index);
 
-      const MaterialHandle material = renderer.create_material(material_info);
-
-      render_components.insert({i, RenderComponent{.mesh = mesh_handle, .material = material}});
+      render_components.insert(
+          {i, RenderComponent{.mesh = mesh_handle,
+                              .material_index = renderer.create_material(material_info)}});
     }
   }
+  renderer.upload_materials();
 
   auto local_transforms = std::move(cpu_scene.local_transforms);
   std::vector<beyond::Mat4> global_transforms(local_transforms);

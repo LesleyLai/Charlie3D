@@ -23,13 +23,9 @@ struct MeshHandle : beyond::GenerationalHandle<MeshHandle, u32, 16> {
   using GenerationalHandle::GenerationalHandle;
 };
 
-struct MaterialHandle : beyond::GenerationalHandle<MaterialHandle, u32, 16> {
-  using GenerationalHandle::GenerationalHandle;
-};
-
 struct RenderComponent {
   MeshHandle mesh;
-  MaterialHandle material;
+  u32 material_index = 0;
 };
 
 struct Scene {

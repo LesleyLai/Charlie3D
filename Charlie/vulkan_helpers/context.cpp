@@ -80,11 +80,18 @@ Context::Context(charlie::Window& window)
         .allow_any_gpu_device_type(false)
         .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
         .add_required_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
+        .add_required_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
         .set_required_features({
             .fillModeNonSolid = true,
         })
         .set_required_features_11({.shaderDrawParameters = true})
-        .set_required_features_12({.descriptorIndexing = true})
+        .set_required_features_12({
+            .descriptorIndexing = true,
+            .shaderSampledImageArrayNonUniformIndexing = true,
+            .descriptorBindingSampledImageUpdateAfterBind = true,
+            .descriptorBindingPartiallyBound = true,
+            .runtimeDescriptorArray = true,
+        })
         .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
         .select();
   }();

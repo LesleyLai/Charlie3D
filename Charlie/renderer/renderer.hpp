@@ -42,12 +42,14 @@ struct Texture {
 };
 
 struct Material {
-  VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+  u32 albedo_texture_index = 0;
+  u32 normal_texture_index = 0;
+  u32 occlusion_texture_index = 0;
 };
 
 struct RenderObject {
   MeshHandle mesh;
-  MaterialHandle material;
+  u32 material_index;
   Mat4 model_matrix;
 };
 
@@ -62,7 +64,8 @@ struct FrameData {
   vkh::AllocatedBuffer camera_buffer{};
   VkDescriptorSet global_descriptor_set{};
 
-  vkh::AllocatedBuffer object_buffer{};
+  vkh::AllocatedBuffer model_matrix_buffer{};
+  vkh::AllocatedBuffer material_index_buffer{};
   VkDescriptorSet object_descriptor_set{};
 
   vkh::AllocatedBuffer indirect_buffer{};
@@ -128,7 +131,8 @@ public:
     return beyond::narrow<uint32_t>(textures_.size());
   }
 
-  [[nodiscard]] auto create_material(const CPUMaterial& material) -> MaterialHandle;
+  [[nodiscard]] auto create_material(const CPUMaterial& material) -> u32;
+  void upload_materials();
 
   [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
   {
@@ -167,23 +171,28 @@ private:
 
   std::unique_ptr<charlie::DescriptorAllocator> descriptor_allocator_;
   std::unique_ptr<charlie::DescriptorLayoutCache> descriptor_layout_cache_;
-  VkDescriptorSetLayout global_descriptor_set_layout_ = {};
-  VkDescriptorSetLayout object_descriptor_set_layout_ = {};
-  VkDescriptorSetLayout material_set_layout_ = {};
+  VkDescriptorSetLayout global_descriptor_set_layout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout object_descriptor_set_layout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout material_set_layout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout bindless_texture_set_layout_ = VK_NULL_HANDLE;
+  VkDescriptorPool bindless_texture_descriptor_pool_ = VK_NULL_HANDLE;
+  VkDescriptorSet bindless_texture_descriptor_set_ = VK_NULL_HANDLE;
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
 
   std::unique_ptr<PipelineManager> pipeline_manager_;
 
-  VkPipelineLayout shadow_map_pipeline_layout_ = {};
+  VkPipelineLayout shadow_map_pipeline_layout_ = VK_NULL_HANDLE;
   PipelineHandle shadow_map_pipeline_;
 
-  VkPipelineLayout mesh_pipeline_layout_ = {};
+  VkPipelineLayout mesh_pipeline_layout_ = VK_NULL_HANDLE;
   PipelineHandle mesh_pipeline_without_shadow_;
   PipelineHandle mesh_pipeline_;
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
-  beyond::SlotMap<MaterialHandle, Material> materials_;
+  std::vector<Material> materials_;
+  vkh::AllocatedBuffer material_buffer_;
+  VkDescriptorSet material_descriptor_set_ = VK_NULL_HANDLE;
 
   std::vector<vkh::AllocatedImage> images_;
   VkSampler sampler_ = VK_NULL_HANDLE;

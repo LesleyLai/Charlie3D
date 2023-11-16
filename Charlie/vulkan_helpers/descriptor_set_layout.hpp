@@ -9,6 +9,7 @@
 namespace vkh {
 
 struct DescriptorSetLayoutCreateInfo {
+  void* p_next = nullptr;
   VkDescriptorSetLayoutCreateFlags flags = 0;
   std::span<const VkDescriptorSetLayoutBinding> bindings;
   beyond::ZStringView debug_name;

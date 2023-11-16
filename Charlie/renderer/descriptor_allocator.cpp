@@ -230,23 +230,22 @@ auto DescriptorBuilder::bind_image(uint32_t binding, const VkDescriptorImageInfo
 auto DescriptorBuilder::build() -> vkh::Expected<DescriptorBuilderResult>
 {
   // build layout first
-  vkh::Expected<VkDescriptorSetLayout> maybe_layout =
-      cache_->create_descriptor_set_layout(vkh::DescriptorSetLayoutCreateInfo{
+  return cache_
+      ->create_descriptor_set_layout(vkh::DescriptorSetLayoutCreateInfo{
           .bindings = bindings_,
-      });
-  if (not maybe_layout.has_value()) { return beyond::make_unexpected(maybe_layout.error()); }
+      })
+      .and_then([this](VkDescriptorSetLayout layout) {
+        return alloc_
+            ->allocate(layout) //
+            .map([&](VkDescriptorSet set) {
+              // write descriptor
+              for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
 
-  VkDescriptorSetLayout layout = maybe_layout.value();
-  return alloc_
-      ->allocate(layout) //
-      .map([&](VkDescriptorSet set) {
-        // write descriptor
-        for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
+              vkUpdateDescriptorSets(alloc_->device(), beyond::narrow<u32>(writes_.size()),
+                                     writes_.data(), 0, nullptr);
 
-        vkUpdateDescriptorSets(alloc_->device(), beyond::narrow<u32>(writes_.size()),
-                               writes_.data(), 0, nullptr);
-
-        return DescriptorBuilderResult{layout, set};
+              return DescriptorBuilderResult{layout, set};
+            });
       });
 }
 
