@@ -25,14 +25,6 @@
 #include <unordered_map>
 #include <vector>
 
-namespace vkh {
-
-class DescriptorAllocator;
-class DescriptorLayoutCache;
-class DescriptorBuilder;
-
-} // namespace vkh
-
 namespace tracy {
 
 class VkCtx;
@@ -40,6 +32,10 @@ class VkCtx;
 }
 
 namespace charlie {
+
+class DescriptorAllocator;
+class DescriptorLayoutCache;
+class DescriptorBuilder;
 
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
@@ -151,7 +147,6 @@ private:
   Window* window_ = nullptr;
   Resolution resolution_;
   vkh::Context context_;
-  VkQueue transfer_queue_{};
   VkQueue graphics_queue_{};
 
   vkh::Swapchain swapchain_;
@@ -171,8 +166,8 @@ private:
   usize frame_number_ = 0;
   FrameData frames_[frame_overlap];
 
-  std::unique_ptr<vkh::DescriptorAllocator> descriptor_allocator_;
-  std::unique_ptr<vkh::DescriptorLayoutCache> descriptor_layout_cache_;
+  std::unique_ptr<charlie::DescriptorAllocator> descriptor_allocator_;
+  std::unique_ptr<charlie::DescriptorLayoutCache> descriptor_layout_cache_;
   VkDescriptorSetLayout global_descriptor_set_layout_ = {};
   VkDescriptorSetLayout object_descriptor_set_layout_ = {};
   VkDescriptorSetLayout material_set_layout_ = {};

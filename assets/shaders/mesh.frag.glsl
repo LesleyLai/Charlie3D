@@ -74,11 +74,33 @@ float shadow_map_proj(vec4 shadow_coord)
     return visibility;
 }
 
+
+// Returns a uniform random number from [0, 1] base on a vec4
+float random4(vec4 seed) {
+    float dot_product = dot(seed, vec4(12.9898, 78.233, 45.164, 94.673));
+    return fract(sin(dot_product) * 43758.5453);
+}
+
+mat2 rotation2d(float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+
+    return mat2(
+        c, -s,
+        s, c
+    );
+}
+
+
 // percentage closer filter
 float shadow_PCF(vec4 shadow_coord, vec2 texel_size, float scale) {
     float visibility = 0.0;
     for (int i = 0; i < SHADOW_SAMPLE_COUNT; ++i) {
+        int index = int(random4(vec4(shadow_coord.xyz, i)) * 16.0) % 16;
+        float rotate = random4(vec4(shadow_coord.xyz, i)) * 3.1415926 * 2.0;
+
         vec2 offset = poisson_disk_16[i] * scale * texel_size;
+        offset = rotation2d(rotate) * offset;
         visibility += shadow_map_proj(shadow_coord + vec4(offset, 0.0, 0.0));
     }
     return visibility / float(SHADOW_SAMPLE_COUNT);
@@ -91,10 +113,11 @@ bool estimate_blocker_depth(vec2 uv, float z_receiver, out float z_blocker) {
     float blocker_depth_sum = 0.0;
 
     ivec2 tex_dim = textureSize(shadow_map, 0);
-    vec2 delta = vec2(1.0) / tex_dim * 10.0;
+    vec2 delta = vec2(1.0) / tex_dim * 5.0;
 
-    for (int i = 0; i < SHADOW_SAMPLE_COUNT; i++) {
-        vec2 offset = poisson_disk_16[i] * delta;
+    for (int i = 0; i < 4; i++) {
+        int index = int(random4(vec4(uv, z_receiver, i)) * 16.0) % 16;
+        vec2 offset = poisson_disk_16[index] * delta;
         float depth_on_shadow_map = texture(shadow_map, uv + offset).r;
         if (depth_on_shadow_map /**+ 1e-3*/ < z_receiver) {
             blocker_count++;
@@ -126,7 +149,7 @@ float shadow_mapping() {
     vec2 shadow_texel_size = vec2(1.0) / shadow_map_size;
 
     //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
-    const float light_size = 50.0f;
+    const float light_size = 10.0f;
     return shadow_PCSS(in_shadow_coord, shadow_texel_size, light_size);
 }
 

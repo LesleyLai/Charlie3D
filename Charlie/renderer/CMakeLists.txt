@@ -5,6 +5,8 @@ add_library(charlie3d_renderer
         render_pass.hpp
         imgui_render_pass.cpp
         imgui_render_pass.hpp
+        descriptor_allocator.hpp
+        descriptor_allocator.cpp
         uploader.cpp uploader.hpp
         scene.cpp scene.hpp
         pipeline_manager.cpp pipeline_manager.hpp)

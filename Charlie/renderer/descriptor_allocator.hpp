@@ -7,11 +7,16 @@
 #include <vulkan/vulkan.h>
 
 #include "../utils/prelude.hpp"
-#include "error_handling.hpp"
+#include "../vulkan_helpers/descriptor_set_layout.hpp"
+#include "../vulkan_helpers/error_handling.hpp"
 
 namespace vkh {
 
 class Context;
+
+}
+
+namespace charlie {
 
 class DescriptorAllocator {
 public:
@@ -31,24 +36,22 @@ public:
   };
 
 private:
-  Context* context_ = nullptr;
+  VkDevice device_ = VK_NULL_HANDLE;
   VkDescriptorPool current_pool_ = VK_NULL_HANDLE;
   PoolSizes descriptor_sizes_;
   std::vector<VkDescriptorPool> used_pools_;
   std::vector<VkDescriptorPool> free_pools_;
 
 public:
-  explicit DescriptorAllocator(Context& context);
+  explicit DescriptorAllocator(VkDevice device);
   ~DescriptorAllocator();
   DescriptorAllocator(const DescriptorAllocator&) = delete;
   auto operator=(const DescriptorAllocator&) & -> DescriptorAllocator& = delete;
-  DescriptorAllocator(DescriptorAllocator&&) noexcept = delete;
-  auto operator=(DescriptorAllocator&&) & noexcept -> DescriptorAllocator& = delete;
 
   void reset_pools();
-  [[nodiscard]] auto allocate(VkDescriptorSetLayout layout) -> Expected<VkDescriptorSet>;
+  [[nodiscard]] auto allocate(VkDescriptorSetLayout layout) -> vkh::Expected<VkDescriptorSet>;
 
-  [[nodiscard]] auto context() -> Context* { return context_; };
+  [[nodiscard]] auto device() -> VkDevice { return device_; };
 
 private:
   [[nodiscard]] auto grab_pool() -> VkDescriptorPool;
@@ -62,11 +65,12 @@ public:
   DescriptorLayoutCache(const DescriptorLayoutCache&) = delete;
   auto operator=(const DescriptorLayoutCache&) = delete;
 
-  auto create_descriptor_layout(const VkDescriptorSetLayoutCreateInfo& info)
-      -> VkDescriptorSetLayout;
+  auto create_descriptor_set_layout(const vkh::DescriptorSetLayoutCreateInfo& info)
+      -> vkh::Expected<VkDescriptorSetLayout>;
 
   struct DescriptorLayoutInfo {
-    // good idea to turn this into a inlined array
+    // TODO: good idea to turn this into an inlined array
+    VkDescriptorSetLayoutCreateFlags flags = 0;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
 
     [[nodiscard]] auto operator==(const DescriptorLayoutInfo& other) const -> bool;
@@ -105,7 +109,7 @@ public:
   auto bind_image(u32 binding, const VkDescriptorImageInfo& image_info, VkDescriptorType type,
                   VkShaderStageFlags stage_flags) -> DescriptorBuilder&;
 
-  auto build() -> Expected<DescriptorBuilderResult>;
+  auto build() -> vkh::Expected<DescriptorBuilderResult>;
 };
 
-} // namespace vkh
+} // namespace charlie

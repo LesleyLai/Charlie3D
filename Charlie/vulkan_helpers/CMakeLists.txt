@@ -13,8 +13,6 @@ add_library(vulkan_helper
         debug_utils.hpp
         debug_utils.cpp
         deletion_queue.hpp
-        descriptor_utils.hpp
-        descriptor_utils.cpp
         descriptor_pool.hpp
         descriptor_pool.cpp
         error_handling.hpp
@@ -31,7 +29,7 @@ add_library(vulkan_helper
         required_field.hpp
         image_view.cpp
         image_view.hpp
-        error_handling.cpp)
+        error_handling.cpp descriptor_set_layout.cpp descriptor_set_layout.hpp)
 target_link_libraries(vulkan_helper
         PUBLIC
         charlie3d::compiler_options

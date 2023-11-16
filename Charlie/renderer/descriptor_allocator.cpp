@@ -1,15 +1,15 @@
-#include "descriptor_utils.hpp"
+#include "descriptor_allocator.hpp"
 
-#include "context.hpp"
-#include "descriptor_pool.hpp"
+#include "../vulkan_helpers/context.hpp"
+#include "../vulkan_helpers/descriptor_pool.hpp"
 
 #include "beyond/utils/assert.hpp"
 #include <algorithm>
 
 namespace {
 
-[[nodiscard]] auto create_pool(vkh::Context& context,
-                               const vkh::DescriptorAllocator::PoolSizes& pool_sizes, u32 count,
+[[nodiscard]] auto create_pool(VkDevice device,
+                               const charlie::DescriptorAllocator::PoolSizes& pool_sizes, u32 count,
                                VkDescriptorPoolCreateFlags flags) -> vkh::Expected<VkDescriptorPool>
 {
   std::vector<VkDescriptorPoolSize> sizes;
@@ -19,36 +19,32 @@ namespace {
   }
 
   return vkh::create_descriptor_pool(
-      context,
+      device,
       vkh::DescriptorPoolCreateInfo{.flags = flags, .max_sets = count, .pool_sizes = sizes});
 }
 
 } // anonymous namespace
 
-namespace vkh {
+namespace charlie {
 
-DescriptorAllocator::DescriptorAllocator(Context& context) : context_{&context} {}
+DescriptorAllocator::DescriptorAllocator(VkDevice device) : device_{device} {}
 
 DescriptorAllocator::~DescriptorAllocator()
 {
-  if (context_) {
+  if (device_) {
     // delete every pool held
-    for (VkDescriptorPool p : free_pools_) {
-      vkDestroyDescriptorPool(context_->device(), p, nullptr);
-    }
-    for (VkDescriptorPool p : used_pools_) {
-      vkDestroyDescriptorPool(context_->device(), p, nullptr);
-    }
+    for (VkDescriptorPool p : free_pools_) { vkDestroyDescriptorPool(device_, p, nullptr); }
+    for (VkDescriptorPool p : used_pools_) { vkDestroyDescriptorPool(device_, p, nullptr); }
   }
 }
 
 void DescriptorAllocator::reset_pools()
 {
-  BEYOND_ENSURE(context_ != nullptr);
+  BEYOND_ENSURE(device_ != VK_NULL_HANDLE);
 
   // reset all used pools and add them to the free pools
   for (auto& p : used_pools_) {
-    vkResetDescriptorPool(context_->device(), p, 0);
+    vkResetDescriptorPool(device_, p, 0);
     free_pools_.push_back(p);
   }
 
@@ -59,10 +55,9 @@ void DescriptorAllocator::reset_pools()
   current_pool_ = VK_NULL_HANDLE;
 }
 
-auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout) -> Expected<VkDescriptorSet>
+auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout) -> vkh::Expected<VkDescriptorSet>
 {
-  BEYOND_ENSURE(context_ != nullptr);
-  auto& context = *context_;
+  BEYOND_ENSURE(device_ != VK_NULL_HANDLE);
 
   // initialize the current_pool_ handle if it's null
   if (current_pool_ == VK_NULL_HANDLE) {
@@ -78,7 +73,7 @@ auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout) -> Expected<VkD
 
   // try to allocate the descriptor set
   VkDescriptorSet set{};
-  VkResult alloc_result = vkAllocateDescriptorSets(context.device(), &alloc_info, &set);
+  VkResult alloc_result = vkAllocateDescriptorSets(device_, &alloc_info, &set);
 
   switch (alloc_result) {
   case VK_SUCCESS:
@@ -90,24 +85,24 @@ auto DescriptorAllocator::allocate(VkDescriptorSetLayout layout) -> Expected<VkD
     break;
   default:
     // unrecoverable error
-    return Expected<VkDescriptorSet>{beyond::unexpect, alloc_result};
+    return vkh::Expected<VkDescriptorSet>{beyond::unexpect, alloc_result};
   }
 
   // allocate a new pool and retry
   current_pool_ = grab_pool();
   used_pools_.push_back(current_pool_);
 
-  alloc_result = vkAllocateDescriptorSets(context.device(), &alloc_info, &set);
+  alloc_result = vkAllocateDescriptorSets(device_, &alloc_info, &set);
   // if it still fails then we have big issues
   if (alloc_result == VK_SUCCESS) { return set; }
 
-  return Expected<VkDescriptorSet>{beyond::unexpect, alloc_result};
+  return vkh::Expected<VkDescriptorSet>{beyond::unexpect, alloc_result};
 }
 
 auto DescriptorAllocator::grab_pool() -> VkDescriptorPool
 {
   if (free_pools_.empty()) {
-    return create_pool(*context_, descriptor_sizes_, 1000, 0).value();
+    return create_pool(device_, descriptor_sizes_, 1000, 0).value();
   } else { // there are reusable pools availible
            // grab pool from the back of the vector and remove it from there.
     VkDescriptorPool pool = free_pools_.back();
@@ -126,41 +121,41 @@ DescriptorLayoutCache::~DescriptorLayoutCache()
   }
 }
 
-auto DescriptorLayoutCache::create_descriptor_layout(const VkDescriptorSetLayoutCreateInfo& info)
-    -> VkDescriptorSetLayout
+auto DescriptorLayoutCache::create_descriptor_set_layout(
+    const vkh::DescriptorSetLayoutCreateInfo& info) -> vkh::Expected<VkDescriptorSetLayout>
 {
   DescriptorLayoutInfo layout_info;
-  layout_info.bindings.resize(info.bindingCount);
-  std::copy(info.pBindings, info.pBindings + info.bindingCount, layout_info.bindings.begin());
+  layout_info.bindings.resize(info.bindings.size());
+  std::ranges::copy(info.bindings, layout_info.bindings.begin());
 
   // sort the bindings if they aren't in order
   if (const bool is_sorted =
           std::ranges::is_sorted(layout_info.bindings, {}, &VkDescriptorSetLayoutBinding::binding);
       !is_sorted) {
-    std::ranges::sort(layout_info.bindings, {}, &VkDescriptorSetLayoutBinding::binding);
+    std::ranges::stable_sort(layout_info.bindings, {}, &VkDescriptorSetLayoutBinding::binding);
   }
 
   // try to grab from cache
   if (auto it = layout_cache_.find(layout_info); it != layout_cache_.end()) { return (*it).second; }
 
-  // create a new one (not found)
-  VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-  VK_CHECK(vkCreateDescriptorSetLayout(device_, &info, nullptr, &layout));
-
-  // add to cache
-  layout_cache_[layout_info] = layout;
-  return layout;
+  // create a new one if not found
+  return vkh::create_descriptor_set_layout(device_, info).map([&](VkDescriptorSetLayout layout) {
+    layout_cache_[layout_info] = layout; // add to cache
+    return layout;
+  });
 }
 
 auto DescriptorLayoutCache::DescriptorLayoutInfo::operator==(
     const DescriptorLayoutInfo& other) const -> bool
 {
-  return std::ranges::equal(
-      other.bindings, bindings,
-      [](const VkDescriptorSetLayoutBinding& lhs, const VkDescriptorSetLayoutBinding& rhs) {
-        return lhs.binding == rhs.binding && lhs.descriptorType != rhs.descriptorType &&
-               lhs.descriptorCount == rhs.descriptorCount && lhs.stageFlags == rhs.stageFlags;
-      });
+  return flags == other.flags &&
+         std::ranges::equal(
+             other.bindings, bindings,
+             [](const VkDescriptorSetLayoutBinding& lhs, const VkDescriptorSetLayoutBinding& rhs) {
+               return lhs.binding == rhs.binding && lhs.descriptorType == rhs.descriptorType &&
+                      lhs.descriptorCount == rhs.descriptorCount &&
+                      lhs.stageFlags == rhs.stageFlags;
+             });
 }
 
 auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> usize
@@ -168,6 +163,7 @@ auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> usize
   using std::hash;
 
   usize result = hash<usize>()(bindings.size());
+  result = hash<usize>()(result + hash<VkFlags>()(flags));
 
   for (const VkDescriptorSetLayoutBinding& b : bindings) {
     // pack the binding data into a single int64. Not fully correct but it's ok
@@ -231,16 +227,15 @@ auto DescriptorBuilder::bind_image(uint32_t binding, const VkDescriptorImageInfo
   return *this;
 }
 
-auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
+auto DescriptorBuilder::build() -> vkh::Expected<DescriptorBuilderResult>
 {
   // build layout first
-  const VkDescriptorSetLayoutCreateInfo layout_info{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = beyond::narrow<u32>(bindings_.size()),
-      .pBindings = bindings_.data(),
-  };
-
-  VkDescriptorSetLayout layout = cache_->create_descriptor_layout(layout_info);
+  VkDescriptorSetLayout layout =
+      cache_
+          ->create_descriptor_set_layout(vkh::DescriptorSetLayoutCreateInfo{
+              .bindings = bindings_,
+          })
+          .value();
 
   return alloc_
       ->allocate(layout) //
@@ -248,11 +243,11 @@ auto DescriptorBuilder::build() -> Expected<DescriptorBuilderResult>
         // write descriptor
         for (VkWriteDescriptorSet& w : writes_) { w.dstSet = set; }
 
-        vkUpdateDescriptorSets(alloc_->context()->device(), beyond::narrow<u32>(writes_.size()),
+        vkUpdateDescriptorSets(alloc_->device(), beyond::narrow<u32>(writes_.size()),
                                writes_.data(), 0, nullptr);
 
         return DescriptorBuilderResult{layout, set};
       });
 }
 
-} // namespace vkh
+} // namespace charlie

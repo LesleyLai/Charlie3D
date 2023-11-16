@@ -230,7 +230,7 @@ PipelineManager::~PipelineManager()
 
              std::vector<PipelineHandle>& pipelines = pipelines_opt.value();
              for (const auto pipeline_handle : pipelines) {
-               // TODO: recreate pipeline asyncronously
+               // TODO: recreate pipeline asynchronously
                const auto& create_info = this->pipeline_create_infos_.at(pipeline_handle.value());
 
                VkPipeline& pipeline = pipelines_.at(pipeline_handle.value());

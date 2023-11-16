@@ -2,11 +2,11 @@
 
 #include "../vulkan_helpers/commands.hpp"
 #include "../vulkan_helpers/descriptor_pool.hpp"
-#include "../vulkan_helpers/descriptor_utils.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
 #include "../vulkan_helpers/image_view.hpp"
 #include "../vulkan_helpers/shader_module.hpp"
 #include "../vulkan_helpers/sync.hpp"
+#include "descriptor_allocator.hpp"
 
 #include "../shader_compiler/shader_compiler.hpp"
 #include "pipeline_manager.hpp"
@@ -345,8 +345,8 @@ void Renderer::init_descriptors()
 {
   ZoneScoped;
 
-  descriptor_allocator_ = std::make_unique<vkh::DescriptorAllocator>(context_);
-  descriptor_layout_cache_ = std::make_unique<vkh::DescriptorLayoutCache>(context_.device());
+  descriptor_allocator_ = std::make_unique<DescriptorAllocator>(context_);
+  descriptor_layout_cache_ = std::make_unique<DescriptorLayoutCache>(context_.device());
 
   static constexpr VkDescriptorSetLayoutBinding cam_buffer_binding = {
       .binding = 0,
@@ -366,39 +366,26 @@ void Renderer::init_descriptors()
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
 
-  static constexpr VkDescriptorSetLayoutBinding bindings[] = {
+  static constexpr VkDescriptorSetLayoutBinding global_bindings[] = {
       cam_buffer_binding, scene_buffer_binding, mesh_shadow_map_binding};
 
-  const VkDescriptorSetLayoutCreateInfo global_layout_create_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = beyond::size(bindings),
-      .pBindings = bindings};
+  const vkh::DescriptorSetLayoutCreateInfo global_layout_create_info = {.bindings =
+                                                                            global_bindings};
 
   global_descriptor_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_layout(global_layout_create_info);
-
-  static constexpr VkDescriptorSetLayoutBinding shadow_map_bindings[] = {scene_buffer_binding};
-
-  const VkDescriptorSetLayoutCreateInfo shadow_map_layout_create_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = beyond::size(shadow_map_bindings),
-      .pBindings = shadow_map_bindings};
+      descriptor_layout_cache_->create_descriptor_set_layout(global_layout_create_info).value();
 
   static constexpr VkDescriptorSetLayoutBinding object_buffer_binding = {
       .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
-
-  static constexpr VkDescriptorSetLayoutCreateInfo object_layout_create_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 1,
-      .pBindings = &object_buffer_binding};
+  static constexpr VkDescriptorSetLayoutBinding object_bindings[] = {object_buffer_binding};
 
   object_descriptor_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_layout(object_layout_create_info);
+      descriptor_layout_cache_->create_descriptor_set_layout({.bindings = object_bindings}).value();
 
-  static constexpr VkDescriptorSetLayoutBinding textures_binding[] = {
+  static constexpr VkDescriptorSetLayoutBinding material_bindings[] = {
       // albedo
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -415,13 +402,9 @@ void Renderer::init_descriptors()
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
 
-  static constexpr VkDescriptorSetLayoutCreateInfo textures_layout_create_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = beyond::size(textures_binding),
-      .pBindings = textures_binding};
-
   material_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_layout(textures_layout_create_info);
+      descriptor_layout_cache_->create_descriptor_set_layout({.bindings = material_bindings})
+          .value();
 
   const size_t scene_param_buffer_size =
       frame_overlap * context_.align_uniform_buffer_size(sizeof(GPUSceneParameters));
@@ -804,8 +787,8 @@ void Renderer::render(const charlie::Camera& camera)
         const Vec3 up =
             abs(dot(dir, Vec3(0.0, 1.0, 0.0))) < 0.01 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
 
-        scene_parameters_.sunlight_view_proj = beyond::ortho(-1.f, 1.f, 1.f, -1.f, 0.f, 10.f) *
-                                               beyond::look_at(-dir * 3.f, Vec3(0.0), up);
+        scene_parameters_.sunlight_view_proj =
+            beyond::ortho(-1.f, 1.f, 1.f, -1.f, 0.f, 10.f) * beyond::look_at(-dir, Vec3(0.0), up);
 
         char* scene_data = nullptr;
         vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
@@ -949,7 +932,7 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
 
   const VkOffset2D offset = {0, 0};
   const VkExtent2D extent{.width = shadow_map_width_, .height = shadow_map_height_};
-  const VkRenderingInfo render_info{
+  const VkRenderingInfo render_info = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
       .renderArea =
           {
@@ -965,8 +948,8 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   const VkViewport viewport{
       .x = 0.0f,
       .y = 0.0f,
-      .width = beyond::narrow<float>(shadow_map_width_),
-      .height = beyond::narrow<float>(shadow_map_height_),
+      .width = narrow<f32>(shadow_map_width_),
+      .height = narrow<f32>(shadow_map_height_),
       .minDepth = 0.0f,
       .maxDepth = 1.0f,
   };
@@ -977,8 +960,8 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   // Bind scene data
   const size_t frame_index = frame_number_ % frame_overlap;
   const u32 uniform_offset =
-      beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
-      beyond::narrow<u32>(frame_index);
+      narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
+      narrow<u32>(frame_index);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 0, 1,
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
 
@@ -1002,7 +985,6 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
     static constexpr VkDeviceSize vertex_offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &vertex_offset);
     vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
     vkCmdDrawIndexed(cmd, mesh.index_count, 1, 0, 0, node_index);
   }
 
