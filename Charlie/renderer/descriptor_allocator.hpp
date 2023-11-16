@@ -89,8 +89,8 @@ private:
 };
 
 struct DescriptorBuilderResult {
-  VkDescriptorSetLayout layout;
-  VkDescriptorSet set;
+  VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+  VkDescriptorSet set = VK_NULL_HANDLE;
 };
 
 class DescriptorBuilder {

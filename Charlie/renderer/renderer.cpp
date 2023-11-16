@@ -348,43 +348,6 @@ void Renderer::init_descriptors()
   descriptor_allocator_ = std::make_unique<DescriptorAllocator>(context_);
   descriptor_layout_cache_ = std::make_unique<DescriptorLayoutCache>(context_.device());
 
-  static constexpr VkDescriptorSetLayoutBinding cam_buffer_binding = {
-      .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
-
-  static constexpr VkDescriptorSetLayoutBinding scene_buffer_binding = {
-      .binding = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT};
-
-  static constexpr VkDescriptorSetLayoutBinding mesh_shadow_map_binding = {
-      .binding = 2,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT};
-
-  static constexpr VkDescriptorSetLayoutBinding global_bindings[] = {
-      cam_buffer_binding, scene_buffer_binding, mesh_shadow_map_binding};
-
-  const vkh::DescriptorSetLayoutCreateInfo global_layout_create_info = {.bindings =
-                                                                            global_bindings};
-
-  global_descriptor_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_set_layout(global_layout_create_info).value();
-
-  static constexpr VkDescriptorSetLayoutBinding object_buffer_binding = {
-      .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
-  static constexpr VkDescriptorSetLayoutBinding object_bindings[] = {object_buffer_binding};
-
-  object_descriptor_set_layout_ =
-      descriptor_layout_cache_->create_descriptor_set_layout({.bindings = object_bindings}).value();
-
   static constexpr VkDescriptorSetLayoutBinding material_bindings[] = {
       // albedo
       {.binding = 0,
@@ -401,7 +364,6 @@ void Renderer::init_descriptors()
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
-
   material_set_layout_ =
       descriptor_layout_cache_->create_descriptor_set_layout({.bindings = material_bindings})
           .value();
@@ -449,59 +411,45 @@ void Renderer::init_descriptors()
                            })
             .value();
 
-    frame.global_descriptor_set =
-        descriptor_allocator_->allocate(global_descriptor_set_layout_).value();
-    frame.object_descriptor_set =
-        descriptor_allocator_->allocate(object_descriptor_set_layout_).value();
-
+    // Global
     const VkDescriptorBufferInfo camera_buffer_info = {
         .buffer = frame.camera_buffer.buffer, .offset = 0, .range = sizeof(GPUCameraData)};
-
-    const VkWriteDescriptorSet camera_write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                               .dstSet = frame.global_descriptor_set,
-                                               .dstBinding = 0,
-                                               .descriptorCount = 1,
-                                               .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                               .pBufferInfo = &camera_buffer_info};
-
     const VkDescriptorBufferInfo scene_buffer_info = {
         .buffer = scene_parameter_buffer_, .offset = 0, .range = sizeof(GPUSceneParameters)};
-    const VkWriteDescriptorSet scene_write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                              .dstSet = frame.global_descriptor_set,
-                                              .dstBinding = 1,
-                                              .descriptorCount = 1,
-                                              .descriptorType =
-                                                  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-                                              .pBufferInfo = &scene_buffer_info};
 
-    const VkDescriptorImageInfo shadow_map_image_buffer_info = {
+    const VkDescriptorImageInfo shadow_map_image_info = {
         .sampler = shadow_map_sampler_,
         .imageView = shadow_map_image_view_,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
-    const VkWriteDescriptorSet shadow_map_write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                                   .dstSet = frame.global_descriptor_set,
-                                                   .dstBinding = 2,
-                                                   .descriptorCount = 1,
-                                                   .descriptorType =
-                                                       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                                   .pImageInfo = &shadow_map_image_buffer_info};
 
+    auto global_descriptor_build_result =
+        DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
+            .bind_buffer(0, camera_buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                         VK_SHADER_STAGE_VERTEX_BIT)
+            .bind_buffer(1, scene_buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+            .bind_image(2, shadow_map_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        VK_SHADER_STAGE_FRAGMENT_BIT)
+            .build()
+            .value();
+    global_descriptor_set_layout_ = global_descriptor_build_result.layout;
+    frame.global_descriptor_set = global_descriptor_build_result.set;
+
+    // Objects
     const VkDescriptorBufferInfo object_buffer_info = {.buffer = frame.object_buffer.buffer,
                                                        .offset = 0,
                                                        .range = sizeof(GPUObjectData) *
                                                                 max_object_count};
 
-    const VkWriteDescriptorSet object_write = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                               .dstSet = frame.object_descriptor_set,
-                                               .dstBinding = 0,
-                                               .descriptorCount = 1,
-                                               .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                               .pBufferInfo = &object_buffer_info};
-
-    VkWriteDescriptorSet set_writes[] = {camera_write, scene_write, shadow_map_write, object_write};
-
-    vkUpdateDescriptorSets(context_, beyond::size(set_writes), set_writes, 0, nullptr);
+    auto objects_descriptor_build_result =
+        DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
+            .bind_buffer(0, object_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                         VK_SHADER_STAGE_VERTEX_BIT)
+            .build()
+            .value();
+    object_descriptor_set_layout_ = objects_descriptor_build_result.layout;
+    frame.object_descriptor_set = objects_descriptor_build_result.set;
   }
 }
 
@@ -1231,59 +1179,38 @@ auto Renderer::create_material(const CPUMaterial& material_info) -> MaterialHand
   const auto normal_texture = textures_.at(material_info.normal_texture_index.value());
   const auto occlusion_texture = textures_.at(material_info.occlusion_texture_index.value());
 
-  // alloc descriptor set for material
-  VkDescriptorSet material_descriptor_set =
-      descriptor_allocator_->allocate(material_set_layout_).value();
-
   // write to the descriptor set so that it points to diffuse texture
-  const VkDescriptorImageInfo albedo_image_buffer_info = {
+  const VkDescriptorImageInfo albedo_image_info = {
       .sampler = sampler_,
       .imageView = albedo_texture.image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
 
-  const VkDescriptorImageInfo normal_image_buffer_info = {
+  const VkDescriptorImageInfo normal_image_info = {
       .sampler = sampler_,
       .imageView = normal_texture.image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
 
-  const VkDescriptorImageInfo occlusion_image_buffer_info = {
+  const VkDescriptorImageInfo occlusion_image_info = {
       .sampler = sampler_,
       .imageView = occlusion_texture.image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
 
-  const VkWriteDescriptorSet albedo_texture_write = VkWriteDescriptorSet{
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = material_descriptor_set,
-      .dstBinding = 0,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &albedo_image_buffer_info,
-  };
-  const VkWriteDescriptorSet normal_texture_write = VkWriteDescriptorSet{
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = material_descriptor_set,
-      .dstBinding = 1,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &normal_image_buffer_info,
-  };
-  const VkWriteDescriptorSet occlusion_texture_write = VkWriteDescriptorSet{
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = material_descriptor_set,
-      .dstBinding = 2,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &occlusion_image_buffer_info,
-  };
-  const VkWriteDescriptorSet texture_write_sets[] = {albedo_texture_write, normal_texture_write,
-                                                     occlusion_texture_write};
-  vkUpdateDescriptorSets(context_, beyond::size(texture_write_sets), texture_write_sets, 0,
-                         nullptr);
+  // alloc descriptor set for material
+  auto result = DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
+                    .bind_image(0, albedo_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .bind_image(1, normal_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .bind_image(2, occlusion_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .build()
+                    .value();
+  BEYOND_ENSURE(material_set_layout_ == result.layout);
 
-  return materials_.insert(Material{.descriptor_set = material_descriptor_set});
+  return materials_.insert(Material{.descriptor_set = result.set});
 }
 
 } // namespace charlie

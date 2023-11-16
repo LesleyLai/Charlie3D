@@ -35,7 +35,6 @@ namespace charlie {
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
-class DescriptorBuilder;
 
 struct Texture {
   VkImage image = VK_NULL_HANDLE;

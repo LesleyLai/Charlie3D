@@ -230,13 +230,13 @@ auto DescriptorBuilder::bind_image(uint32_t binding, const VkDescriptorImageInfo
 auto DescriptorBuilder::build() -> vkh::Expected<DescriptorBuilderResult>
 {
   // build layout first
-  VkDescriptorSetLayout layout =
-      cache_
-          ->create_descriptor_set_layout(vkh::DescriptorSetLayoutCreateInfo{
-              .bindings = bindings_,
-          })
-          .value();
+  vkh::Expected<VkDescriptorSetLayout> maybe_layout =
+      cache_->create_descriptor_set_layout(vkh::DescriptorSetLayoutCreateInfo{
+          .bindings = bindings_,
+      });
+  if (not maybe_layout.has_value()) { return beyond::make_unexpected(maybe_layout.error()); }
 
+  VkDescriptorSetLayout layout = maybe_layout.value();
   return alloc_
       ->allocate(layout) //
       .map([&](VkDescriptorSet set) {
