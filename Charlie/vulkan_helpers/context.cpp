@@ -58,9 +58,7 @@ Context::Context(charlie::Window& window)
     return vkb::InstanceBuilder{}
         .require_api_version(1, 3, 0)
         .set_debug_callback(debug_callback)
-        .request_validation_layers()
-        .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
-        .enable_extension("VK_EXT_debug_utils")
+        .enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
         .build();
   }();
 
