@@ -892,9 +892,11 @@ void Renderer::present(u32& swapchain_image_index)
           .value();
 
   const vkh::AllocatedBuffer tangent_buffer =
-      upload_buffer(context_, upload_context_, cpu_mesh.tangents, buffer_usage,
-                    fmt::format("{} Tangent", cpu_mesh.name))
-          .value();
+      cpu_mesh.tangents.size() == 0
+          ? vkh::AllocatedBuffer{.buffer = nullptr, .allocation = nullptr}
+          : upload_buffer(context_, upload_context_, cpu_mesh.tangents, buffer_usage,
+                          fmt::format("{} Tangent", cpu_mesh.name))
+                .value();
 
   const vkh::AllocatedBuffer index_buffer =
       upload_buffer(context_, upload_context_, cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -1072,12 +1074,13 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   const size_t frame_index = frame_number_ % frame_overlap;
 
   // Render objects
+  // TODO: bug
   render_objects_.clear();
   for (const auto [node_index, render_component] : scene_->render_components) {
     render_objects_.push_back(RenderObject{
         .mesh = render_component.mesh,
         .material_index = render_component.material_index,
-        .model_matrix = scene_->global_transforms[node_index],
+        .model_matrix = scene_->global_transforms.at(node_index),
     });
   }
 
@@ -1089,10 +1092,10 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   const usize object_count = render_objects_.size();
   BEYOND_ENSURE(object_count <= max_object_count);
-  for (usize i = 0; i < scene_->global_transforms.size(); ++i) {
-    object_model_matrix_data[i] = scene_->global_transforms[i];
-    const auto material_index = render_objects_[i].material_index;
-    object_material_index_data[i] = material_index;
+  for (usize i = 0; i < render_objects_.size(); ++i) {
+    const RenderObject& render_object = render_objects_[i];
+    object_model_matrix_data[i] = render_object.model_matrix;
+    object_material_index_data[i] = render_object.material_index;
   }
 
   context_.unmap(current_frame().model_matrix_buffer);

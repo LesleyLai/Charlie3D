@@ -126,10 +126,10 @@ auto index_mesh(charlie::CPUMesh& mesh)
     });
   }
 
-  std::vector<beyond::Mat4> global_transforms(objects.size(), beyond::Mat4::identity());
+  std::vector<beyond::Mat4> local_transforms(objects.size(), beyond::Mat4::identity());
 
   return CPUScene{
-      .local_transforms = std::move(global_transforms),
+      .local_transforms = std::move(local_transforms),
       .objects = std::move(objects),
       .meshes = std::move(meshes),
   };
