@@ -11,6 +11,8 @@
 
 #include <tracy/Tracy.hpp>
 
+#include <vulkan/vk_enum_string_helper.h>
+
 namespace {
 
 [[nodiscard]] auto debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
@@ -19,21 +21,24 @@ namespace {
                                   void* /*p_user_data*/) -> VkBool32
 {
   const auto log_level = [&]() {
-    switch (message_severity) {
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-      return spdlog::level::trace;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-      return spdlog::level::info;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-      return spdlog::level::warn;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+    if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
       return spdlog::level::err;
-    default:
-      beyond::panic("Unknown severity level");
+    } else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+      return spdlog::level::warn;
+    } else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+      return spdlog::level::info;
+    } else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+      return spdlog::level::trace;
     }
+
+    beyond::panic("Unknown severity level");
   }();
 
   spdlog::log(log_level, "{}", p_callback_data->pMessage);
+
+  if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+    beyond::panic("Vulkan Validation error!");
+  }
 
   return 0;
 }
