@@ -19,13 +19,18 @@
 
 namespace fastgltf {
 
-template <> struct ElementTraits<Vec2> : ElementTraitsBase<Vec2, AccessorType::Vec2, float> {};
+template <>
+struct ElementTraits<beyond::Vec2> : ElementTraitsBase<beyond::Vec2, AccessorType::Vec2, float> {};
 
-template <> struct ElementTraits<Vec3> : ElementTraitsBase<Vec3, AccessorType::Vec3, float> {};
+template <>
+struct ElementTraits<beyond::Vec3> : ElementTraitsBase<beyond::Vec3, AccessorType::Vec3, float> {};
 
-template <> struct ElementTraits<Point3> : ElementTraitsBase<Point3, AccessorType::Vec3, float> {};
+template <>
+struct ElementTraits<beyond::Point3>
+    : ElementTraitsBase<beyond::Point3, AccessorType::Vec3, float> {};
 
-template <> struct ElementTraits<Vec4> : ElementTraitsBase<Vec4, AccessorType::Vec4, float> {};
+template <>
+struct ElementTraits<beyond::Vec4> : ElementTraitsBase<beyond::Vec4, AccessorType::Vec4, float> {};
 
 } // namespace fastgltf
 

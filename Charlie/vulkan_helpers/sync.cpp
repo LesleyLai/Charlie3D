@@ -66,7 +66,7 @@ void cmd_pipeline_barrier2(VkCommandBuffer command, const DependencyInfo& depend
   const VkDependencyInfo vk_dependency_info{
       .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
       .dependencyFlags = dependency_info.dependency_flags,
-      .imageMemoryBarrierCount = narrow<u32>(dependency_info.image_barriers.size()),
+      .imageMemoryBarrierCount = beyond::narrow<uint32_t>(dependency_info.image_barriers.size()),
       .pImageMemoryBarriers = dependency_info.image_barriers.data(),
   };
 

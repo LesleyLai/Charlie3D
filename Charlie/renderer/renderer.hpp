@@ -12,6 +12,7 @@
 #include <beyond/container/slot_map.hpp>
 #include <beyond/math/matrix.hpp>
 #include <beyond/utils/function_ref.hpp>
+#include <beyond/utils/ref.hpp>
 
 #include "../asset/cpu_scene.hpp"
 #include "mesh.hpp"
@@ -39,6 +40,7 @@ class DescriptorLayoutCache;
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
   VkImageView image_view = VK_NULL_HANDLE;
+  VkSampler sampler = VK_NULL_HANDLE;
 };
 
 struct Material {
@@ -195,7 +197,7 @@ private:
   VkDescriptorSet material_descriptor_set_ = VK_NULL_HANDLE;
 
   std::vector<vkh::AllocatedImage> images_;
-  VkSampler sampler_ = VK_NULL_HANDLE;
+  VkSampler default_sampler_ = VK_NULL_HANDLE;
   std::vector<Texture> textures_;
 
   std::vector<RenderObject> render_objects_;
@@ -218,7 +220,7 @@ private:
 
   void on_input_event(const Event& event, const InputStates& states);
 
-  void present(u32& swapchain_image_index);
+  void present(beyond::Ref<u32> swapchain_image_index);
 };
 
 } // namespace charlie

@@ -28,16 +28,16 @@
 
 namespace {
 
-static constexpr u32 max_bindless_texture_count = 1024;
-static constexpr u32 bindless_texture_binding = 10;
+static constexpr uint32_t max_bindless_texture_count = 1024;
+static constexpr uint32_t bindless_texture_binding = 10;
 
 struct GPUCameraData {
-  Mat4 view;
-  Mat4 proj;
-  Mat4 view_proj;
+  beyond::Mat4 view;
+  beyond::Mat4 proj;
+  beyond::Mat4 view_proj;
 };
 
-constexpr usize max_object_count = 10000;
+constexpr beyond::usize max_object_count = 10000;
 
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
@@ -77,9 +77,9 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
 
 struct IndirectBatch {
   charlie::MeshHandle mesh;
-  u32 material_index = 0;
-  u32 first = 0;
-  u32 count = 0;
+  uint32_t material_index = 0;
+  uint32_t first = 0;
+  uint32_t count = 0;
 };
 
 [[nodiscard]] auto compact_draws(std::span<const charlie::RenderObject> objects)
@@ -90,7 +90,7 @@ struct IndirectBatch {
   if (objects.empty()) return draws;
 
   beyond::optional<charlie::MeshHandle> last_mesh = beyond::nullopt;
-  for (u32 i = 0; i < objects.size(); ++i) {
+  for (uint32_t i = 0; i < objects.size(); ++i) {
     const auto& object = objects[i];
     const bool same_mesh = object.mesh == last_mesh;
     if (same_mesh) {
@@ -672,7 +672,7 @@ void Renderer::init_sampler()
                                             .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                                             .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                                             .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT};
-  vkCreateSampler(context_, &sampler_info, nullptr, &sampler_);
+  vkCreateSampler(context_, &sampler_info, nullptr, &default_sampler_);
 }
 
 void Renderer::init_default_texture()
@@ -846,12 +846,12 @@ void Renderer::render(const charlie::Camera& camera)
     VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, frame.render_fence));
   }
 
-  present(swapchain_image_index);
+  present(beyond::ref(swapchain_image_index));
 
   ++frame_number_;
 }
 
-void Renderer::present(u32& swapchain_image_index)
+void Renderer::present(beyond::Ref<u32> swapchain_image_index)
 {
   ZoneScopedN("vkQueuePresentKHR");
 
@@ -865,7 +865,7 @@ void Renderer::present(u32& swapchain_image_index)
       .pWaitSemaphores = &frame.render_semaphore,
       .swapchainCount = 1,
       .pSwapchains = &swapchain,
-      .pImageIndices = &swapchain_image_index,
+      .pImageIndices = &swapchain_image_index.get(),
   };
 
   const VkResult result = vkQueuePresentKHR(graphics_queue_, &present_info);
@@ -1175,7 +1175,7 @@ Renderer::~Renderer()
 
   imgui_render_pass_ = nullptr;
 
-  vkDestroySampler(context_, sampler_, nullptr);
+  vkDestroySampler(context_, default_sampler_, nullptr);
 
   for (auto texture : textures_) { vkDestroyImageView(context_, texture.image_view, nullptr); }
   for (auto image : images_) { vkh::destroy_image(context_, image); }
@@ -1250,7 +1250,8 @@ auto Renderer::add_texture(Texture texture) -> u32
   textures_.push_back(texture);
   const u32 texture_index = narrow<u32>(textures_.size() - 1);
 
-  VkDescriptorImageInfo image_info{.sampler = sampler_,
+  VkDescriptorImageInfo image_info{.sampler = texture.sampler == VK_NULL_HANDLE ? default_sampler_
+                                                                                : texture.sampler,
                                    .imageView = texture.image_view,
                                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 

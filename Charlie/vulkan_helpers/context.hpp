@@ -27,9 +27,9 @@ class Context {
   VkQueue compute_queue_{};
   VkQueue transfer_queue_{};
   VkQueue present_queue_{};
-  u32 graphics_queue_family_index_ = 0;
-  u32 compute_queue_family_index_ = 0;
-  u32 transfer_queue_family_index_ = 0;
+  uint32_t graphics_queue_family_index_ = 0;
+  uint32_t compute_queue_family_index_ = 0;
+  uint32_t transfer_queue_family_index_ = 0;
 
   VmaAllocator allocator_{};
 
@@ -81,17 +81,17 @@ public:
     return transfer_queue_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue_family_index() const noexcept -> u32
+  [[nodiscard]] BEYOND_FORCE_INLINE auto graphics_queue_family_index() const noexcept -> uint32_t
   {
     return graphics_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue_family_index() const noexcept -> u32
+  [[nodiscard]] BEYOND_FORCE_INLINE auto compute_queue_family_index() const noexcept -> uint32_t
   {
     return compute_queue_family_index_;
   }
 
-  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue_family_index() const noexcept -> u32
+  [[nodiscard]] BEYOND_FORCE_INLINE auto transfer_queue_family_index() const noexcept -> uint32_t
   {
     return transfer_queue_family_index_;
   }

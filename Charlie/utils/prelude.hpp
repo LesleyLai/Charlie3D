@@ -5,8 +5,12 @@
 
 #include <beyond/math/math_fwd.hpp>
 #include <beyond/utils/narrowing.hpp>
+#include <beyond/utils/ref.hpp>
 #include <beyond/utils/utils.hpp>
+
 #include <bit>
+
+namespace charlie {
 
 using beyond::i16;
 using beyond::i32;
@@ -45,5 +49,12 @@ using beyond::Mat4;
 using beyond::narrow;
 
 using std::bit_cast;
+
+using beyond::Ref;
+
+using beyond::cref;
+using beyond::ref;
+
+} // namespace charlie
 
 #endif // CHARLIE3D_PRELUDE_HPP

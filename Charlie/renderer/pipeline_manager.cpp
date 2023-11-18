@@ -137,7 +137,7 @@ auto create_graphics_pipeline_impl(VkDevice device,
   const VkGraphicsPipelineCreateInfo pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .pNext = &vk_pipeline_rendering_create_info,
-      .stageCount = narrow<u32>(shader_stage_create_info.size()),
+      .stageCount = beyond::narrow<uint32_t>(shader_stage_create_info.size()),
       .pStages = shader_stage_create_info.data(),
       .pVertexInputState = &vertex_input_info,
       .pInputAssemblyState = &input_assembly,

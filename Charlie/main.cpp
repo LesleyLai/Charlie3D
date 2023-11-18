@@ -44,8 +44,8 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   if (hide_control_panel) { return; }
 
   const float control_panel_width = ImGui::GetFontSize() * 30.f;
-  ImGui::SetNextWindowPos(ImVec2(narrow<float>(resolution.width) - control_panel_width, 0));
-  ImGui::SetNextWindowSize(ImVec2(control_panel_width, narrow<float>(resolution.height)));
+  ImGui::SetNextWindowPos(ImVec2(beyond::narrow<float>(resolution.width) - control_panel_width, 0));
+  ImGui::SetNextWindowSize(ImVec2(control_panel_width, beyond::narrow<float>(resolution.height)));
   ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_NoDecoration);
 
   if (ImGui::CollapsingHeader("Environment Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {

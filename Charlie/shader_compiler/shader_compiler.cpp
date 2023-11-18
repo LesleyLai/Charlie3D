@@ -103,7 +103,7 @@ class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
 
 auto compile_shader_impl(charlie::ShaderCompilerImpl& shader_compiler_impl,
                          beyond::ZStringView filename, const std::string& src,
-                         charlie::ShaderStage stage) -> beyond::optional<std::vector<u32>>
+                         charlie::ShaderStage stage) -> beyond::optional<std::vector<uint32_t>>
 {
   const shaderc::Compiler& compiler = shader_compiler_impl.compiler;
 

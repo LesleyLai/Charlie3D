@@ -13,7 +13,7 @@ auto create_descriptor_set_layout(VkDevice device, const DescriptorSetLayoutCrea
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .pNext = create_info.p_next,
       .flags = create_info.flags,
-      .bindingCount = narrow<u32>(create_info.bindings.size()),
+      .bindingCount = beyond::narrow<uint32_t>(create_info.bindings.size()),
       .pBindings = create_info.bindings.data(),
   };
 

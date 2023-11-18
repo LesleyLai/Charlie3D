@@ -9,8 +9,9 @@
 namespace {
 
 [[nodiscard]] auto create_pool(VkDevice device,
-                               const charlie::DescriptorAllocator::PoolSizes& pool_sizes, u32 count,
-                               VkDescriptorPoolCreateFlags flags) -> vkh::Expected<VkDescriptorPool>
+                               const charlie::DescriptorAllocator::PoolSizes& pool_sizes,
+                               uint32_t count, VkDescriptorPoolCreateFlags flags)
+    -> vkh::Expected<VkDescriptorPool>
 {
   std::vector<VkDescriptorPoolSize> sizes;
   sizes.reserve(pool_sizes.sizes.size());

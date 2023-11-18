@@ -63,9 +63,10 @@ static void CALLBACK watch_callback(DWORD error_code, DWORD number_of_bytes_tran
 
     if (notify_info->Action != FILE_ACTION_MODIFIED) { continue; }
 
-    int callback_filename_size = WideCharToMultiByte(
-        CP_ACP, 0, notify_info->FileName, narrow<int>(notify_info->FileNameLength / sizeof(WCHAR)),
-        callback_filename, MAX_PATH - 1, nullptr, nullptr);
+    int callback_filename_size =
+        WideCharToMultiByte(CP_ACP, 0, notify_info->FileName,
+                            beyond::narrow<int>(notify_info->FileNameLength / sizeof(WCHAR)),
+                            callback_filename, MAX_PATH - 1, nullptr, nullptr);
     callback_filename[callback_filename_size] = '\0';
 
     entry.callback(entry.directory_path / callback_filename);
