@@ -1,7 +1,7 @@
 #include "descriptor_allocator.hpp"
 
 #include "../vulkan_helpers/context.hpp"
-#include "../vulkan_helpers/descriptor_pool.hpp"
+#include "../vulkan_helpers/initializers.hpp"
 
 #include "beyond/utils/assert.hpp"
 #include <algorithm>

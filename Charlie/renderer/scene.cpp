@@ -5,7 +5,7 @@
 
 #include "../utils/configuration.hpp"
 
-#include "../vulkan_helpers/image_view.hpp"
+#include "../vulkan_helpers/initializers.hpp"
 
 #include "renderer.hpp"
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef CHARLIE3D_IMAGE_HPP
-#define CHARLIE3D_IMAGE_HPP
+#ifndef CHARLIE3D_VULKAN_HELPER_IMAGE_HPP
+#define CHARLIE3D_VULKAN_HELPER_IMAGE_HPP
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_core.h>
@@ -14,6 +14,13 @@
 namespace vkh {
 
 class Context;
+
+struct AllocatedImage {
+  VkImage image = {};
+  VmaAllocation allocation = {};
+
+  explicit(false) operator VkImage() { return image; } // NOLINT(google-explicit-constructor)
+};
 
 // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 struct ImageCreateInfo {
@@ -33,11 +40,6 @@ struct ImageCreateInfo {
   beyond::ZStringView debug_name;
 };
 
-struct AllocatedImage {
-  VkImage image = {};
-  VmaAllocation allocation = {};
-};
-
 auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_info)
     -> Expected<AllocatedImage>;
 
@@ -45,4 +47,4 @@ void destroy_image(vkh::Context& context, AllocatedImage& image);
 
 } // namespace vkh
 
-#endif // CHARLIE3D_IMAGE_HPP
+#endif // CHARLIE3D_VULKAN_HELPER_IMAGE_HPP

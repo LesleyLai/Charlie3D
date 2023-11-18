@@ -15,7 +15,7 @@
 #include <beyond/utils/handle.hpp>
 
 #include "../vulkan_helpers/graphics_pipeline.hpp"
-#include "../vulkan_helpers/shader_module.hpp"
+#include "../vulkan_helpers/initializers.hpp"
 
 #include <vulkan/vulkan.h>
 

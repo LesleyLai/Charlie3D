@@ -1,11 +1,7 @@
 #include "renderer.hpp"
 
-#include "../vulkan_helpers/commands.hpp"
-#include "../vulkan_helpers/descriptor_pool.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
-#include "../vulkan_helpers/image_view.hpp"
-#include "../vulkan_helpers/shader_module.hpp"
-#include "../vulkan_helpers/sync.hpp"
+#include "../vulkan_helpers/initializers.hpp"
 #include "descriptor_allocator.hpp"
 
 #include "../shader_compiler/shader_compiler.hpp"
@@ -985,11 +981,14 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
 
-  auto* object_data =
+  // TODO: wrong model matrix index
+  auto* object_model_matrix_data =
       beyond::narrow<Mat4*>(context_.map(current_frame().model_matrix_buffer).value());
   const usize object_count = scene_->global_transforms.size();
   BEYOND_ENSURE(object_count <= max_object_count);
-  for (usize i = 0; i < object_count; ++i) { object_data[i] = scene_->global_transforms[i]; }
+  for (usize i = 0; i < object_count; ++i) {
+    object_model_matrix_data[i] = scene_->global_transforms[i];
+  }
   context_.unmap(current_frame().model_matrix_buffer);
 
   for (const auto [node_index, render_component] : scene_->render_components) {

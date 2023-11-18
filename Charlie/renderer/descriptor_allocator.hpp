@@ -7,8 +7,7 @@
 #include <vulkan/vulkan.h>
 
 #include "../utils/prelude.hpp"
-#include "../vulkan_helpers/descriptor_set_layout.hpp"
-#include "../vulkan_helpers/error_handling.hpp"
+#include "../vulkan_helpers/initializers.hpp"
 
 namespace vkh {
 
