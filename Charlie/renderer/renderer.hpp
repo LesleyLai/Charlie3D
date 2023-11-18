@@ -162,8 +162,8 @@ private:
 
   static constexpr uint32_t shadow_map_width_ = 4096;
   static constexpr uint32_t shadow_map_height_ = 4096;
-  vkh::AllocatedImage shadow_map_image_;
-  VkImageView shadow_map_image_view_ = VK_NULL_HANDLE;
+  vkh::AllocatedImage shadow_map_images_[frame_overlap];
+  VkImageView shadow_map_image_views_[frame_overlap];
   VkSampler shadow_map_sampler_ = VK_NULL_HANDLE;
 
   usize frame_number_ = 0;

@@ -248,26 +248,28 @@ void Renderer::init_shadow_map()
 {
   ZoneScoped;
 
-  shadow_map_image_ =
-      vkh::create_image(
-          context_,
-          vkh::ImageCreateInfo{
-              .format = depth_format_,
-              .extent = VkExtent3D{shadow_map_width_, shadow_map_height_, 1},
-              .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-              .debug_name = "Shadow Map Image",
-          })
-          .expect("Fail to create shadow map image");
-  shadow_map_image_view_ =
-      vkh::create_image_view(
-          context_, vkh::ImageViewCreateInfo{.image = shadow_map_image_.image,
-                                             .format = depth_format_,
-                                             .subresource_range =
-                                                 vkh::SubresourceRange{
-                                                     .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                                 },
-                                             .debug_name = "Shadow Map Image View"})
-          .expect("Fail to create shadow map image view");
+  for (u32 i = 0; i < frame_overlap; ++i) {
+    shadow_map_images_[i] =
+        vkh::create_image(
+            context_,
+            vkh::ImageCreateInfo{
+                .format = depth_format_,
+                .extent = VkExtent3D{shadow_map_width_, shadow_map_height_, 1},
+                .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                .debug_name = "Shadow Map Image",
+            })
+            .expect("Fail to create shadow map image");
+    shadow_map_image_views_[i] =
+        vkh::create_image_view(
+            context_, vkh::ImageViewCreateInfo{.image = shadow_map_images_[i].image,
+                                               .format = depth_format_,
+                                               .subresource_range =
+                                                   vkh::SubresourceRange{
+                                                       .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                                   },
+                                               .debug_name = "Shadow Map Image View"})
+            .expect("Fail to create shadow map image view");
+  }
 
   const VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                                             .magFilter = VK_FILTER_LINEAR,
@@ -473,7 +475,7 @@ void Renderer::init_descriptors()
 
     const VkDescriptorImageInfo shadow_map_image_info = {
         .sampler = shadow_map_sampler_,
-        .imageView = shadow_map_image_view_,
+        .imageView = shadow_map_image_views_[i],
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
 
@@ -917,6 +919,8 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   ZoneScopedN("Shadow Render Pass");
   TracyVkZone(current_frame().tracy_vk_ctx, cmd, "Shadow Render Pass");
 
+  const u32 current_frame_index = frame_number_ % frame_overlap;
+
   vkh::cmd_pipeline_barrier2(
       cmd,
       {.image_barriers = std::array{
@@ -924,7 +928,7 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
                .stage_masks = {VK_PIPELINE_STAGE_2_NONE, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT},
                .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
                .layouts = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
-               .image = shadow_map_image_.image,
+               .image = shadow_map_images_[current_frame_index].image,
                .subresource_range =
                    vkh::SubresourceRange{
                        .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -934,7 +938,7 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
 
   const VkRenderingAttachmentInfo depth_attachments_info{
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = shadow_map_image_view_,
+      .imageView = shadow_map_image_views_[current_frame_index],
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1008,7 +1012,7 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
                                                     VK_ACCESS_2_SHADER_SAMPLED_READ_BIT},
                                    .layouts = {VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                   .image = shadow_map_image_.image,
+                                   .image = shadow_map_images_[current_frame_index].image,
                                    .subresource_range =
                                        vkh::SubresourceRange{
                                            .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -1186,8 +1190,11 @@ Renderer::~Renderer()
   vkDestroyImageView(context_, depth_image_view_, nullptr);
   vkh::destroy_image(context_, depth_image_);
 
-  vkDestroyImageView(context_, shadow_map_image_view_, nullptr);
-  vkh::destroy_image(context_, shadow_map_image_);
+  for (u32 i = 0; i < frame_overlap; ++i) {
+    vkDestroyImageView(context_, shadow_map_image_views_[i], nullptr);
+    vkh::destroy_image(context_, shadow_map_images_[i]);
+  }
+
   vkDestroySampler(context_, shadow_map_sampler_, nullptr);
 
   descriptor_allocator_ = nullptr;
