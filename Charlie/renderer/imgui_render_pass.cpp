@@ -86,10 +86,7 @@ ImguiRenderPass::ImguiRenderPass(Renderer& renderer, SDL_Window* window,
   };
   ImGui_ImplVulkan_Init(&init_info, VK_NULL_HANDLE);
 
-  // execute a gpu command to upload imgui font textures
-  immediate_submit(renderer.context(), renderer.upload_context(),
-                   [&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
-  ImGui_ImplVulkan_DestroyFontUploadObjects();
+  ImGui_ImplVulkan_CreateFontsTexture();
 }
 
 ImguiRenderPass::~ImguiRenderPass()
