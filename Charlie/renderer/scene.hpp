@@ -29,7 +29,7 @@ struct RenderComponent {
 };
 
 struct Scene {
-  std::vector<Mat4> local_transforms; // Cached local transformation for each nodes
+  std::vector<Mat4> local_transforms; // Cached local transformation for each node
   std::vector<Mat4> global_transforms;
   std::unordered_map<u32, RenderComponent> render_components;
 };

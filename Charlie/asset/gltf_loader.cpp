@@ -11,6 +11,7 @@
 #include <beyond/math/matrix.hpp>
 #include <beyond/math/transform.hpp>
 #include <beyond/types/optional.hpp>
+#include <beyond/types/optional_conversion.hpp>
 #include <beyond/utils/narrowing.hpp>
 
 #include "../utils/thread_pool.hpp"
@@ -38,12 +39,11 @@ namespace {
 
 auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
 {
-  return {
-      .name = texture.name,
-      .image_index = beyond::narrow<uint32_t>(texture.imageIndex.value()),
-      .sampler_index = beyond::narrow<uint32_t>(texture.samplerIndex.value()),
-  };
-};
+  return {.name = texture.name,
+          .image_index = beyond::narrow<uint32_t>(texture.imageIndex.value()),
+          .sampler_index =
+              beyond::from_std(texture.samplerIndex).map(beyond::narrow<uint32_t, size_t>)};
+}
 
 [[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
                                        const fastgltf::Image& image) -> charlie::CPUImage
@@ -148,11 +148,9 @@ namespace charlie {
 
   for (auto& node : parsed_asset->nodes) {
     const auto transform = get_node_transform(node);
-
-    result.objects.push_back({.mesh_index = node.meshIndex.has_value()
-                                                ? beyond::narrow<int>(node.meshIndex.value())
-                                                : -1});
-
+    const i32 mesh_index =
+        beyond::from_std(node.meshIndex).map(beyond::narrow<i32, size_t>).value_or(-1);
+    result.objects.push_back({.mesh_index = mesh_index});
     result.local_transforms.push_back(transform);
   }
 
@@ -203,124 +201,123 @@ namespace charlie {
   }
 
   for (const auto& mesh : parsed_asset->meshes) {
-    // TODO: handle more primitives
-    BEYOND_ENSURE(mesh.primitives.size() == 1);
+    // Each gltf primitive is treated as an own mesh
+    for (const auto& primitive : mesh.primitives) {
+      BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
 
-    const auto& primitive = mesh.primitives.at(0);
-    BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
+      usize position_accessor_id = 0;
+      usize normal_accessor_id = 0;
+      beyond::optional<usize> tangent_accessor_id;
+      beyond::optional<usize> texture_coord_accessor_id;
+      usize index_accessor_id = 0;
+      if (const auto itr = primitive.attributes.find("POSITION");
+          itr != primitive.attributes.end()) {
+        position_accessor_id = itr->second;
+      } else {
+        beyond::panic("Mesh misses POSITION attribute!");
+      }
+      if (const auto itr = primitive.attributes.find("NORMAL"); itr != primitive.attributes.end()) {
+        normal_accessor_id = itr->second;
+      } else {
+        beyond::panic("Mesh misses NORMAL attribute!");
+      }
+      if (const auto itr = primitive.attributes.find("TANGENT");
+          itr != primitive.attributes.end()) {
+        tangent_accessor_id = itr->second;
+      }
 
-    usize position_accessor_id = 0;
-    usize normal_accessor_id = 0;
-    beyond::optional<usize> tangent_accessor_id;
-    beyond::optional<usize> texture_coord_accessor_id;
-    usize index_accessor_id = 0;
-    if (const auto itr = primitive.attributes.find("POSITION"); itr != primitive.attributes.end()) {
-      position_accessor_id = itr->second;
-    } else {
-      beyond::panic("Mesh misses POSITION attribute!");
+      if (const auto itr = primitive.attributes.find("TEXCOORD_0");
+          itr != primitive.attributes.end()) {
+        texture_coord_accessor_id = itr->second;
+      }
+      // TODO: handle meshes without index accessor
+      index_accessor_id = primitive.indicesAccessor.value();
+
+      const fastgltf::Accessor& position_accessor =
+          parsed_asset->accessors.at(position_accessor_id);
+      const fastgltf::Accessor& normal_accessor = parsed_asset->accessors.at(normal_accessor_id);
+      const fastgltf::Accessor& index_accessor = parsed_asset->accessors.at(index_accessor_id);
+
+      using fastgltf::AccessorType;
+      BEYOND_ENSURE(position_accessor.type == AccessorType::Vec3);
+      BEYOND_ENSURE(normal_accessor.type == AccessorType::Vec3);
+      BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
+
+      std::vector<beyond::Point3> positions;
+      positions.resize(position_accessor.count);
+      fastgltf::copyFromAccessor<beyond::Point3>(*parsed_asset, position_accessor,
+                                                 positions.data());
+
+      std::vector<beyond::Vec3> normals;
+      normals.resize(normal_accessor.count);
+      fastgltf::copyFromAccessor<beyond::Vec3>(*parsed_asset, normal_accessor, normals.data());
+
+      std::vector<beyond::Vec2> tex_coords;
+      texture_coord_accessor_id
+          .map([&](size_t id) {
+            const auto& texture_coord_accessor = parsed_asset->accessors.at(id);
+
+            BEYOND_ENSURE(texture_coord_accessor.type == AccessorType::Vec2);
+
+            tex_coords.resize(texture_coord_accessor.count);
+            fastgltf::copyFromAccessor<beyond::Vec2>(*parsed_asset, texture_coord_accessor,
+                                                     tex_coords.data());
+          })
+          .or_else([&] { tex_coords.resize(positions.size()); });
+
+      std::vector<beyond::Vec4> tangents;
+      tangent_accessor_id.map([&](size_t id) {
+        const auto& tangent_accessor = parsed_asset->accessors.at(id);
+        BEYOND_ENSURE(tangent_accessor.type == AccessorType::Vec4);
+
+        tangents.resize(tangent_accessor.count);
+        fastgltf::copyFromAccessor<beyond::Vec4>(*parsed_asset, tangent_accessor, tangents.data());
+      });
+
+      std::vector<u32> indices;
+      indices.resize(index_accessor.count);
+      fastgltf::copyFromAccessor<u32>(*parsed_asset, index_accessor, indices.data());
+
+      const auto material_index = beyond::from_std(primitive.materialIndex).map(narrow<u32, usize>);
+
+      result.meshes.push_back(CPUMesh{.name = mesh.name,
+                                      .material_index = material_index,
+                                      .positions = std::move(positions),
+                                      .normals = std::move(normals),
+                                      .uv = std::move(tex_coords),
+                                      .tangents = std::move(tangents),
+                                      .indices = std::move(indices)});
     }
-    if (const auto itr = primitive.attributes.find("NORMAL"); itr != primitive.attributes.end()) {
-      normal_accessor_id = itr->second;
-    } else {
-      beyond::panic("Mesh misses NORMAL attribute!");
-    }
-    if (const auto itr = primitive.attributes.find("TANGENT"); itr != primitive.attributes.end()) {
-      tangent_accessor_id = itr->second;
-    }
-
-    if (const auto itr = primitive.attributes.find("TEXCOORD_0");
-        itr != primitive.attributes.end()) {
-      texture_coord_accessor_id = itr->second;
-    }
-    // TODO: handle meshes without index accessor
-    index_accessor_id = primitive.indicesAccessor.value();
-
-    const fastgltf::Accessor& position_accessor = parsed_asset->accessors.at(position_accessor_id);
-    const fastgltf::Accessor& normal_accessor = parsed_asset->accessors.at(normal_accessor_id);
-    const fastgltf::Accessor& index_accessor = parsed_asset->accessors.at(index_accessor_id);
-
-    using fastgltf::AccessorType;
-    BEYOND_ENSURE(position_accessor.type == AccessorType::Vec3);
-    BEYOND_ENSURE(normal_accessor.type == AccessorType::Vec3);
-    BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
-
-    std::vector<beyond::Point3> positions;
-    positions.resize(position_accessor.count);
-    fastgltf::copyFromAccessor<beyond::Point3>(*parsed_asset, position_accessor, positions.data());
-
-    std::vector<beyond::Vec3> normals;
-    normals.resize(normal_accessor.count);
-    fastgltf::copyFromAccessor<beyond::Vec3>(*parsed_asset, normal_accessor, normals.data());
-
-    std::vector<beyond::Vec2> tex_coords;
-    texture_coord_accessor_id
-        .map([&](size_t id) {
-          const auto& texture_coord_accessor = parsed_asset->accessors.at(id);
-
-          BEYOND_ENSURE(texture_coord_accessor.type == AccessorType::Vec2);
-
-          tex_coords.resize(texture_coord_accessor.count);
-          fastgltf::copyFromAccessor<beyond::Vec2>(*parsed_asset, texture_coord_accessor,
-                                                   tex_coords.data());
-        })
-        .or_else([&] { tex_coords.resize(positions.size()); });
-
-    std::vector<beyond::Vec4> tangents;
-    tangent_accessor_id.map([&](size_t id) {
-      const auto& tangent_accessor = parsed_asset->accessors.at(id);
-      BEYOND_ENSURE(tangent_accessor.type == AccessorType::Vec4);
-
-      tangents.resize(tangent_accessor.count);
-      fastgltf::copyFromAccessor<beyond::Vec4>(*parsed_asset, tangent_accessor, tangents.data());
-    });
-
-    std::vector<u32> indices;
-    indices.resize(index_accessor.count);
-    fastgltf::copyFromAccessor<u32>(*parsed_asset, index_accessor, indices.data());
-
-    BEYOND_ENSURE(primitive.materialIndex.has_value());
-    beyond::optional<u32> material_index;
-    if (mesh.primitives[0].materialIndex.has_value()) {
-      material_index = beyond::narrow<u32>(mesh.primitives[0].materialIndex.value());
-    }
-
-    result.meshes.push_back(CPUMesh{.name = mesh.name,
-                                    .material_index = material_index,
-                                    .positions = std::move(positions),
-                                    .normals = std::move(normals),
-                                    .uv = std::move(tex_coords),
-                                    .tangents = std::move(tangents),
-                                    .indices = std::move(indices)});
   }
 
   if (auto error = asset->validate(); error != fastgltf::Error::None) {
     SPDLOG_ERROR("GLTF validation error {} from{}", static_cast<uint64_t>(error),
-                 file_path.string().c_str());
+                 file_path.string());
   }
 
   // TODO: don't hard code floor here
-  {
-    result.materials.emplace_back();
-    result.meshes.push_back(CPUMesh{
-        .name = "Floor",
-        .material_index = result.materials.size() - 1,
-        .positions =
-            {
-                Point3{0.5f, 0.0f, 0.5f},   // top right
-                Point3{0.5f, 0.0f, -0.5f},  // bottom right
-                Point3{-0.5f, 0.0f, -0.5f}, // bottom left
-                Point3{-0.5f, 0.0f, 0.5f}   // top left
-            },
-        .normals = {Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}},
-        .uv = {Vec2{0, 0}, Vec2{0, 1}, Vec2{1, 0}, Vec2{1, 1}},
-        .tangents = {Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}},
-        .indices = {0, 1, 3, 1, 2, 3},
-    });
-    result.objects.push_back(CPURenderObject{
-        .mesh_index = narrow<i32>(result.meshes.size() - 1),
-    });
-    result.local_transforms.push_back(beyond::scale(5.0f, 1.f, 5.0f));
-  }
+  //  {
+  //    result.materials.emplace_back();
+  //    result.meshes.push_back(CPUMesh{
+  //        .name = "Floor",
+  //        .material_index = result.materials.size() - 1,
+  //        .positions =
+  //            {
+  //                Point3{0.5f, 0.0f, 0.5f},   // top right
+  //                Point3{0.5f, 0.0f, -0.5f},  // bottom right
+  //                Point3{-0.5f, 0.0f, -0.5f}, // bottom left
+  //                Point3{-0.5f, 0.0f, 0.5f}   // top left
+  //            },
+  //        .normals = {Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}},
+  //        .uv = {Vec2{0, 0}, Vec2{0, 1}, Vec2{1, 0}, Vec2{1, 1}},
+  //        .tangents = {Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0,
+  //        1}}, .indices = {0, 1, 3, 1, 2, 3},
+  //    });
+  //    result.objects.push_back(CPURenderObject{
+  //        .mesh_index = narrow<i32>(result.meshes.size() - 1),
+  //    });
+  //    result.local_transforms.push_back(beyond::scale(5.0f, 1.f, 5.0f));
+  //  }
 
   io_thread_pool.wait();
 
