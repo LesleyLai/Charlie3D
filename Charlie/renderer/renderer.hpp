@@ -115,8 +115,6 @@ public:
 
   [[nodiscard]] auto context() noexcept -> vkh::Context& { return context_; }
 
-  [[nodiscard]] auto upload_context() noexcept -> UploadContext& { return upload_context_; }
-
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
 
   struct ImageUploadInfo {
@@ -127,11 +125,7 @@ public:
       -> VkImage;
 
   // Returns texture index
-  auto add_texture(Texture texture) -> uint32_t;
-  [[nodiscard]] auto texture_count() const -> uint32_t
-  {
-    return beyond::narrow<uint32_t>(textures_.size());
-  }
+  auto add_texture(Texture texture) -> u32;
 
   [[nodiscard]] auto add_material(const CPUMaterial& material_info) -> u32;
   void upload_materials();
@@ -143,8 +137,8 @@ public:
 
   void resize();
 
-  uint32_t default_albedo_texture_index = static_cast<uint32_t>(~0);
-  uint32_t default_normal_texture_index = static_cast<uint32_t>(~0);
+  u32 default_albedo_texture_index = static_cast<u32>(~0);
+  u32 default_normal_texture_index = static_cast<u32>(~0);
 
   bool enable_shadow_mapping = true;
 
