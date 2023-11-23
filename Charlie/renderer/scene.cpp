@@ -60,32 +60,25 @@ namespace charlie {
 
         return renderer.add_texture(Texture{.image = image, .image_view = image_view});
       });
+  const auto lookup_texture_index = [&](u32 local_index) {
+    return texture_indices_map.at(local_index);
+  };
+
+  for (const CPUMaterial& material : cpu_scene.materials) {
+    [[maybe_unused]] u32 material_index = renderer.add_material(CPUMaterial{
+        .base_color_factor = material.base_color_factor,
+        .albedo_texture_index = material.albedo_texture_index.map(lookup_texture_index),
+        .normal_texture_index = material.normal_texture_index.map(lookup_texture_index),
+        .occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index)});
+  }
 
   std::unordered_map<uint32_t, RenderComponent> render_components;
-
-  for (uint32_t i = 0; i < cpu_scene.objects.size(); ++i) {
+  for (u32 i = 0; i < cpu_scene.objects.size(); ++i) {
     const auto& object = cpu_scene.objects[i];
     if (object.mesh_index >= 0) {
-      const auto mesh_handle = mesh_storage[beyond::narrow<uint32_t>(object.mesh_index)];
+      const auto mesh_handle = mesh_storage[narrow<u32>(object.mesh_index)];
 
-      const auto material_index = cpu_scene.meshes.at(object.mesh_index).material_index.value();
-      auto material_info = cpu_scene.materials[material_index];
-      material_info.albedo_texture_index =
-          material_info.albedo_texture_index
-              .map([&](uint32_t index) { return texture_indices_map[index]; })
-              .value_or(renderer.default_albedo_texture_index);
-      material_info.normal_texture_index =
-          material_info.normal_texture_index
-              .map([&](uint32_t index) { return texture_indices_map[index]; })
-              .value_or(renderer.default_normal_texture_index);
-      material_info.occlusion_texture_index =
-          material_info.occlusion_texture_index
-              .map([&](uint32_t index) { return texture_indices_map[index]; })
-              .value_or(renderer.default_albedo_texture_index);
-
-      render_components.insert(
-          {i, RenderComponent{.mesh = mesh_handle,
-                              .material_index = renderer.create_material(material_info)}});
+      render_components.insert({i, RenderComponent{.mesh = mesh_handle}});
     }
   }
   renderer.upload_materials();

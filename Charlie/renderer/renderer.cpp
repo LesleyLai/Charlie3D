@@ -71,40 +71,6 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
   vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{image_memory_barrier_to_present}});
 }
 
-struct IndirectBatch {
-  charlie::MeshHandle mesh;
-  uint32_t material_index = 0;
-  uint32_t first = 0;
-  uint32_t count = 0;
-};
-
-[[nodiscard]] auto compact_draws(std::span<const charlie::RenderObject> objects)
-    -> std::vector<IndirectBatch>
-{
-  std::vector<IndirectBatch> draws;
-
-  if (objects.empty()) return draws;
-
-  beyond::optional<charlie::MeshHandle> last_mesh = beyond::nullopt;
-  for (uint32_t i = 0; i < objects.size(); ++i) {
-    const auto& object = objects[i];
-    const bool same_mesh = object.mesh == last_mesh;
-    if (same_mesh) {
-      BEYOND_ASSERT(!draws.empty());
-      ++draws.back().count;
-    } else {
-      draws.push_back(IndirectBatch{
-          .mesh = object.mesh,
-          .material_index = object.material_index,
-          .first = i,
-          .count = 1,
-      });
-      last_mesh = object.mesh;
-    }
-  }
-  return draws;
-}
-
 } // anonymous namespace
 
 namespace charlie {
@@ -795,7 +761,8 @@ void Renderer::render(const charlie::Camera& camera)
             abs(dot(dir, Vec3(0.0, 1.0, 0.0))) < 0.01 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
 
         scene_parameters_.sunlight_view_proj =
-            beyond::ortho(-1.f, 1.f, 1.f, -1.f, 0.f, 10.f) * beyond::look_at(-dir, Vec3(0.0), up);
+            beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *
+            beyond::look_at(-dir, Vec3(0.0), up);
 
         char* scene_data = nullptr;
         vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
@@ -874,40 +841,47 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
 
 [[nodiscard]] auto Renderer::upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle
 {
-  static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  std::vector<SubMesh> submeshes;
+  for (usize i = 0; i < cpu_mesh.submeshes.size(); ++i) {
+    const auto& submesh = cpu_mesh.submeshes[i];
+    static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-  const vkh::AllocatedBuffer position_buffer =
-      upload_buffer(context_, upload_context_, cpu_mesh.positions, buffer_usage,
-                    fmt::format("{} Position", cpu_mesh.name))
-          .value();
-  const vkh::AllocatedBuffer normal_buffer =
-      upload_buffer(context_, upload_context_, cpu_mesh.normals, buffer_usage,
-                    fmt::format("{} Normal", cpu_mesh.name))
-          .value();
-  const vkh::AllocatedBuffer uv_buffer =
-      upload_buffer(context_, upload_context_, cpu_mesh.uv, buffer_usage,
-                    fmt::format("{} Texcoord", cpu_mesh.name))
-          .value();
+    const vkh::AllocatedBuffer position_buffer =
+        upload_buffer(context_, upload_context_, submesh.positions, buffer_usage,
+                      fmt::format("{} Position ({})", cpu_mesh.name, i))
+            .value();
+    const vkh::AllocatedBuffer normal_buffer =
+        upload_buffer(context_, upload_context_, submesh.normals, buffer_usage,
+                      fmt::format("{} Normal ({})", cpu_mesh.name, i))
+            .value();
+    const vkh::AllocatedBuffer uv_buffer =
+        upload_buffer(context_, upload_context_, submesh.uv, buffer_usage,
+                      fmt::format("{} Texcoord ({})", cpu_mesh.name, i))
+            .value();
 
-  const vkh::AllocatedBuffer tangent_buffer =
-      cpu_mesh.tangents.size() == 0
-          ? vkh::AllocatedBuffer{.buffer = nullptr, .allocation = nullptr}
-          : upload_buffer(context_, upload_context_, cpu_mesh.tangents, buffer_usage,
-                          fmt::format("{} Tangent", cpu_mesh.name))
-                .value();
+    const vkh::AllocatedBuffer tangent_buffer =
+        submesh.tangents.size() == 0
+            ? vkh::AllocatedBuffer{.buffer = nullptr, .allocation = nullptr}
+            : upload_buffer(context_, upload_context_, submesh.tangents, buffer_usage,
+                            fmt::format("{} Tangent ({})", cpu_mesh.name, i))
+                  .value();
 
-  const vkh::AllocatedBuffer index_buffer =
-      upload_buffer(context_, upload_context_, cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                    fmt::format("{} Index", cpu_mesh.name))
-          .value();
+    const vkh::AllocatedBuffer index_buffer =
+        upload_buffer(context_, upload_context_, submesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                      fmt::format("{} Index ({})", cpu_mesh.name, i))
+            .value();
 
-  return meshes_.insert(Mesh{.position_buffer = position_buffer,
-                             .normal_buffer = normal_buffer,
-                             .uv_buffer = uv_buffer,
-                             .tangent_buffer = tangent_buffer,
-                             .index_buffer = index_buffer,
-                             .vertices_count = beyond::narrow<u32>(cpu_mesh.positions.size()),
-                             .index_count = beyond::narrow<u32>(cpu_mesh.indices.size())});
+    submeshes.push_back(SubMesh{.position_buffer = position_buffer,
+                                .normal_buffer = normal_buffer,
+                                .uv_buffer = uv_buffer,
+                                .tangent_buffer = tangent_buffer,
+                                .index_buffer = index_buffer,
+                                .vertices_count = beyond::narrow<u32>(submesh.positions.size()),
+                                .index_count = beyond::narrow<u32>(submesh.indices.size()),
+                                .material_index = submesh.material_index.value()});
+  }
+
+  return meshes_.insert(Mesh{.submeshes = std::move(submeshes)});
 }
 
 void Renderer::draw_shadow(VkCommandBuffer cmd)
@@ -996,9 +970,11 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
     const auto& mesh = meshes_.try_get(mesh_handle).expect("Cannot find mesh by handle");
 
     static constexpr VkDeviceSize vertex_offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &vertex_offset);
-    vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(cmd, mesh.index_count, 1, 0, 0, node_index);
+    for (const auto& submesh : mesh.submeshes) {
+      vkCmdBindVertexBuffers(cmd, 0, 1, &submesh.position_buffer.buffer, &vertex_offset);
+      vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+      vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, node_index);
+    }
   }
 
   vkCmdEndRendering(cmd);
@@ -1077,14 +1053,14 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   const size_t frame_index = frame_number_ % frame_overlap;
 
   // Render objects
-  // TODO: bug
-  render_objects_.clear();
+  draws_.clear();
   for (const auto [node_index, render_component] : scene_->render_components) {
-    render_objects_.push_back(RenderObject{
-        .mesh = render_component.mesh,
-        .material_index = render_component.material_index,
-        .model_matrix = scene_->global_transforms.at(node_index),
-    });
+    const Mesh& mesh = meshes_.try_get(render_component.mesh).expect("Cannot find mesh by handle!");
+
+    for (const auto& submesh : mesh.submeshes) {
+      draws_.push_back(RenderObject{.submesh = &submesh,
+                                    .model_matrix = scene_->global_transforms.at(node_index)});
+    }
   }
 
   // Copy to object buffer
@@ -1093,39 +1069,16 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   auto* object_material_index_data =
       beyond::narrow<i32*>(context_.map(current_frame().material_index_buffer).value());
 
-  const usize object_count = render_objects_.size();
+  const usize object_count = draws_.size();
   BEYOND_ENSURE(object_count <= max_object_count);
-  for (usize i = 0; i < render_objects_.size(); ++i) {
-    const RenderObject& render_object = render_objects_[i];
+  for (usize i = 0; i < draws_.size(); ++i) {
+    const RenderObject& render_object = draws_[i];
     object_model_matrix_data[i] = render_object.model_matrix;
-    object_material_index_data[i] = render_object.material_index;
+    object_material_index_data[i] = render_object.submesh->material_index;
   }
 
   context_.unmap(current_frame().model_matrix_buffer);
   context_.unmap(current_frame().material_index_buffer);
-
-  // Generate draws
-  const auto draws = compact_draws(render_objects_);
-
-  {
-    auto* draw_commands =
-        context_.map<VkDrawIndexedIndirectCommand>(current_frame().indirect_buffer).value();
-    BEYOND_ENSURE(draw_commands != nullptr);
-
-    for (u32 i = 0; i < object_count; ++i) {
-      const auto mesh_handle = render_objects_[i].mesh;
-      const auto& mesh = meshes_.try_get(mesh_handle).expect("Cannot find mesh by handle");
-
-      draw_commands[i] = VkDrawIndexedIndirectCommand{
-          .indexCount = mesh.index_count,
-          .instanceCount = 1,
-          .firstIndex = 0,
-          .vertexOffset = 0,
-          .firstInstance = i,
-      };
-    }
-    context_.unmap(current_frame().indirect_buffer);
-  }
 
   if (enable_shadow_mapping) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1142,27 +1095,22 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
-
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
+                          &material_descriptor_set_, 0, nullptr);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
                           &bindless_texture_descriptor_set_, 0, nullptr);
 
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
-                          &material_descriptor_set_, 0, nullptr);
-
-  for (const IndirectBatch& draw : draws) {
-    const Mesh& mesh = meshes_.try_get(draw.mesh).expect("Cannot find mesh by handle!");
+  for (u32 i = 0; i < draws_.size(); ++i) {
+    const SubMesh& submesh = *draws_[i].submesh;
     constexpr VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &offset);
-    vkCmdBindVertexBuffers(cmd, 1, 1, &mesh.normal_buffer.buffer, &offset);
-    vkCmdBindVertexBuffers(cmd, 2, 1, &mesh.uv_buffer.buffer, &offset);
-    vkCmdBindVertexBuffers(cmd, 3, 1, &mesh.tangent_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &submesh.position_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 1, 1, &submesh.normal_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 2, 1, &submesh.uv_buffer.buffer, &offset);
+    vkCmdBindVertexBuffers(cmd, 3, 1, &submesh.tangent_buffer.buffer, &offset);
 
-    vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-    const VkDeviceSize indirect_offset = draw.first * sizeof(VkDrawIndexedIndirectCommand);
-    constexpr uint32_t draw_stride = sizeof(VkDrawIndexedIndirectCommand);
-    vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, indirect_offset, draw.count,
-                             draw_stride);
+    vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
   }
 
   vkCmdEndRendering(cmd);
@@ -1179,7 +1127,9 @@ Renderer::~Renderer()
   for (auto texture : textures_) { vkDestroyImageView(context_, texture.image_view, nullptr); }
   for (auto image : images_) { vkh::destroy_image(context_, image); }
 
-  for (const auto& mesh : meshes_.values()) { destroy_mesh(context_, mesh); }
+  for (auto& mesh : meshes_.values()) {
+    for (auto& submesh : mesh.submeshes) { destroy_submesh(context_, submesh); }
+  }
 
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);
@@ -1268,11 +1218,14 @@ auto Renderer::add_texture(Texture texture) -> u32
   return texture_index;
 }
 
-auto Renderer::create_material(const CPUMaterial& material_info) -> u32
+auto Renderer::add_material(const CPUMaterial& material_info) -> u32
 {
-  const u32 albedo_texture_index = material_info.albedo_texture_index.value();
-  const u32 normal_texture_index = material_info.normal_texture_index.value();
-  const u32 occlusion_texture_index = material_info.occlusion_texture_index.value();
+  const u32 albedo_texture_index =
+      material_info.albedo_texture_index.value_or(default_albedo_texture_index);
+  const u32 normal_texture_index =
+      material_info.normal_texture_index.value_or(default_normal_texture_index);
+  const u32 occlusion_texture_index =
+      material_info.occlusion_texture_index.value_or(default_albedo_texture_index);
 
   materials_.push_back(Material{.albedo_texture_index = albedo_texture_index,
                                 .normal_texture_index = normal_texture_index,

@@ -22,6 +22,7 @@ struct Material {
     uint albedo_texture_index;
     uint normal_texture_index;
     uint occlusion_texture_index;
+    uint _padding;
 };
 layout (std430, set = 2, binding = 0) readonly buffer MaterialBuffer {
     Material material[];
@@ -161,7 +162,7 @@ float shadow_mapping() {
     vec2 shadow_texel_size = vec2(1.0) / shadow_map_size;
 
     //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
-    const float light_size = 10.0f;
+    const float light_size = 100.0f;
     return shadow_PCSS(in_shadow_coord, shadow_texel_size, light_size);
 }
 

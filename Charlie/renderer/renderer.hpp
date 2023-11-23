@@ -44,14 +44,14 @@ struct Texture {
 };
 
 struct Material {
-  u32 albedo_texture_index = 0;
-  u32 normal_texture_index = 0;
-  u32 occlusion_texture_index = 0;
+  u32 albedo_texture_index = 0xdeadbeef;
+  u32 normal_texture_index = 0xdeadbeef;
+  u32 occlusion_texture_index = 0xdeadbeef;
+  u32 _padding = 0xdeadbeef;
 };
 
 struct RenderObject {
-  MeshHandle mesh;
-  u32 material_index;
+  const SubMesh* submesh = nullptr;
   Mat4 model_matrix;
 };
 
@@ -133,7 +133,7 @@ public:
     return beyond::narrow<uint32_t>(textures_.size());
   }
 
-  [[nodiscard]] auto create_material(const CPUMaterial& material) -> u32;
+  [[nodiscard]] auto add_material(const CPUMaterial& material_info) -> u32;
   void upload_materials();
 
   [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
@@ -200,7 +200,7 @@ private:
   VkSampler default_sampler_ = VK_NULL_HANDLE;
   std::vector<Texture> textures_;
 
-  std::vector<RenderObject> render_objects_;
+  std::vector<RenderObject> draws_;
 
   std::unique_ptr<Scene> scene_;
   GPUSceneParameters scene_parameters_;

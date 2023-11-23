@@ -48,6 +48,32 @@ auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
           .sampler_index = to_beyond(texture.samplerIndex).map(beyond::narrow<uint32_t, size_t>)};
 }
 
+auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
+{
+  static constexpr auto get_texture_index = [](const fastgltf::TextureInfo& texture) -> uint32_t {
+    return beyond::narrow<uint32_t>(texture.textureIndex);
+  };
+
+  const beyond::optional<uint32_t> albedo_texture_index =
+      beyond::from_std(material.pbrData.baseColorTexture.transform(get_texture_index));
+
+  const beyond::optional<uint32_t> normal_texture_index =
+      beyond::from_std(material.normalTexture.transform(get_texture_index));
+
+  const beyond::optional<uint32_t> occlusion_texture_index =
+      beyond::from_std(material.occlusionTexture.transform(get_texture_index));
+
+  return charlie::CPUMaterial{
+      .base_color_factor = {material.pbrData.baseColorFactor[0],
+                            material.pbrData.baseColorFactor[1],
+                            material.pbrData.baseColorFactor[2],
+                            material.pbrData.baseColorFactor[3]},
+      .albedo_texture_index = albedo_texture_index,
+      .normal_texture_index = normal_texture_index,
+      .occlusion_texture_index = occlusion_texture_index,
+  };
+};
+
 [[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
                                        const fastgltf::Image& image) -> charlie::CPUImage
 {
@@ -91,16 +117,16 @@ namespace charlie {
                         transform_arr[12], transform_arr[13], transform_arr[14], transform_arr[15]};
 
   } else {
-    //    const auto transform = std::get<fastgltf::Node::TRS>(node.transform);
-    //    const beyond::Vec3 translation{transform.translation[0], transform.translation[1],
-    //                                   transform.translation[2]};
+    const auto transform = std::get<fastgltf::Node::TRS>(node.transform);
+    const beyond::Vec3 translation{transform.translation[0], transform.translation[1],
+                                   transform.translation[2]};
     //    const beyond::Quat rotation{transform.rotation[3], transform.rotation[0],
     //    transform.rotation[1],
     //                                transform.rotation[2]};
-    //    const beyond::Vec3 scale{transform.scale[0], transform.scale[1], transform.scale[2]};
+    const beyond::Vec3 scale{transform.scale[0], transform.scale[1], transform.scale[2]};
 
     // TODO: proper handle TRS
-    return beyond::Mat4::identity();
+    return beyond::translate(translation) * beyond::scale(scale);
   }
 }
 
@@ -124,19 +150,11 @@ namespace charlie {
 
   ThreadPool io_thread_pool{"IO Thread Pool"};
 
-  // Creates a Parser instance. Optimally, you should reuse this across loads, but don't use it
-  // across threads. To enable extensions, you have to pass them into the parser's constructor.
   fastgltf::Parser parser;
 
-  // The GltfDataBuffer class is designed for re-usability of the same JSON string. It contains
-  // utility functions to load data from a std::filesystem::path, copy from an existing buffer,
-  // or re-use an already existing allocation. Note that it has to outlive the process of every
-  // parsing function you call.
   fastgltf::GltfDataBuffer data;
   data.loadFromFile(file_path);
 
-  // This loads the glTF file into the gltf object and parses the JSON. For GLB files, use
-  // Parser::loadBinaryGLTF instead.
   using fastgltf::Options;
 
   auto maybe_asset = parser.loadGLTF(&data, file_path.parent_path(),
@@ -172,36 +190,15 @@ namespace charlie {
   std::ranges::transform(asset.textures, std::back_inserter(result.textures), to_cpu_texture);
 
   result.materials.reserve(asset.materials.size());
-  for (const auto& material : asset.materials) {
-    static constexpr auto get_texture_index = [](const fastgltf::TextureInfo& texture) -> u32 {
-      return narrow<u32>(texture.textureIndex);
-    };
-
-    const beyond::optional<u32> albedo_texture_index =
-        beyond::from_std(material.pbrData.baseColorTexture.transform(get_texture_index));
-
-    const beyond::optional<u32> normal_texture_index =
-        beyond::from_std(material.normalTexture.transform(get_texture_index));
-
-    const beyond::optional<u32> occlusion_texture_index =
-        beyond::from_std(material.occlusionTexture.transform(get_texture_index));
-
-    result.materials.push_back(CPUMaterial{
-        .base_color_factor = {material.pbrData.baseColorFactor[0],
-                              material.pbrData.baseColorFactor[1],
-                              material.pbrData.baseColorFactor[2],
-                              material.pbrData.baseColorFactor[3]},
-        .albedo_texture_index = albedo_texture_index,
-        .normal_texture_index = normal_texture_index,
-        .occlusion_texture_index = occlusion_texture_index,
-    });
-  }
+  std::ranges::transform(asset.materials, std::back_inserter(result.materials), to_cpu_material);
 
   for (const auto& mesh : asset.meshes) {
     // Each gltf primitive is treated as an own mesh
+
+    std::vector<CPUSubmesh> submeshes;
+    submeshes.reserve(mesh.primitives.size());
     for (const auto& primitive : mesh.primitives) {
       BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
-
       constexpr auto find_attribute_id = [](const fastgltf::Primitive& primitive,
                                             std::string_view name) -> beyond::optional<usize> {
         if (const auto itr = primitive.findAttribute(name); itr != primitive.attributes.end()) {
@@ -243,7 +240,6 @@ namespace charlie {
       texture_coord_accessor_id
           .map([&](size_t id) {
             const auto& texture_coord_accessor = asset.accessors.at(id);
-
             BEYOND_ENSURE(texture_coord_accessor.type == AccessorType::Vec2);
 
             tex_coords.resize(texture_coord_accessor.count);
@@ -261,6 +257,7 @@ namespace charlie {
         fastgltf::copyFromAccessor<beyond::Vec4>(asset, tangent_accessor, tangents.data());
       });
 
+      // BEYOND_ENSURE(index_accessor.componentType == fastgltf::ComponentType::UnsignedInt);
       std::vector<u32> indices;
       indices.resize(index_accessor.count);
       fastgltf::copyFromAccessor<u32>(asset, index_accessor, indices.data());
@@ -268,14 +265,16 @@ namespace charlie {
       const beyond::optional<u32> material_index =
           to_beyond(primitive.materialIndex).map(beyond::narrow<u32, usize>);
 
-      result.meshes.push_back(CPUMesh{.name = std::string{mesh.name},
-                                      .material_index = material_index,
-                                      .positions = std::move(positions),
-                                      .normals = std::move(normals),
-                                      .uv = std::move(tex_coords),
-                                      .tangents = std::move(tangents),
-                                      .indices = std::move(indices)});
+      submeshes.push_back(CPUSubmesh{.material_index = material_index,
+                                     .positions = std::move(positions),
+                                     .normals = std::move(normals),
+                                     .uv = std::move(tex_coords),
+                                     .tangents = std::move(tangents),
+                                     .indices = std::move(indices)});
     }
+
+    result.meshes.push_back(
+        CPUMesh{.name = std::string{mesh.name}, .submeshes = std::move(submeshes)});
   }
 
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {
@@ -284,29 +283,29 @@ namespace charlie {
   }
 
   // TODO: don't hard code floor here
-  {
-    result.materials.emplace_back();
-    result.meshes.push_back(CPUMesh{
-        .name = "Floor",
-        .material_index = result.materials.size() - 1,
-        .positions =
-            {
-                Point3{0.5f, 0.0f, 0.5f},   // top right
-                Point3{0.5f, 0.0f, -0.5f},  // bottom right
-                Point3{-0.5f, 0.0f, -0.5f}, // bottom left
-                Point3{-0.5f, 0.0f, 0.5f}   // top left
-            },
-        .normals = {Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}},
-        .uv = {Vec2{0, 0}, Vec2{0, 1}, Vec2{1, 0}, Vec2{1, 1}},
-        .tangents = {Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}},
-        .indices = {0, 1, 3, 1, 2, 3},
-    });
-    result.objects.push_back(CPURenderObject{
-        .mesh_index = narrow<i32>(result.meshes.size() - 1),
-    });
-    result.local_transforms.push_back(beyond::translate(0.0f, -1.0f, 0.0f) *
-                                      beyond::scale(5.0f, 1.f, 5.0f));
-  }
+  //  {
+  //    result.materials.emplace_back();
+  //    result.meshes.push_back(CPUMesh{
+  //        .name = "Floor",
+  //        .material_index = result.materials.size() - 1,
+  //        .positions =
+  //            {
+  //                Point3{0.5f, 0.0f, 0.5f},   // top right
+  //                Point3{0.5f, 0.0f, -0.5f},  // bottom right
+  //                Point3{-0.5f, 0.0f, -0.5f}, // bottom left
+  //                Point3{-0.5f, 0.0f, 0.5f}   // top left
+  //            },
+  //        .normals = {Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}},
+  //        .uv = {Vec2{0, 0}, Vec2{0, 1}, Vec2{1, 0}, Vec2{1, 1}},
+  //        .tangents = {Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0,
+  //        1}}, .indices = {0, 1, 3, 1, 2, 3},
+  //    });
+  //    result.objects.push_back(CPURenderObject{
+  //        .mesh_index = narrow<i32>(result.meshes.size() - 1),
+  //    });
+  //    result.local_transforms.push_back(beyond::translate(0.0f, -1.0f, 0.0f) *
+  //                                      beyond::scale(5.0f, 1.f, 5.0f));
+  //  }
 
   io_thread_pool.wait();
 

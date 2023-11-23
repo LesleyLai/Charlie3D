@@ -15,9 +15,7 @@
 
 namespace charlie {
 
-struct CPUMesh {
-  std::string name;
-
+struct CPUSubmesh {
   beyond::optional<u32> material_index;
 
   std::vector<Point3> positions;
@@ -27,6 +25,11 @@ struct CPUMesh {
 
   std::vector<u32> indices;
   beyond::AABB3 bounding_box; // object space bounding box
+};
+
+struct CPUMesh {
+  std::string name;
+  std::vector<CPUSubmesh> submeshes;
 };
 
 } // namespace charlie
