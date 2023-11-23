@@ -487,6 +487,8 @@ void Renderer::init_pipelines()
 
 void Renderer::init_mesh_pipeline()
 {
+  ZoneScoped;
+
   const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
   const std::filesystem::path shader_directory = asset_path / "shaders";
 
@@ -588,6 +590,8 @@ void Renderer::init_mesh_pipeline()
 
 void Renderer::init_shadow_pipeline()
 {
+  ZoneScoped;
+
   const ShaderHandle vertex_shader =
       pipeline_manager_->add_shader("shadow.vert.glsl", ShaderStage::vertex);
 
@@ -860,7 +864,7 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
             .value();
 
     const vkh::AllocatedBuffer tangent_buffer =
-        submesh.tangents.size() == 0
+        submesh.tangents.empty()
             ? vkh::AllocatedBuffer{.buffer = nullptr, .allocation = nullptr}
             : upload_buffer(context_, upload_context_, submesh.tangents, buffer_usage,
                             fmt::format("{} Tangent ({})", cpu_mesh.name, i))
@@ -876,8 +880,8 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
                                 .uv_buffer = uv_buffer,
                                 .tangent_buffer = tangent_buffer,
                                 .index_buffer = index_buffer,
-                                .vertices_count = beyond::narrow<u32>(submesh.positions.size()),
-                                .index_count = beyond::narrow<u32>(submesh.indices.size()),
+                                .vertices_count = narrow<u32>(submesh.positions.size()),
+                                .index_count = narrow<u32>(submesh.indices.size()),
                                 .material_index = submesh.material_index.value()});
   }
 

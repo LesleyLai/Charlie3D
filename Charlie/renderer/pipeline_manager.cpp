@@ -7,6 +7,8 @@
 #include <beyond/utils/assert.hpp>
 #include <spdlog/spdlog.h>
 
+#include <Tracy/Tracy.hpp>
+
 #include "../utils/string_map.hpp"
 
 namespace {
@@ -199,6 +201,9 @@ PipelineManager::~PipelineManager()
 [[nodiscard]] auto PipelineManager::add_shader(beyond::ZStringView filename, ShaderStage stage)
     -> ShaderHandle
 {
+  ZoneScoped;
+  ZoneText(filename.c_str(), filename.size());
+
   const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
   std::filesystem::path shader_directory = asset_path / "shaders";
   std::filesystem::path shader_path = shader_directory / filename.c_str();
@@ -243,9 +248,9 @@ PipelineManager::~PipelineManager()
          });
        }});
 
-  ShaderCompiler compiler;
   std::string shader_path_str = shader_path.string();
-  auto compilation_res = compiler.compile_shader_from_file(shader_path_str, {.stage = stage});
+  auto compilation_res =
+      shader_compiler_.compile_shader_from_file(shader_path_str, {.stage = stage});
   BEYOND_ENSURE(compilation_res.has_value());
 
   VkShaderModule shader_module = vkh::load_shader_module(device_, compilation_res.value().spirv,

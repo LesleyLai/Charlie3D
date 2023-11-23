@@ -54,6 +54,7 @@ struct GraphicsPipelineCreateInfo {
 
 class PipelineManager {
   VkDevice device_ = VK_NULL_HANDLE;
+  ShaderCompiler shader_compiler_;
   std::unique_ptr<struct Shaders> shaders_;
   FileWatcher shader_file_watcher_;
 
