@@ -119,6 +119,7 @@ public:
 
   struct ImageUploadInfo {
     VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+    u32 mip_levels = 1; // Generate mipmaps if mip_level > 1
   };
 
   auto upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info = {})

@@ -186,7 +186,8 @@ void main()
     if (albedo.a < 0.1) {
         discard;
     }
-    vec3 normal = calculate_pixel_normal();
+    //vec3 normal = calculate_pixel_normal();
+    vec3 normal = in_normal;
 
     // lighting
     float ambient_strength = scene_data.sunlight_direction.w;

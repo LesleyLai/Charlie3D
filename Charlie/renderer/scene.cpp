@@ -89,24 +89,33 @@ void generate_tangent_if_missing(Ref<CPUSubmesh> submesh_ref)
                          [&](const CPUMesh& mesh) { return renderer.upload_mesh_data(mesh); });
 
   std::vector<VkImage> images(cpu_scene.images.size(), VK_NULL_HANDLE);
-  std::ranges::transform(cpu_scene.images, images.begin(), [&](const CPUImage& cpu_image) {
-    return renderer.upload_image(cpu_image);
-  });
+  std::vector<VkImageView> image_views(cpu_scene.images.size(), VK_NULL_HANDLE);
+  for (usize i = 0; i < cpu_scene.images.size(); ++i) {
+    const CPUImage& cpu_image = cpu_scene.images[i];
+    const u32 mip_levels =
+        static_cast<u32>(
+            std::floor(narrow<f64>(std::log2(std::max(cpu_image.width, cpu_image.height))))) +
+        1;
+
+    images[i] = renderer.upload_image(cpu_image, {.mip_levels = mip_levels});
+
+    VkImageView image_view =
+        vkh::create_image_view(
+            renderer.context(),
+            {.image = images[i],
+             .format = VK_FORMAT_R8G8B8A8_SRGB,
+             .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                        .level_count = mip_levels}})
+            .value();
+    image_views[i] = image_view;
+  }
 
   // A map from local index to resource index
   std::vector<uint32_t> texture_indices_map(cpu_scene.textures.size());
   std::ranges::transform(
       cpu_scene.textures, texture_indices_map.begin(), [&](const CPUTexture& cpu_texture) {
         VkImage image = images.at(cpu_texture.image_index);
-        VkImageView image_view =
-            vkh::create_image_view(
-                renderer.context(),
-                {.image = image,
-                 .format = VK_FORMAT_R8G8B8A8_SRGB,
-                 .subresource_range =
-                     vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT}})
-                .value();
-
+        VkImageView image_view = image_views.at(cpu_texture.image_index);
         return renderer.add_texture(Texture{.image = image, .image_view = image_view});
       });
   const auto lookup_texture_index = [&](u32 local_index) {
@@ -126,7 +135,6 @@ void generate_tangent_if_missing(Ref<CPUSubmesh> submesh_ref)
     const auto& object = cpu_scene.objects[i];
     if (object.mesh_index >= 0) {
       const auto mesh_handle = mesh_storage[narrow<u32>(object.mesh_index)];
-
       render_components.insert({i, RenderComponent{.mesh = mesh_handle}});
     }
   }

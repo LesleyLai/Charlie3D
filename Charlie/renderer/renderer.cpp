@@ -101,6 +101,68 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
   input_handler.add_listener(std::bind_front(&Renderer::on_input_event, std::ref(*this)));
 }
 
+static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution image_resolution,
+                                u32 mip_levels)
+{
+  vkh::ImageBarrier2 barrier{.image = image,
+                             .subresource_range = {
+                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1,
+                             }};
+
+  i32 mip_width = narrow<i32>(image_resolution.width);
+  i32 mip_height = narrow<i32>(image_resolution.height);
+
+  for (u32 i = 1; i < mip_levels; i++) {
+    barrier.subresource_range.baseMipLevel = i - 1;
+    barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
+    barrier.access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_TRANSFER_READ_BIT};
+    barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT};
+    vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+
+    const i32 next_mip_width = std::max(mip_width / 2, 1);
+    const i32 next_mip_height = std::max(mip_height / 2, 1);
+
+    VkImageBlit blit{.srcSubresource =
+                         {
+                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .mipLevel = i - 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1,
+                         },
+                     .srcOffsets = {{0, 0, 0}, {mip_width, mip_height, 1}},
+                     .dstSubresource =
+                         {
+                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .mipLevel = i,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1,
+                         },
+                     .dstOffsets = {{0, 0, 0}, {next_mip_width, next_mip_height, 1}}};
+    vkCmdBlitImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+    barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    barrier.access_masks = {VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT};
+    barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT};
+    vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+
+    mip_width = next_mip_width;
+    mip_height = next_mip_height;
+  }
+
+  barrier.subresource_range.baseMipLevel = mip_levels - 1;
+  barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  barrier.access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT};
+  barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT};
+  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+}
+
 auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info)
     -> VkImage
 {
@@ -138,6 +200,9 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploa
       .depth = 1,
   };
 
+  const u32 mip_levels = upload_info.mip_levels;
+  const bool need_generate_mipmap = mip_levels > 1;
+
   const auto image_debug_name =
       cpu_image.name.empty() ? fmt::format("{} Image", cpu_image.name) : "Image";
   vkh::AllocatedImage allocated_image =
@@ -145,16 +210,18 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploa
                         vkh::ImageCreateInfo{
                             .format = upload_info.format,
                             .extent = image_extent,
-                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            .mip_levels = mip_levels,
                             .debug_name = image_debug_name,
                         })
           .expect("Failed to create image");
 
   immediate_submit(context, upload_context, [&](VkCommandBuffer cmd) {
-    static constexpr VkImageSubresourceRange range = {
+    const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .baseMipLevel = 0,
-        .levelCount = 1,
+        .levelCount = mip_levels,
         .baseArrayLayer = 0,
         .layerCount = 1,
     };
@@ -189,18 +256,29 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploa
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
     // barrier the image into the shader readable layout
-    vkh::cmd_pipeline_barrier2(
-        cmd, {.image_barriers = std::array{
-                  vkh::ImageBarrier2{
-                      .stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                                      VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
-                      .access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT},
-                      .layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                      .image = allocated_image.image,
-                      .subresource_range = range}
-                      .to_vk_struct() //
-              }});
+    if (not need_generate_mipmap) {
+      vkh::cmd_pipeline_barrier2(
+          cmd, {.image_barriers = std::array{
+                    vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                                       VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+                                       .access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                        VK_ACCESS_2_SHADER_READ_BIT},
+                                       .layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                       .image = allocated_image.image,
+                                       .subresource_range = range}
+                        .to_vk_struct() //
+                }});
+    } else {
+      VkFormatProperties format_properties;
+      vkGetPhysicalDeviceFormatProperties(context_.physical_device(), upload_info.format,
+                                          &format_properties);
+      BEYOND_ENSURE(format_properties.optimalTilingFeatures &
+                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+
+      cmd_generate_mipmap(cmd, allocated_image.image, Resolution{cpu_image.width, cpu_image.height},
+                          mip_levels);
+    }
   });
 
   return images_.emplace_back(allocated_image).image;
@@ -637,7 +715,8 @@ void Renderer::init_sampler()
                                             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
                                             .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                                             .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                                            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT};
+                                            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                                            .maxLod = VK_LOD_CLAMP_NONE};
   vkCreateSampler(context_, &sampler_info, nullptr, &default_sampler_);
 }
 
