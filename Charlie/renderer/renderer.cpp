@@ -762,7 +762,7 @@ void Renderer::render(const charlie::Camera& camera)
         // Scene data
         const auto dir = Vec3(scene_parameters_.sunlight_direction.xyz);
         const Vec3 up =
-            abs(dot(dir, Vec3(0.0, 1.0, 0.0))) < 0.01 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
+            abs(dot(dir, Vec3(0.0, 1.0, 0.0))) > 0.9 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
 
         scene_parameters_.sunlight_view_proj =
             beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *

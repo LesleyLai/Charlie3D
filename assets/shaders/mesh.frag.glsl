@@ -182,13 +182,16 @@ void main()
     vec3 sunlight_color = scene_data.sunlight_color.xyz * scene_data.sunlight_color.w;
 
     uint albedo_texture_index = material_buffer.material[in_material_index].albedo_texture_index;
-    vec3 albedo = texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord).xyz;
+    vec4 albedo = texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
+    if (albedo.a < 0.1) {
+        discard;
+    }
     vec3 normal = calculate_pixel_normal();
 
     // lighting
     float ambient_strength = scene_data.sunlight_direction.w;
-    vec3 ambient = albedo * ambient_occlusion * ambient_strength;
-    vec3 diffuse = albedo * sunlight_color * max(dot(-sunlight_direction, normal), 0.0);
+    vec3 ambient = albedo.rgb * ambient_occlusion * ambient_strength;
+    vec3 diffuse = albedo.rgb * sunlight_color * max(dot(-sunlight_direction, normal), 0.0);
 
     float visibility = shadow_mapping();
 
