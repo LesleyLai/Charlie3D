@@ -864,11 +864,9 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
             .value();
 
     const vkh::AllocatedBuffer tangent_buffer =
-        submesh.tangents.empty()
-            ? vkh::AllocatedBuffer{.buffer = nullptr, .allocation = nullptr}
-            : upload_buffer(context_, upload_context_, submesh.tangents, buffer_usage,
-                            fmt::format("{} Tangent ({})", cpu_mesh.name, i))
-                  .value();
+        upload_buffer(context_, upload_context_, submesh.tangents, buffer_usage,
+                      fmt::format("{} Tangent ({})", cpu_mesh.name, i))
+            .value();
 
     const vkh::AllocatedBuffer index_buffer =
         upload_buffer(context_, upload_context_, submesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,

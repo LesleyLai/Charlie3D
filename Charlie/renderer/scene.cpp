@@ -7,11 +7,57 @@
 
 #include "../vulkan_helpers/initializers.hpp"
 
+#include "beyond/math/serial.hpp"
+
 #include "renderer.hpp"
 
 #include <tracy/Tracy.hpp>
 
 namespace charlie {
+
+// Generate per face tangents
+void generate_tangent_if_missing(Ref<CPUSubmesh> submesh_ref)
+{
+  if (submesh_ref.get().tangents.empty()) {
+    CPUSubmesh& submesh = submesh_ref.get();
+    const std::vector<Point3>& positions = submesh.positions;
+    const std::vector<Vec2>& uv = submesh.uv;
+    std::vector<Vec4>& tangents = submesh.tangents;
+
+    BEYOND_ASSERT(submesh.positions.size() == submesh.normals.size());
+    BEYOND_ASSERT(submesh.positions.size() == submesh.uv.size());
+    tangents.resize(submesh.positions.size());
+    BEYOND_ENSURE(submesh.positions.size() % 3 == 0);
+    for (usize j = 0; j < submesh.positions.size(); j += 3) {
+      const Point3 pos1 = positions[j];
+      const Point3 pos2 = positions[j + 1];
+      const Point3 pos3 = positions[j + 2];
+
+      const Vec2 uv1 = uv[j];
+      const Vec2 uv2 = uv[j + 1];
+      const Vec2 uv3 = uv[j + 2];
+
+      const Vec3 edge1 = pos2 - pos1;
+      const Vec3 edge2 = pos3 - pos1;
+      const Vec2 delta_uv1 = uv2 - uv1;
+      const Vec2 delta_uv2 = uv3 - uv1;
+
+      const Vec3 tangent = normalize(delta_uv2.y * edge1 - delta_uv1.y * edge2);
+      const Vec3 bitangent = normalize(-delta_uv2.x * edge1 + delta_uv1.x * edge2);
+
+      // Hacky way to get the handedness of the TNB
+      float sign = 1.0;
+      const Vec3 calculated_bitangent = cross(submesh.normals[j], tangent);
+      if (dot(bitangent, calculated_bitangent) < 0) { // Opposite
+        sign = -1.0;
+      }
+
+      tangents[j] = Vec4{tangent, sign};
+      tangents[j + 1] = Vec4{tangent, sign};
+      tangents[j + 2] = Vec4{tangent, sign};
+    }
+  }
+}
 
 [[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene
 {
@@ -34,6 +80,9 @@ namespace charlie {
     }
   }();
 
+  for (auto& mesh : cpu_scene.meshes) {
+    for (auto& submesh : mesh.submeshes) { generate_tangent_if_missing(ref(submesh)); }
+  }
   std::vector<MeshHandle> mesh_storage;
   mesh_storage.reserve(cpu_scene.meshes.size());
   std::ranges::transform(cpu_scene.meshes, std::back_inserter(mesh_storage),

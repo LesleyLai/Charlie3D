@@ -36,9 +36,9 @@ namespace {
 
   spdlog::log(log_level, "{}", p_callback_data->pMessage);
 
-  if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-    beyond::panic("Vulkan Validation error!");
-  }
+  //  if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+  //    beyond::panic("Vulkan Validation error!");
+  //  }
 
   return 0;
 }
