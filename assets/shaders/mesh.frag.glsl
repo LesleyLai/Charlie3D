@@ -19,6 +19,7 @@ layout (location = 0) out vec4 out_frag_color;
 layout (set = 0, binding = 2) uniform sampler2D shadow_map;
 
 struct Material {
+    vec4 base_color_factor;
     uint albedo_texture_index;
     uint normal_texture_index;
     uint occlusion_texture_index;
@@ -52,11 +53,15 @@ const vec2 poisson_disk_16[SHADOW_SAMPLE_COUNT] = vec2[](
     vec2(-0.857891, 0.512805)
 );
 
+Material current_material() {
+    return material_buffer.material[in_material_index];
+}
+
 vec3 calculate_pixel_normal() {
     mat3 TNB = mat3(normalize(in_tangent), normalize(in_bi_tangent), normalize(in_normal));
 
     // obtain normal from normal map in range [0,1]
-    uint normal_texture_index = material_buffer.material[in_material_index].normal_texture_index;
+    uint normal_texture_index = current_material().normal_texture_index;
     vec3 tangent_space_normal = texture(global_textures[nonuniformEXT(normal_texture_index)], in_tex_coord).xyz;
     // transform normal vector to range [-1,1]
     tangent_space_normal = normalize(tangent_space_normal * 2.0 - 1.0);
@@ -175,14 +180,16 @@ void main()
 
     #else
 
-    uint occlusion_texture_index = material_buffer.material[in_material_index].occlusion_texture_index;
+    Material material = current_material();
+
+    uint occlusion_texture_index = material.occlusion_texture_index;
     float ambient_occlusion = texture(global_textures[nonuniformEXT(occlusion_texture_index)], in_tex_coord).r;
 
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
     vec3 sunlight_color = scene_data.sunlight_color.xyz * scene_data.sunlight_color.w;
 
-    uint albedo_texture_index = material_buffer.material[in_material_index].albedo_texture_index;
-    vec4 albedo = texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
+    uint albedo_texture_index = material.albedo_texture_index;
+    vec4 albedo = material.base_color_factor * texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
     if (albedo.a < 0.1) {
         discard;
     }

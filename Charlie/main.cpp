@@ -189,6 +189,7 @@ int main(int argc, const char** argv)
     lag += delta_time;
 
     input_handler.handle_events();
+
     draw_gui(window.resolution(), renderer, camera, delta_time);
 
     while (lag >= MS_PER_FIXED_UPDATE) {

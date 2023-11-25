@@ -1308,7 +1308,8 @@ auto Renderer::add_material(const CPUMaterial& material_info) -> u32
   const u32 occlusion_texture_index =
       material_info.occlusion_texture_index.value_or(default_albedo_texture_index);
 
-  materials_.push_back(Material{.albedo_texture_index = albedo_texture_index,
+  materials_.push_back(Material{.base_color_factor = material_info.base_color_factor,
+                                .albedo_texture_index = albedo_texture_index,
                                 .normal_texture_index = normal_texture_index,
                                 .occlusion_texture_index = occlusion_texture_index});
 

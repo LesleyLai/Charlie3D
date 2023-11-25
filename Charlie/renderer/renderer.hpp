@@ -44,6 +44,7 @@ struct Texture {
 };
 
 struct Material {
+  Vec4 base_color_factor;
   u32 albedo_texture_index = 0xdeadbeef;
   u32 normal_texture_index = 0xdeadbeef;
   u32 occlusion_texture_index = 0xdeadbeef;
