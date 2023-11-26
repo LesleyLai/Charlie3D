@@ -180,23 +180,16 @@ int main(int argc, const char** argv)
   using Clock = std::chrono::steady_clock;
   using namespace std::literals::chrono_literals;
   auto previous_time = Clock::now();
-  Clock::duration lag = 0ns;
-  static constexpr auto MS_PER_FIXED_UPDATE = 10ms;
   while (true) {
     const auto current_time = Clock::now();
     const auto delta_time = current_time - previous_time;
     previous_time = current_time;
-    lag += delta_time;
 
     input_handler.handle_events();
 
-    while (lag >= MS_PER_FIXED_UPDATE) {
-      camera.fixed_update();
-      lag -= MS_PER_FIXED_UPDATE;
-    }
+    camera.update(delta_time);
 
-    const bool minimized = SDL_GetWindowFlags(window.raw_window()) & SDL_WINDOW_MINIMIZED;
-    if (not minimized) {
+    if (not window.is_minimized()) {
       draw_gui(window.resolution(), renderer, camera, delta_time);
       renderer.render(camera);
     }

@@ -48,9 +48,16 @@ void Camera::draw_gui()
   }
 }
 
-void Camera::fixed_update()
+void Camera::update(std::chrono::steady_clock::duration delta_time)
 {
-  controller_->fixed_update();
+  using namespace std::literals::chrono_literals;
+  static constexpr auto MS_PER_FIXED_UPDATE = 10ms;
+
+  update_lag_ += delta_time;
+  while (update_lag_ >= MS_PER_FIXED_UPDATE) {
+    controller_->fixed_update();
+    update_lag_ -= MS_PER_FIXED_UPDATE;
+  }
 }
 
 void Camera::on_input_event(const Event& event, const InputStates& states)
@@ -197,7 +204,7 @@ void ArcballCameraController::on_mouse_move(MouseMoveEvent event, const InputSta
 
   // Panning
   if (states.mouse_button_down(MouseButton::right)) {
-    const Vec2 delta_pan = normalized_delta_mouse * zooming_;
+    const Vec2 delta_pan = normalized_delta_mouse;
 
     const auto delta = cross(right_axis(), forward_axis_) * delta_pan.y * pan_speed_ -
                        right_axis() * delta_pan.x * pan_speed_;

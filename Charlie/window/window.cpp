@@ -23,4 +23,9 @@ Window::~Window()
   return SDL_GetWindowID(window_);
 }
 
+auto Window::is_minimized() const noexcept -> bool
+{
+  return SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED;
+}
+
 } // namespace charlie

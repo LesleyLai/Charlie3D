@@ -5,6 +5,8 @@
 #include <beyond/math/matrix.hpp>
 #include <beyond/math/point.hpp>
 
+#include <chrono>
+
 #include "../utils/prelude.hpp"
 #include "../window/input_handler.hpp"
 
@@ -21,6 +23,7 @@ public:
 
 private:
   CameraController* controller_ = nullptr;
+  std::chrono::steady_clock::duration update_lag_{};
 
 public:
   explicit Camera(CameraController& controller) : controller_{&controller} {}
@@ -32,7 +35,7 @@ public:
   void draw_gui();
   void on_input_event(const Event& event, const InputStates& states);
 
-  void fixed_update();
+  void update(std::chrono::steady_clock::duration delta_time);
 };
 
 struct CameraController {

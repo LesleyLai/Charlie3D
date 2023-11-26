@@ -31,6 +31,8 @@ public:
 
   [[nodiscard]] auto window_id() const noexcept -> u32;
 
+  [[nodiscard]] auto is_minimized() const noexcept -> bool;
+
 private:
   friend WindowManager;
   explicit Window(SDL_Window* raw_window) : window_{raw_window} {}
