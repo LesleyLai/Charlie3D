@@ -72,6 +72,11 @@ void Camera::on_input_event(const Event& event, const InputStates& states)
   controller_->on_input_event(event, states);
 }
 
+auto Camera::position() const -> beyond::Vec3
+{
+  return controller_->position();
+}
+
 void FirstPersonCameraController::fixed_update()
 {
   const auto velocity = input_axis_;

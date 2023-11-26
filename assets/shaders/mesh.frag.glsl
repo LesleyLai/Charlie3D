@@ -1,13 +1,13 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier: require
 
-layout (location = 0) in vec2 in_tex_coord;
-layout (location = 1) in vec3 in_normal;
-layout (location = 2) in vec3 in_tangent;
-layout (location = 3) in vec3 in_bi_tangent;
-layout (location = 4) in vec4 in_shadow_coord;
-
-layout (location = 5) in flat int in_material_index;
+layout (location = 0) in vec3 in_world_pos;
+layout (location = 1) in vec2 in_tex_coord;
+layout (location = 2) in vec3 in_normal;
+layout (location = 3) in vec3 in_tangent;
+layout (location = 4) in vec3 in_bi_tangent;
+layout (location = 5) in vec4 in_shadow_coord;
+layout (location = 6) in flat int in_material_index;
 
 
 //layout (constant_id = 0) const int shadow_mode = 0;
@@ -18,12 +18,23 @@ layout (location = 0) out vec4 out_frag_color;
 
 layout (set = 0, binding = 2) uniform sampler2D shadow_map;
 
+#define PI 3.1415926538
+
+layout (set = 0, binding = 0) uniform CameraBuffer {
+    mat4 view;
+    mat4 proj;
+    mat4 view_proj;
+    vec3 position;
+} camera;
+
 struct Material {
     vec4 base_color_factor;
     uint albedo_texture_index;
     uint normal_texture_index;
+    uint metallic_roughness_texture_index;
     uint occlusion_texture_index;
-    uint _padding;
+    float metallic_factor;
+    float roughness_factor;
 };
 layout (std430, set = 2, binding = 0) readonly buffer MaterialBuffer {
     Material material[];
@@ -52,6 +63,10 @@ const vec2 poisson_disk_16[SHADOW_SAMPLE_COUNT] = vec2[](
     vec2(-0.522737, 0.0698312),
     vec2(-0.857891, 0.512805)
 );
+
+float Fd_lambertian() {
+    return 1.0 / PI;
+}
 
 Material current_material() {
     return material_buffer.material[in_material_index];
@@ -166,9 +181,65 @@ float shadow_mapping() {
     ivec2 shadow_map_size = textureSize(shadow_map, 0);
     vec2 shadow_texel_size = vec2(1.0) / shadow_map_size;
 
-    //float visibility = PCF(in_shadow_coord / in_shadow_coord.w, 1.0);
+    //return shadow_PCF(in_shadow_coord, shadow_map_size, 0.0);
     const float light_size = 100.0f;
     return shadow_PCSS(in_shadow_coord, shadow_texel_size, light_size);
+}
+
+struct Surface {
+    vec3 base_color;
+    vec3 normal;
+    float reflectance;
+    float perceptual_roughness;
+    float metallic;
+};
+
+float D_GGX(float NoH, float a) {
+    float a2 = a * a;
+    float f = (NoH * a2 - NoH) * NoH + 1.0;
+    return a2 / (PI * f * f);
+}
+
+vec3 F_Schlick(float u, vec3 f0) {
+    return f0 + (vec3(1.0) - f0) * pow(1.0 - u, 5.0);
+}
+
+float V_SmithGGXCorrelated(float NoV, float NoL, float a) {
+    float a2 = a * a;
+    float GGXL = NoV * sqrt((-NoL * a2 + NoL) * NoL + a2);
+    float GGXV = NoL * sqrt((-NoV * a2 + NoV) * NoV + a2);
+    return 0.5 / (GGXV + GGXL);
+}
+
+vec3 BRDF(vec3 view_direction, vec3 light_direction, Surface surface) {
+    vec3 base_color = surface.base_color;
+    vec3 normal = surface.normal;
+    float metallic = surface.metallic;
+    float roughness = surface.perceptual_roughness * surface.perceptual_roughness;
+    float reflectance = surface.reflectance;
+
+    vec3 f0 = mix(vec3(0.16 * reflectance * reflectance), base_color, metallic);
+    vec3 h = normalize(view_direction + light_direction);
+
+    float NoV = abs(dot(normal, view_direction)) + 1e-5;
+    float NoL = clamp(dot(normal, light_direction), 0.0, 1.0);
+    float NoH = clamp(dot(normal, h), 0.0, 1.0);
+    float LoH = clamp(dot(light_direction, h), 0.0, 1.0);
+
+    // Mapped reflectance
+
+    float D = D_GGX(NoH, roughness);
+    vec3 F = F_Schlick(LoH, f0);
+    float V = V_SmithGGXCorrelated(NoV, NoL, roughness);
+
+    // Specular BRDF (Cook-Torrance)
+    vec3 Fr = (D * V) * F;
+
+    // diffuse BRDF
+    vec3 diffuse_color = (1.0 - metallic) * base_color;
+    vec3 Fd = diffuse_color * Fd_lambertian();
+
+    return Fd + Fr;
 }
 
 void main()
@@ -185,27 +256,54 @@ void main()
     uint occlusion_texture_index = material.occlusion_texture_index;
     float ambient_occlusion = texture(global_textures[nonuniformEXT(occlusion_texture_index)], in_tex_coord).r;
 
-    vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
-    vec3 sunlight_color = scene_data.sunlight_color.xyz * scene_data.sunlight_color.w;
-
     uint albedo_texture_index = material.albedo_texture_index;
     vec4 albedo = material.base_color_factor * texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
     if (albedo.a < 0.1) {
         discard;
     }
-    //vec3 normal = calculate_pixel_normal();
-    vec3 normal = in_normal;
+    vec3 base_color = albedo.rgb;
+
+    vec2 metallic_roughness = texture(global_textures[nonuniformEXT(material.metallic_roughness_texture_index)], in_tex_coord).bg;
+    float metallic = metallic_roughness.r * material.metallic_factor;
+    float perceptual_roughness = metallic_roughness.g * material.roughness_factor;
+
+    vec3 normal = calculate_pixel_normal();
+    //vec3 normal = in_normal;
 
     // lighting
+    vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
     float ambient_strength = scene_data.sunlight_direction.w;
-    vec3 ambient = albedo.rgb * ambient_occlusion * ambient_strength;
-    vec3 diffuse = albedo.rgb * sunlight_color * max(dot(-sunlight_direction, normal), 0.0);
+    vec3 ambient = base_color * ambient_occlusion * ambient_strength;
+
+    vec3 view_direction = normalize(camera.position - in_world_pos); // view unit vector
+    vec3 light_direction = normalize(-sunlight_direction);
+
+
+    Surface surface;
+    surface.base_color = base_color;
+    surface.normal = normal;
+    surface.reflectance = 0.5;
+    surface.perceptual_roughness = perceptual_roughness;
+    surface.metallic = metallic;
+
+    vec3 F = BRDF(view_direction, light_direction, surface);
+
+    float NoL = clamp(dot(normal, light_direction), 0.0, 1.0);
+
+    // lightIntensity is the illuminance
+    // at perpendicular incidence in lux
+    vec3 sunlight_color = scene_data.sunlight_color.xyz;
+    float sunlight_intensity = scene_data.sunlight_color.w;
+
+    float illuminance = sunlight_intensity * NoL;
+    vec3 luminance = F * sunlight_color * illuminance;
 
     float visibility = shadow_mapping();
+    // visibility = 1.0;
 
-    vec3 Li = ambient + diffuse * visibility;
+    vec3 Lo = ambient + luminance * visibility;
 
-    vec3 color = reinhard_tone_mapping(Li);
+    vec3 color = reinhard_tone_mapping(Lo);
     out_frag_color = vec4(color, 1.0f);
 
     #endif

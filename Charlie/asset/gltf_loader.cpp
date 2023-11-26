@@ -60,6 +60,9 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
   const beyond::optional<uint32_t> normal_texture_index =
       beyond::from_std(material.normalTexture.transform(get_texture_index));
 
+  const beyond::optional<uint32_t> metallic_roughness_texture_index =
+      beyond::from_std(material.pbrData.metallicRoughnessTexture.transform(get_texture_index));
+
   const beyond::optional<uint32_t> occlusion_texture_index =
       beyond::from_std(material.occlusionTexture.transform(get_texture_index));
 
@@ -70,6 +73,7 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
                             material.pbrData.baseColorFactor[3]},
       .albedo_texture_index = albedo_texture_index,
       .normal_texture_index = normal_texture_index,
+      .metallic_roughness_texture_index = metallic_roughness_texture_index,
       .occlusion_texture_index = occlusion_texture_index,
   };
 };

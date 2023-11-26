@@ -44,11 +44,13 @@ struct Texture {
 };
 
 struct Material {
-  Vec4 base_color_factor;
+  Vec4 base_color_factor = Vec4(1, 1, 1, 1);
   u32 albedo_texture_index = 0xdeadbeef;
   u32 normal_texture_index = 0xdeadbeef;
+  u32 metallic_roughness_texture_index = 0xdeadbeef;
   u32 occlusion_texture_index = 0xdeadbeef;
-  u32 _padding = 0xdeadbeef;
+  f32 metallic_factor = 1.0f;
+  f32 roughness_factor = 1.0f;
 };
 
 struct RenderObject {
@@ -84,8 +86,8 @@ struct FrameData {
 class Camera;
 
 struct GPUSceneParameters {
-  Vec4 sunlight_direction = {0, -1, -1, 1}; // w is used for ambient strength
-  Vec4 sunlight_color = {1, 1, 1, 5};       // w for sunlight intensity
+  Vec4 sunlight_direction = {0, -1, -1, 0.1f}; // w is used for ambient strength
+  Vec4 sunlight_color = {1, 1, 1, 5};          // w for sunlight intensity
   Mat4 sunlight_view_proj;
 };
 

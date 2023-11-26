@@ -127,6 +127,8 @@ void generate_tangent_if_missing(Ref<CPUSubmesh> submesh_ref)
         .base_color_factor = material.base_color_factor,
         .albedo_texture_index = material.albedo_texture_index.map(lookup_texture_index),
         .normal_texture_index = material.normal_texture_index.map(lookup_texture_index),
+        .metallic_roughness_texture_index =
+            material.metallic_roughness_texture_index.map(lookup_texture_index),
         .occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index)});
   }
 

@@ -31,6 +31,7 @@ struct GPUCameraData {
   beyond::Mat4 view;
   beyond::Mat4 proj;
   beyond::Mat4 view_proj;
+  beyond::Vec3 position;
 };
 
 constexpr beyond::usize max_object_count = 10000;
@@ -522,7 +523,7 @@ void Renderer::init_descriptors()
     auto global_descriptor_build_result =
         DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
             .bind_buffer(0, camera_buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                         VK_SHADER_STAGE_VERTEX_BIT)
+                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
             .bind_buffer(1, scene_buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
             .bind_image(2, shadow_map_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -829,6 +830,7 @@ void Renderer::render(const charlie::Camera& camera)
             .view = view,
             .proj = projection,
             .view_proj = projection * view,
+            .position = camera.position(),
         };
 
         const vkh::AllocatedBuffer& camera_buffer = current_frame().camera_buffer;
@@ -1305,13 +1307,18 @@ auto Renderer::add_material(const CPUMaterial& material_info) -> u32
       material_info.albedo_texture_index.value_or(default_albedo_texture_index);
   const u32 normal_texture_index =
       material_info.normal_texture_index.value_or(default_normal_texture_index);
+  // TODO: Can I use default albedo for metallic roughness?
+  const u32 metallic_roughness_texture_index =
+      material_info.metallic_roughness_texture_index.value_or(default_albedo_texture_index);
   const u32 occlusion_texture_index =
       material_info.occlusion_texture_index.value_or(default_albedo_texture_index);
 
-  materials_.push_back(Material{.base_color_factor = material_info.base_color_factor,
-                                .albedo_texture_index = albedo_texture_index,
-                                .normal_texture_index = normal_texture_index,
-                                .occlusion_texture_index = occlusion_texture_index});
+  materials_.push_back(
+      Material{.base_color_factor = material_info.base_color_factor,
+               .albedo_texture_index = albedo_texture_index,
+               .normal_texture_index = normal_texture_index,
+               .metallic_roughness_texture_index = metallic_roughness_texture_index,
+               .occlusion_texture_index = occlusion_texture_index});
 
   return narrow<u32>(materials_.size() - 1);
 }

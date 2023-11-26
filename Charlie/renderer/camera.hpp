@@ -27,6 +27,7 @@ public:
 
   [[nodiscard]] auto view_matrix() const -> beyond::Mat4;
   [[nodiscard]] auto proj_matrix() const -> beyond::Mat4;
+  [[nodiscard]] auto position() const -> beyond::Vec3;
 
   void draw_gui();
   void on_input_event(const Event& event, const InputStates& states);
@@ -43,6 +44,7 @@ struct CameraController {
   virtual void draw_gui() {}
   virtual void update() {}
   virtual void fixed_update() {}
+  [[nodiscard]] virtual auto position() const -> Vec3 = 0;
   [[nodiscard]] virtual auto view_matrix() const -> Mat4 = 0;
 
   virtual void on_input_event(const Event&, const InputStates&) {}
@@ -55,6 +57,7 @@ class FirstPersonCameraController : public CameraController {
 
   void fixed_update() override;
   [[nodiscard]] auto view_matrix() const -> Mat4 override;
+  [[nodiscard]] auto position() const -> Vec3 override { return position_; }
   void on_key_input(int key, int scancode, int action, int mods);
 };
 
@@ -111,6 +114,11 @@ private:
   void on_mouse_scroll(MouseWheelEvent event);
 
   void draw_gui() override;
+
+  [[nodiscard]] auto position() const -> Vec3 override
+  {
+    return eye_position_from_zooming(zooming_);
+  }
 
   [[nodiscard]] auto right_axis() const -> Vec3;
 

@@ -19,6 +19,7 @@ struct CPUMaterial {
   Vec4 base_color_factor;
   beyond::optional<u32> albedo_texture_index;
   beyond::optional<u32> normal_texture_index;
+  beyond::optional<u32> metallic_roughness_texture_index;
   beyond::optional<u32> occlusion_texture_index;
 };
 
