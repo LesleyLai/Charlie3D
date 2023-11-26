@@ -165,7 +165,7 @@ namespace charlie {
                                      Options::LoadGLBBuffers | Options::LoadExternalBuffers);
   if (const auto error = maybe_asset.error(); error != fastgltf::Error::None) {
     beyond::panic(fmt::format("Error while loading {}: {}", file_path.string(),
-                              fastgltf::getErrorName(error)));
+                              fastgltf::getErrorMessage(error)));
   }
   fastgltf::Asset& asset = maybe_asset.get();
 

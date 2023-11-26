@@ -190,14 +190,16 @@ int main(int argc, const char** argv)
 
     input_handler.handle_events();
 
-    draw_gui(window.resolution(), renderer, camera, delta_time);
-
     while (lag >= MS_PER_FIXED_UPDATE) {
       camera.fixed_update();
       lag -= MS_PER_FIXED_UPDATE;
     }
 
-    renderer.render(camera);
+    const bool minimized = SDL_GetWindowFlags(window.raw_window()) & SDL_WINDOW_MINIMIZED;
+    if (not minimized) {
+      draw_gui(window.resolution(), renderer, camera, delta_time);
+      renderer.render(camera);
+    }
 
     FrameMark;
   }
