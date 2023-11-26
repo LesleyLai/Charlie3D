@@ -91,20 +91,15 @@ vec3 reinhard_tone_mapping(vec3 radiance) {
 
 float shadow_map_proj(vec4 shadow_coord)
 {
-    // Need larger z bias when the light is more parallel to the surface
-    vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
-    //float bias = 1e-3 * (1.1 - max(dot(-sunlight_direction, in_normal), 0.0));
-
-    float visibility = 1.0;
     if (0.0 < shadow_coord.z && shadow_coord.z < 1.0)
     {
         float z = texture(shadow_map, shadow_coord.xy).r;
-        if (shadow_coord.w > 0.0 && z < shadow_coord.z/** - bias*/)
+        if (shadow_coord.w > 0.0 && z < shadow_coord.z)
         {
-            visibility = 0.0;
+            return 0.0;
         }
     }
-    return visibility;
+    return 1.0;
 }
 
 
@@ -181,6 +176,7 @@ float shadow_mapping() {
     ivec2 shadow_map_size = textureSize(shadow_map, 0);
     vec2 shadow_texel_size = vec2(1.0) / shadow_map_size;
 
+    //return shadow_map_proj(in_shadow_coord);
     //return shadow_PCF(in_shadow_coord, shadow_map_size, 0.0);
     const float light_size = 100.0f;
     return shadow_PCSS(in_shadow_coord, shadow_texel_size, light_size);
@@ -268,7 +264,7 @@ void main()
     float perceptual_roughness = metallic_roughness.g * material.roughness_factor;
 
     vec3 normal = calculate_pixel_normal();
-    //vec3 normal = in_normal;
+    // normal = in_normal;
 
     // lighting
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;

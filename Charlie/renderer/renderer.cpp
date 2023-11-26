@@ -705,7 +705,8 @@ void Renderer::init_shadow_pipeline()
        .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
                                           .attribute_descriptions = attribute_descriptions},
        .shaders = {vertex_shader},
-       .cull_mode = VK_CULL_MODE_FRONT_BIT});
+       .cull_mode = VK_CULL_MODE_FRONT_BIT,
+       .depth_bias_info = DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}});
 }
 
 void Renderer::init_sampler()

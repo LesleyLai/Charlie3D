@@ -42,6 +42,14 @@ struct PipelineHandle : beyond::Handle<PipelineHandle> {
   friend class PipelineManager;
 };
 
+struct DepthBiasInfo {
+  float constant_factor = 1.00f; // a scalar factor controlling the constant depth value added to
+                                 // each fragment
+  float clamp = 0.0f;            // maximum (or minimum) depth bias of a fragment
+  float slope_factor =
+      1.00f; // a scalar factor applied to a fragment’s slope in depth bias calculations
+};
+
 struct GraphicsPipelineCreateInfo {
   VkPipelineLayout layout = VK_NULL_HANDLE;
   vkh::PipelineRenderingCreateInfo pipeline_rendering_create_info;
@@ -50,6 +58,8 @@ struct GraphicsPipelineCreateInfo {
   beyond::StaticVector<ShaderHandle, 6> shaders;
   VkPolygonMode polygon_mode = VK_POLYGON_MODE_FILL;
   VkCullModeFlags cull_mode = VK_CULL_MODE_NONE;
+  // Enable depth bias if it is not nullopt
+  beyond::optional<DepthBiasInfo> depth_bias_info = beyond::nullopt;
 };
 
 class PipelineManager {

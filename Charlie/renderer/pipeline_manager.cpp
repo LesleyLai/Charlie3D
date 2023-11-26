@@ -66,16 +66,21 @@ auto create_graphics_pipeline_impl(VkDevice device,
       .scissorCount = 1,
   };
 
-  const VkPipelineRasterizationStateCreateInfo rasterizer{
+  VkPipelineRasterizationStateCreateInfo rasterizer{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .depthClampEnable = VK_FALSE,
       .rasterizerDiscardEnable = VK_FALSE,
       .polygonMode = create_info.polygon_mode,
       .cullMode = create_info.cull_mode,
       .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .depthBiasEnable = VK_FALSE,
       .lineWidth = 1.0f,
   };
+  if (create_info.depth_bias_info.has_value()) {
+    rasterizer.depthBiasEnable = VK_TRUE;
+    rasterizer.depthBiasConstantFactor = create_info.depth_bias_info->constant_factor;
+    rasterizer.depthBiasClamp = create_info.depth_bias_info->clamp;
+    rasterizer.depthBiasSlopeFactor = create_info.depth_bias_info->slope_factor;
+  }
 
   static constexpr VkPipelineMultisampleStateCreateInfo multisampling{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
