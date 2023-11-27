@@ -9,7 +9,6 @@ add_library(vulkan_helper
         context.hpp
         debug_utils.hpp
         debug_utils.cpp
-        deletion_queue.hpp
         error_handling.hpp
         graphics_pipeline.hpp
         swapchain.hpp

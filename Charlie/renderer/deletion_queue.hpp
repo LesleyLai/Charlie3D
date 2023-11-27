@@ -6,22 +6,19 @@
 #include <ranges>
 #include <utility>
 
-#include "context.hpp"
+#include "../vulkan_helpers/context.hpp"
 
-namespace vkh {
+namespace charlie {
 
 class DeletionQueue {
-  std::vector<std::function<void(Context&)>> deleters_;
-  Context* context_ = nullptr;
+  std::vector<std::function<void(Ref<vkh::Context>)>> deleters_;
+  vkh::Context* context_ = nullptr;
 
 public:
   DeletionQueue() = default;
-  explicit DeletionQueue(Context& context) : context_{&context} {}
+  explicit DeletionQueue(vkh::Context& context) : context_{&context} {}
 
-  ~DeletionQueue()
-  {
-    flush();
-  }
+  ~DeletionQueue() { flush(); }
 
   DeletionQueue(const DeletionQueue&) = delete;
   auto operator=(const DeletionQueue&) & -> DeletionQueue& = delete;
@@ -45,10 +42,10 @@ public:
 
   void flush()
   {
-    for (auto& deleter : std::ranges::reverse_view(deleters_)) { deleter(*context_); }
+    for (auto& deleter : std::ranges::reverse_view(deleters_)) { deleter(ref(*context_)); }
 
     deleters_.clear();
   }
 };
 
-} // namespace vkh
+} // namespace charlie

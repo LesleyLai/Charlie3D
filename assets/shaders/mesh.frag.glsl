@@ -147,7 +147,7 @@ bool estimate_blocker_depth(vec2 uv, float z_receiver, out float z_blocker) {
         int index = int(random4(vec4(uv, z_receiver, i)) * 16.0) % 16;
         vec2 offset = poisson_disk_16[index] * delta;
         float depth_on_shadow_map = texture(shadow_map, uv + offset).r;
-        if (depth_on_shadow_map /**+ 1e-3*/ < z_receiver) {
+        if (depth_on_shadow_map < z_receiver) {
             blocker_count++;
             blocker_depth_sum += depth_on_shadow_map;
         }

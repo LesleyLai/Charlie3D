@@ -15,6 +15,7 @@
 #include <beyond/utils/ref.hpp>
 
 #include "../asset/cpu_scene.hpp"
+#include "deletion_queue.hpp"
 #include "mesh.hpp"
 #include "pipeline_manager.hpp"
 #include "render_pass.hpp"
@@ -111,9 +112,19 @@ public:
 
   [[nodiscard]] auto resolution() const noexcept -> Resolution { return resolution_; }
 
+  [[nodiscard]] BEYOND_FORCE_INLINE auto current_frame_index() const noexcept -> usize
+  {
+    return frame_number_ % frame_overlap;
+  }
+
   [[nodiscard]] auto current_frame() noexcept -> FrameData&
   {
-    return frames_[frame_number_ % frame_overlap];
+    return frames_[current_frame_index()];
+  }
+
+  [[nodiscard]] auto current_frame_deletion_queue() noexcept -> DeletionQueue&
+  {
+    return frame_deletion_queue_[current_frame_index()];
   }
 
   [[nodiscard]] auto context() noexcept -> vkh::Context& { return context_; }
@@ -168,6 +179,7 @@ private:
 
   usize frame_number_ = 0;
   FrameData frames_[frame_overlap];
+  DeletionQueue frame_deletion_queue_[frame_overlap];
 
   std::unique_ptr<charlie::DescriptorAllocator> descriptor_allocator_;
   std::unique_ptr<charlie::DescriptorLayoutCache> descriptor_layout_cache_;

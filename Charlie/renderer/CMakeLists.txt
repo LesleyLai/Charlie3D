@@ -2,6 +2,7 @@ add_library(charlie3d_renderer
         renderer.hpp renderer.cpp
         mesh.hpp mesh.cpp
         camera.cpp camera.hpp
+        deletion_queue.hpp
         render_pass.hpp
         imgui_render_pass.cpp
         imgui_render_pass.hpp
@@ -9,7 +10,8 @@ add_library(charlie3d_renderer
         descriptor_allocator.cpp
         uploader.cpp uploader.hpp
         scene.cpp scene.hpp
-        pipeline_manager.cpp pipeline_manager.hpp)
+        pipeline_manager.cpp
+        pipeline_manager.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(SDL2 REQUIRED)
