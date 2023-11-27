@@ -781,6 +781,8 @@ void Renderer::render(const charlie::Camera& camera)
 
   pipeline_manager_->update();
 
+  update_textures();
+
   const auto& frame = current_frame();
   constexpr u64 one_second = 1'000'000'000;
 
@@ -1285,21 +1287,27 @@ auto Renderer::add_texture(Texture texture) -> u32
   textures_.push_back(texture);
   const u32 texture_index = narrow<u32>(textures_.size() - 1);
 
-  VkDescriptorImageInfo image_info{.sampler = texture.sampler == VK_NULL_HANDLE ? default_sampler_
-                                                                                : texture.sampler,
-                                   .imageView = texture.image_view,
-                                   .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  textures_to_update_.push_back(TextureUpdate{
+      .index = texture_index,
+  });
 
-  VkWriteDescriptorSet descriptor_write = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = bindless_texture_descriptor_set_,
-      .dstBinding = bindless_texture_binding,
-      .dstArrayElement = texture_index,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &image_info,
-  };
-  vkUpdateDescriptorSets(context_, 1, &descriptor_write, 0, nullptr);
+  //  VkDescriptorImageInfo image_info{.sampler = texture.sampler == VK_NULL_HANDLE ?
+  //  default_sampler_
+  //                                                                                :
+  //                                                                                texture.sampler,
+  //                                   .imageView = texture.image_view,
+  //                                   .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  //
+  //  VkWriteDescriptorSet descriptor_write = {
+  //      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+  //      .dstSet = bindless_texture_descriptor_set_,
+  //      .dstBinding = bindless_texture_binding,
+  //      .dstArrayElement = texture_index,
+  //      .descriptorCount = 1,
+  //      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+  //      .pImageInfo = &image_info,
+  //  };
+  //  vkUpdateDescriptorSets(context_, 1, &descriptor_write, 0, nullptr);
 
   return texture_index;
 }
@@ -1351,6 +1359,34 @@ void Renderer::upload_materials()
                     .value();
   BEYOND_ENSURE(material_set_layout_ == result.layout);
   material_descriptor_set_ = result.set;
+}
+
+void Renderer::update_textures()
+{
+  beyond::StaticVector<VkDescriptorImageInfo, max_bindless_texture_count> image_infos;
+  beyond::StaticVector<VkWriteDescriptorSet, max_bindless_texture_count> descriptor_writes;
+
+  for (const TextureUpdate& texture_to_update : textures_to_update_) {
+    const Texture& texture = textures_.at(texture_to_update.index);
+
+    VkDescriptorImageInfo& image_info = image_infos.emplace_back(VkDescriptorImageInfo{
+        .sampler = texture.sampler == VK_NULL_HANDLE ? default_sampler_ : texture.sampler,
+        .imageView = texture.image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+
+    descriptor_writes.push_back(VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = bindless_texture_descriptor_set_,
+        .dstBinding = bindless_texture_binding,
+        .dstArrayElement = texture_to_update.index,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &image_info,
+    });
+  }
+  textures_to_update_.clear();
+
+  vkUpdateDescriptorSets(context_, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
 }
 
 } // namespace charlie

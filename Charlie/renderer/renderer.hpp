@@ -209,6 +209,10 @@ private:
   std::vector<vkh::AllocatedImage> images_;
   VkSampler default_sampler_ = VK_NULL_HANDLE;
   std::vector<Texture> textures_;
+  struct TextureUpdate {
+    uint32_t index = 0xdeadbeef; // Index
+  };
+  std::vector<TextureUpdate> textures_to_update_;
 
   std::vector<RenderObject> draws_;
 
@@ -230,6 +234,7 @@ private:
 
   void on_input_event(const Event& event, const InputStates& states);
 
+  void update_textures();
   void present(beyond::Ref<u32> swapchain_image_index);
 };
 
