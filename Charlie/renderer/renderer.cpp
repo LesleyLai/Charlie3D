@@ -588,36 +588,22 @@ void Renderer::init_mesh_pipeline()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &mesh_pipeline_layout_));
 
-  // TODO: how to deal with specialized constant?
-  //  struct ConstantData {
-  //    int shadow_mode = 0;
-  //  } constant_data;
-  //
-  //  VkSpecializationMapEntry map_entry = {
-  //      .constantID = 0,
-  //      .offset = 0,
-  //      .size = sizeof(int),
-  //  };
-  //
-  //  VkSpecializationInfo specialization_info = {
-  //      .mapEntryCount = 1,
-  //      .pMapEntries = &map_entry,
-  //      .dataSize = sizeof(constant_data),
-  //      .pData = &constant_data,
-  //  };
+  struct ConstantData {
+    int shadow_mode = 0;
+  } constant_data;
 
-  //  const VkPipelineShaderStageCreateInfo triangle_shader_stages[] = {
-  //      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-  //       .stage = VK_SHADER_STAGE_VERTEX_BIT,
-  //       .module = triangle_vert_shader,
-  //       .pName = "main"},
-  //      {
-  //          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-  //          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-  //          .module = triangle_frag_shader,
-  //          .pName = "main",
-  //          .pSpecializationInfo = &specialization_info,
-  //      }};
+  VkSpecializationMapEntry map_entry = {
+      .constantID = 0,
+      .offset = 0,
+      .size = sizeof(int),
+  };
+
+  VkSpecializationInfo specialization_info = {
+      .mapEntryCount = 1,
+      .pMapEntries = &map_entry,
+      .dataSize = sizeof(constant_data),
+      .pData = &constant_data,
+  };
 
   std::vector<VkVertexInputBindingDescription> binding_descriptions = {
       {
@@ -657,12 +643,12 @@ void Renderer::init_mesh_pipeline()
       .debug_name = "Mesh Graphics Pipeline",
       .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
                                          .attribute_descriptions = attribute_descriptions},
-      .shaders = {vertex_shader, fragment_shader},
-      .cull_mode = VK_CULL_MODE_BACK_BIT};
+      .stages = {{vertex_shader}, {fragment_shader, &specialization_info}},
+      .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT}};
 
-  // constant_data.shadow_mode = 1;
+  constant_data.shadow_mode = 1;
   mesh_pipeline_ = pipeline_manager_->create_graphics_pipeline(create_info);
-  // constant_data.shadow_mode = 0;
+  constant_data.shadow_mode = 0;
   create_info.debug_name = "Mesh Graphics Pipeline (without shadow)";
   mesh_pipeline_without_shadow_ = pipeline_manager_->create_graphics_pipeline(create_info);
 }
@@ -704,9 +690,9 @@ void Renderer::init_shadow_pipeline()
        .debug_name = "Shadow Mapping Graphics Pipeline",
        .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
                                           .attribute_descriptions = attribute_descriptions},
-       .shaders = {vertex_shader},
-       //.cull_mode = VK_CULL_MODE_FRONT_BIT,
-       .depth_bias_info = DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}});
+       .stages = {{vertex_shader}},
+       .rasterization_state = {
+           .depth_bias_info = DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}}});
 }
 
 void Renderer::init_sampler()
@@ -1095,7 +1081,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = VkClearValue{.color = {.float32 = {0.5f, 0.5f, 0.5f, 1.0f}}},
+      .clearValue = VkClearValue{.color = {.float32 = {0.8f, 0.8f, 0.8f, 1.0f}}},
   };
 
   const VkRenderingAttachmentInfo depth_attachments_info{
@@ -1111,11 +1097,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
       .renderArea =
           {
-              .offset =
-                  {
-                      .x = 0,
-                      .y = 0,
-                  },
+              .offset = {0, 0},
               .extent = to_extent2d(resolution()),
           },
       .layerCount = 1,
@@ -1324,12 +1306,15 @@ auto Renderer::add_material(const CPUMaterial& material_info) -> u32
   const u32 occlusion_texture_index =
       material_info.occlusion_texture_index.value_or(default_albedo_texture_index);
 
-  materials_.push_back(
-      Material{.base_color_factor = material_info.base_color_factor,
-               .albedo_texture_index = albedo_texture_index,
-               .normal_texture_index = normal_texture_index,
-               .metallic_roughness_texture_index = metallic_roughness_texture_index,
-               .occlusion_texture_index = occlusion_texture_index});
+  materials_.push_back(Material{
+      .base_color_factor = material_info.base_color_factor,
+      .albedo_texture_index = albedo_texture_index,
+      .normal_texture_index = normal_texture_index,
+      .metallic_roughness_texture_index = metallic_roughness_texture_index,
+      .occlusion_texture_index = occlusion_texture_index,
+      .metallic_factor = material_info.metallic_factor,
+      .roughness_factor = material_info.roughness_factor,
+  });
 
   return narrow<u32>(materials_.size() - 1);
 }

@@ -1,6 +1,9 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier: require
 
+#include "scene_data.h.glsl"
+#include "pbr.h.glsl"
+
 layout (location = 0) in vec3 in_world_pos;
 layout (location = 1) in vec2 in_tex_coord;
 layout (location = 2) in vec3 in_normal;
@@ -10,15 +13,11 @@ layout (location = 5) in vec4 in_shadow_coord;
 layout (location = 6) in flat int in_material_index;
 
 
-//layout (constant_id = 0) const int shadow_mode = 0;
+layout (constant_id = 0) const int shadow_mode = 0;
 
 layout (location = 0) out vec4 out_frag_color;
 
-#include "scene_data.h.glsl"
-
 layout (set = 0, binding = 2) uniform sampler2D shadow_map;
-
-#define PI 3.1415926538
 
 layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 view;
@@ -63,10 +62,6 @@ const vec2 poisson_disk_16[SHADOW_SAMPLE_COUNT] = vec2[](
     vec2(-0.522737, 0.0698312),
     vec2(-0.857891, 0.512805)
 );
-
-float Fd_lambertian() {
-    return 1.0 / PI;
-}
 
 Material current_material() {
     return material_buffer.material[in_material_index];
@@ -182,61 +177,6 @@ float shadow_mapping() {
     return shadow_PCSS(in_shadow_coord, shadow_texel_size, light_size);
 }
 
-struct Surface {
-    vec3 base_color;
-    vec3 normal;
-    float reflectance;
-    float perceptual_roughness;
-    float metallic;
-};
-
-float D_GGX(float NoH, float a) {
-    float a2 = a * a;
-    float f = (NoH * a2 - NoH) * NoH + 1.0;
-    return a2 / (PI * f * f);
-}
-
-vec3 F_Schlick(float u, vec3 f0) {
-    return f0 + (vec3(1.0) - f0) * pow(1.0 - u, 5.0);
-}
-
-float V_SmithGGXCorrelated(float NoV, float NoL, float a) {
-    float a2 = a * a;
-    float GGXL = NoV * sqrt((-NoL * a2 + NoL) * NoL + a2);
-    float GGXV = NoL * sqrt((-NoV * a2 + NoV) * NoV + a2);
-    return 0.5 / (GGXV + GGXL);
-}
-
-vec3 BRDF(vec3 view_direction, vec3 light_direction, Surface surface) {
-    vec3 base_color = surface.base_color;
-    vec3 normal = surface.normal;
-    float metallic = surface.metallic;
-    float roughness = surface.perceptual_roughness * surface.perceptual_roughness;
-    float reflectance = surface.reflectance;
-
-    vec3 f0 = mix(vec3(0.16 * reflectance * reflectance), base_color, metallic);
-    vec3 h = normalize(view_direction + light_direction);
-
-    float NoV = abs(dot(normal, view_direction)) + 1e-5;
-    float NoL = clamp(dot(normal, light_direction), 0.0, 1.0);
-    float NoH = clamp(dot(normal, h), 0.0, 1.0);
-    float LoH = clamp(dot(light_direction, h), 0.0, 1.0);
-
-    // Mapped reflectance
-
-    float D = D_GGX(NoH, roughness);
-    vec3 F = F_Schlick(LoH, f0);
-    float V = V_SmithGGXCorrelated(NoV, NoL, roughness);
-
-    // Specular BRDF (Cook-Torrance)
-    vec3 Fr = (D * V) * F;
-
-    // diffuse BRDF
-    vec3 diffuse_color = (1.0 - metallic) * base_color;
-    vec3 Fd = diffuse_color * Fd_lambertian();
-
-    return Fd + Fr;
-}
 
 void main()
 {
@@ -264,7 +204,7 @@ void main()
     float perceptual_roughness = metallic_roughness.g * material.roughness_factor;
 
     vec3 normal = calculate_pixel_normal();
-    // normal = in_normal;
+    normal = in_normal;
 
     // lighting
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
@@ -294,8 +234,10 @@ void main()
     float illuminance = sunlight_intensity * NoL;
     vec3 luminance = F * sunlight_color * illuminance;
 
-    float visibility = shadow_mapping();
-    // visibility = 1.0;
+    float visibility = 1.0;
+    if (shadow_mode == 1) {
+        visibility = shadow_mapping();
+    }
 
     vec3 Lo = ambient + luminance * visibility;
 

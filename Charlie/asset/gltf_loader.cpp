@@ -71,6 +71,8 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
                             material.pbrData.baseColorFactor[1],
                             material.pbrData.baseColorFactor[2],
                             material.pbrData.baseColorFactor[3]},
+      .metallic_factor = material.pbrData.metallicFactor,
+      .roughness_factor = material.pbrData.roughnessFactor,
       .albedo_texture_index = albedo_texture_index,
       .normal_texture_index = normal_texture_index,
       .metallic_roughness_texture_index = metallic_roughness_texture_index,
@@ -98,6 +100,13 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
           BEYOND_ENSURE(data.mimeType == JPEG || data.mimeType == PNG ||
                         data.mimeType == GltfBuffer);
           return charlie::load_image_from_memory(data.bytes, std::string{image.name});
+        } else if constexpr (std::is_same_v<DataType, fastgltf::sources::BufferView>) {
+          using enum fastgltf::MimeType;
+          // TODO: Handle other Mime types
+          BEYOND_ENSURE(data.mimeType == JPEG || data.mimeType == PNG ||
+                        data.mimeType == GltfBuffer);
+          beyond::panic("Buffer view is unsupported yet!");
+
         } else {
           beyond::panic("Unsupported image data format!");
         }

@@ -195,11 +195,11 @@ private:
   std::unique_ptr<PipelineManager> pipeline_manager_;
 
   VkPipelineLayout shadow_map_pipeline_layout_ = VK_NULL_HANDLE;
-  PipelineHandle shadow_map_pipeline_;
+  GraphicsPipelineHandle shadow_map_pipeline_;
 
   VkPipelineLayout mesh_pipeline_layout_ = VK_NULL_HANDLE;
-  PipelineHandle mesh_pipeline_without_shadow_;
-  PipelineHandle mesh_pipeline_;
+  GraphicsPipelineHandle mesh_pipeline_without_shadow_;
+  GraphicsPipelineHandle mesh_pipeline_;
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<Material> materials_;

@@ -25,14 +25,17 @@ namespace {
   BEYOND_UNREACHABLE();
 }
 
-[[nodiscard]] constexpr auto to_VkPipelineShaderStageCreateInfo(charlie::ShaderEntry entry)
+[[nodiscard]] auto to_VkPipelineShaderStageCreateInfo(charlie::ShaderStageCreateInfo shader_info)
     -> VkPipelineShaderStageCreateInfo
 {
+  const auto entry = *std::bit_cast<charlie::ShaderEntry*>(shader_info.handle);
+
   return VkPipelineShaderStageCreateInfo{.sType =
                                              VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                                          .stage = to_VkShaderStageFlagBits(entry.stage),
                                          .module = entry.shader_module,
-                                         .pName = "main"};
+                                         .pName = "main",
+                                         .pSpecializationInfo = shader_info.p_specialization_info};
 }
 
 auto create_graphics_pipeline_impl(VkDevice device,
@@ -70,16 +73,18 @@ auto create_graphics_pipeline_impl(VkDevice device,
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .depthClampEnable = VK_FALSE,
       .rasterizerDiscardEnable = VK_FALSE,
-      .polygonMode = create_info.polygon_mode,
-      .cullMode = create_info.cull_mode,
+      .polygonMode = create_info.rasterization_state.polygon_mode,
+      .cullMode = create_info.rasterization_state.cull_mode,
       .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
       .lineWidth = 1.0f,
   };
-  if (create_info.depth_bias_info.has_value()) {
+  if (create_info.rasterization_state.depth_bias_info.has_value()) {
+    const charlie::DepthBiasInfo depth_bias_info =
+        create_info.rasterization_state.depth_bias_info.value();
     rasterizer.depthBiasEnable = VK_TRUE;
-    rasterizer.depthBiasConstantFactor = create_info.depth_bias_info->constant_factor;
-    rasterizer.depthBiasClamp = create_info.depth_bias_info->clamp;
-    rasterizer.depthBiasSlopeFactor = create_info.depth_bias_info->slope_factor;
+    rasterizer.depthBiasConstantFactor = depth_bias_info.constant_factor;
+    rasterizer.depthBiasClamp = depth_bias_info.clamp;
+    rasterizer.depthBiasSlopeFactor = depth_bias_info.slope_factor;
   }
 
   static constexpr VkPipelineMultisampleStateCreateInfo multisampling{
@@ -135,11 +140,9 @@ auto create_graphics_pipeline_impl(VkDevice device,
       .dynamicStateCount = beyond::size(dynamic_states),
       .pDynamicStates = dynamic_states};
 
-  std::vector<VkPipelineShaderStageCreateInfo> shader_stage_create_info(create_info.shaders.size());
-  std::ranges::transform(
-      create_info.shaders, shader_stage_create_info.begin(), [](charlie::ShaderHandle handle) {
-        return to_VkPipelineShaderStageCreateInfo(*std::bit_cast<charlie::ShaderEntry*>(handle));
-      });
+  std::vector<VkPipelineShaderStageCreateInfo> shader_stage_create_info(create_info.stages.size());
+  std::ranges::transform(create_info.stages, shader_stage_create_info.begin(),
+                         to_VkPipelineShaderStageCreateInfo);
 
   const VkGraphicsPipelineCreateInfo pipeline_create_info{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -193,8 +196,48 @@ struct Shaders {
   }
 };
 
+struct PipelineCreateInfoCache {
+  std::vector<GraphicsPipelineCreateInfo> graphics_pipeline_create_infos;
+
+  [[nodiscard]] auto add(GraphicsPipelineCreateInfo create_info) -> GraphicsPipelineHandle
+  {
+    beyond::StaticVector<ShaderStageCreateInfo, 6> new_shader_info;
+    for (auto shader_info : create_info.stages) {
+      if (shader_info.p_specialization_info != nullptr) {
+        auto* new_specialization_info = new VkSpecializationInfo{
+            .mapEntryCount = shader_info.p_specialization_info->mapEntryCount,
+            .dataSize = shader_info.p_specialization_info->dataSize,
+        };
+        auto* map_entries = new VkSpecializationMapEntry[new_specialization_info->mapEntryCount];
+        std::copy_n(shader_info.p_specialization_info->pMapEntries,
+                    shader_info.p_specialization_info->mapEntryCount, map_entries);
+        new_specialization_info->pMapEntries = map_entries;
+
+        auto* data = new u8[shader_info.p_specialization_info->dataSize];
+        memcpy(data, shader_info.p_specialization_info->pData,
+               shader_info.p_specialization_info->dataSize);
+        new_specialization_info->pData = data;
+
+        shader_info.p_specialization_info = new_specialization_info;
+      }
+
+      new_shader_info.push_back(shader_info);
+    }
+
+    create_info.stages = std::move(new_shader_info);
+    graphics_pipeline_create_infos.push_back(create_info);
+    return GraphicsPipelineHandle{narrow<u32>(graphics_pipeline_create_infos.size() - 1)};
+  }
+
+  [[nodiscard]] auto get(GraphicsPipelineHandle handle) const -> const GraphicsPipelineCreateInfo&
+  {
+    return graphics_pipeline_create_infos.at(handle.value());
+  }
+};
+
 PipelineManager::PipelineManager(VkDevice device)
-    : device_{device}, shaders_{std::make_unique<Shaders>()}
+    : device_{device}, shaders_{std::make_unique<Shaders>()},
+      pipeline_create_info_cache_{std::make_unique<PipelineCreateInfoCache>()}
 {
 }
 
@@ -234,14 +277,14 @@ PipelineManager::~PipelineManager()
            // Update related pipelines!
            const auto shader_handle = std::bit_cast<ShaderHandle>(&entry);
            {
-             beyond::optional<std::vector<PipelineHandle>&> pipelines_opt =
+             beyond::optional<std::vector<GraphicsPipelineHandle>&> pipelines_opt =
                  this->pipeline_dependency_map_.at(shader_handle);
              BEYOND_ENSURE(pipelines_opt.has_value());
 
-             std::vector<PipelineHandle>& pipelines = pipelines_opt.value();
+             std::vector<GraphicsPipelineHandle>& pipelines = pipelines_opt.value();
              for (const auto pipeline_handle : pipelines) {
                // TODO: recreate pipeline asynchronously
-               const auto& create_info = this->pipeline_create_infos_.at(pipeline_handle.value());
+               const auto& create_info = this->pipeline_create_info_cache_->get(pipeline_handle);
 
                VkPipeline& pipeline = pipelines_.at(pipeline_handle.value());
                vkDestroyPipeline(device_, pipeline, nullptr);
@@ -269,7 +312,7 @@ PipelineManager::~PipelineManager()
                                                         });
 
   // Create entry for the shader in the pipeline handle
-  pipeline_dependency_map_.try_emplace(shader_handle, std::vector<PipelineHandle>{});
+  pipeline_dependency_map_.try_emplace(shader_handle, std::vector<GraphicsPipelineHandle>{});
 
   return shader_handle;
 }
@@ -280,17 +323,17 @@ void PipelineManager::update()
 }
 
 auto PipelineManager::create_graphics_pipeline(const GraphicsPipelineCreateInfo& create_info)
-    -> PipelineHandle
+    -> GraphicsPipelineHandle
 {
+
   VkPipeline pipeline = create_graphics_pipeline_impl(device_, create_info);
 
   pipelines_.push_back(pipeline);
-  pipeline_create_infos_.push_back(create_info);
+  const auto pipeline_handle = pipeline_create_info_cache_->add(create_info);
+  BEYOND_ENSURE(narrow<u32>(pipelines_.size() - 1) == pipeline_handle.value());
 
-  const auto pipeline_handle = PipelineHandle{narrow<u32>(pipelines_.size() - 1)};
-
-  for (ShaderHandle shader : create_info.shaders) {
-    pipeline_dependency_map_.at(shader).push_back(pipeline_handle);
+  for (const ShaderStageCreateInfo& shader_info : create_info.stages) {
+    pipeline_dependency_map_.at(shader_info.handle).push_back(pipeline_handle);
   }
 
   return pipeline_handle;

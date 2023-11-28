@@ -1,6 +1,7 @@
 #ifndef CHARLIE3D_PIPELINE_MANAGER_HPP
 #define CHARLIE3D_PIPELINE_MANAGER_HPP
 
+#include <any>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -37,7 +38,7 @@ struct ShaderEntry {
 };
 
 // A "virtual" graphics pipeline handle is useful to deal with hot reloading
-struct PipelineHandle : beyond::Handle<PipelineHandle> {
+struct GraphicsPipelineHandle : beyond::Handle<GraphicsPipelineHandle> {
   using Handle::Handle;
   friend class PipelineManager;
 };
@@ -50,16 +51,25 @@ struct DepthBiasInfo {
       1.00f; // a scalar factor applied to a fragment’s slope in depth bias calculations
 };
 
+struct ShaderStageCreateInfo {
+  ShaderHandle handle;
+  const VkSpecializationInfo* p_specialization_info = nullptr;
+};
+
+struct RasterizationStateCreateInfo {
+  VkPolygonMode polygon_mode = VK_POLYGON_MODE_FILL;
+  VkCullModeFlags cull_mode = VK_CULL_MODE_NONE;
+  // Enable depth bias if it is not nullopt
+  beyond::optional<DepthBiasInfo> depth_bias_info = beyond::nullopt;
+};
+
 struct GraphicsPipelineCreateInfo {
   VkPipelineLayout layout = VK_NULL_HANDLE;
   vkh::PipelineRenderingCreateInfo pipeline_rendering_create_info;
   std::string debug_name;
   vkh::PipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
-  beyond::StaticVector<ShaderHandle, 6> shaders;
-  VkPolygonMode polygon_mode = VK_POLYGON_MODE_FILL;
-  VkCullModeFlags cull_mode = VK_CULL_MODE_NONE;
-  // Enable depth bias if it is not nullopt
-  beyond::optional<DepthBiasInfo> depth_bias_info = beyond::nullopt;
+  beyond::StaticVector<ShaderStageCreateInfo, 6> stages;
+  RasterizationStateCreateInfo rasterization_state;
 };
 
 class PipelineManager {
@@ -69,11 +79,11 @@ class PipelineManager {
   FileWatcher shader_file_watcher_;
 
   std::vector<VkPipeline> pipelines_;
-  // Cached for pipeline recreation
-  std::vector<struct GraphicsPipelineCreateInfo> pipeline_create_infos_;
+  std::unique_ptr<struct PipelineCreateInfoCache>
+      pipeline_create_info_cache_; // Cached for pipeline recreation
 
-  // A map from shader entry to pipelines that depends on those shader entries
-  std::unordered_map<ShaderHandle, std::vector<PipelineHandle>> pipeline_dependency_map_;
+  // An adjacency list from shader entry to pipelines that depends on those shader entries
+  std::unordered_map<ShaderHandle, std::vector<GraphicsPipelineHandle>> pipeline_dependency_map_;
 
 public:
   explicit PipelineManager(VkDevice device);
@@ -89,9 +99,9 @@ public:
 
   // Create a graphics pipeline
   [[nodiscard]] auto create_graphics_pipeline(const GraphicsPipelineCreateInfo& create_info)
-      -> PipelineHandle;
+      -> GraphicsPipelineHandle;
 
-  [[nodiscard]] auto get_pipeline(PipelineHandle handle) const -> VkPipeline
+  [[nodiscard]] auto get_pipeline(GraphicsPipelineHandle handle) const -> VkPipeline
   {
     return pipelines_.at(handle.value());
   }

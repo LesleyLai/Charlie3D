@@ -125,11 +125,14 @@ void generate_tangent_if_missing(Ref<CPUSubmesh> submesh_ref)
   for (const CPUMaterial& material : cpu_scene.materials) {
     [[maybe_unused]] u32 material_index = renderer.add_material(CPUMaterial{
         .base_color_factor = material.base_color_factor,
+        .metallic_factor = material.metallic_factor,
+        .roughness_factor = material.roughness_factor,
         .albedo_texture_index = material.albedo_texture_index.map(lookup_texture_index),
         .normal_texture_index = material.normal_texture_index.map(lookup_texture_index),
         .metallic_roughness_texture_index =
             material.metallic_roughness_texture_index.map(lookup_texture_index),
-        .occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index)});
+        .occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index),
+    });
   }
 
   std::unordered_map<uint32_t, RenderComponent> render_components;

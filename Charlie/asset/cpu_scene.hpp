@@ -17,6 +17,8 @@ struct CPURenderObject {
 
 struct CPUMaterial {
   Vec4 base_color_factor;
+  float metallic_factor = 0.0;
+  float roughness_factor = 0.0;
   beyond::optional<u32> albedo_texture_index;
   beyond::optional<u32> normal_texture_index;
   beyond::optional<u32> metallic_roughness_texture_index;
