@@ -1172,12 +1172,10 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   for (u32 i = 0; i < draws_.size(); ++i) {
     const SubMesh& submesh = *draws_[i].submesh;
-    constexpr VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &submesh.position_buffer.buffer, &offset);
-    vkCmdBindVertexBuffers(cmd, 1, 1, &submesh.normal_buffer.buffer, &offset);
-    vkCmdBindVertexBuffers(cmd, 2, 1, &submesh.uv_buffer.buffer, &offset);
-    vkCmdBindVertexBuffers(cmd, 3, 1, &submesh.tangent_buffer.buffer, &offset);
-
+    const VkBuffer buffers[] = {submesh.position_buffer.buffer, submesh.normal_buffer.buffer,
+                                submesh.uv_buffer.buffer, submesh.tangent_buffer.buffer};
+    constexpr VkDeviceSize offsets[] = {0, 0, 0, 0};
+    vkCmdBindVertexBuffers(cmd, 0, 4, buffers, offsets);
     vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
