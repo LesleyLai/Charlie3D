@@ -1,9 +1,7 @@
 #version 460
 
-layout (location = 0) in vec3 in_position;
-layout (location = 1) in vec3 in_normal;
-layout (location = 2) in vec2 in_tex_coord;
-layout (location = 3) in vec4 in_tangent;
+#extension GL_EXT_buffer_reference: require
+#extension GL_EXT_scalar_block_layout: require
 
 layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 view;
@@ -11,6 +9,30 @@ layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 view_proj;
     vec3 position;
 } camera;
+
+layout (buffer_reference, scalar) readonly buffer PositionBuffer {
+    vec3 position[];
+};
+
+layout (buffer_reference, scalar) readonly buffer NormalBuffer {
+    vec3 normal[];
+};
+
+layout (buffer_reference, scalar) readonly buffer TextureCoordBuffer {
+    vec2 tex_coord[];
+};
+
+layout (buffer_reference, scalar) readonly buffer TangentBuffer {
+    vec4 tangent[];
+};
+
+layout (push_constant) uniform constants
+{
+    PositionBuffer position_buffer;
+    NormalBuffer normal_buffer;
+    TextureCoordBuffer tex_coord_buffer;
+    TangentBuffer tangent_buffer;
+} PushConstants;
 
 #include "scene_data.h.glsl"
 #include "object_data.h.glsl"
@@ -31,6 +53,11 @@ const mat4 light_space_to_NDC = mat4(
 
 void main()
 {
+    vec3 in_position = PushConstants.position_buffer.position[gl_VertexIndex];
+    vec3 in_normal = PushConstants.normal_buffer.normal[gl_VertexIndex];
+    vec2 in_tex_coord = PushConstants.tex_coord_buffer.tex_coord[gl_VertexIndex];
+    vec4 in_tangent = PushConstants.tangent_buffer.tangent[gl_VertexIndex];
+
     mat4 model = object_buffer.objects[gl_BaseInstance].model;
     mat4 transform_matrix = camera.view_proj * model;
     vec4 world_pos = camera.view * model * vec4(in_position, 1.0f);

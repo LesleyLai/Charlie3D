@@ -92,6 +92,13 @@ struct GPUSceneParameters {
   Mat4 sunlight_view_proj;
 };
 
+struct MeshPushConstant {
+  VkDeviceAddress position_buffer_address = 0;
+  VkDeviceAddress normal_buffer_address = 0;
+  VkDeviceAddress tex_coord_buffer_address = 0;
+  VkDeviceAddress tangent_buffer_address = 0;
+};
+
 class Renderer {
 public:
   explicit Renderer(Window& window, InputHandler& input_handler);

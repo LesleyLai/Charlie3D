@@ -580,10 +580,18 @@ void Renderer::init_mesh_pipeline()
                                                object_descriptor_set_layout_, material_set_layout_,
                                                bindless_texture_set_layout_};
 
+  const VkPushConstantRange push_constant = {
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = sizeof(MeshPushConstant),
+  };
+
   const VkPipelineLayoutCreateInfo pipeline_layout_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = beyond::size(set_layouts),
       .pSetLayouts = set_layouts,
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &push_constant,
   };
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &mesh_pipeline_layout_));
@@ -605,34 +613,6 @@ void Renderer::init_mesh_pipeline()
       .pData = &constant_data,
   };
 
-  std::vector<VkVertexInputBindingDescription> binding_descriptions = {
-      {
-          .binding = 0,
-          .stride = sizeof(Vec3),
-          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-      },
-      {
-          .binding = 1,
-          .stride = sizeof(Vec3),
-          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-      },
-      {
-          .binding = 2,
-          .stride = sizeof(Vec2),
-          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-      },
-      {
-          .binding = 3,
-          .stride = sizeof(Vec4),
-          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-      }};
-
-  std::vector<VkVertexInputAttributeDescription> attribute_descriptions = {
-      {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
-      {.location = 1, .binding = 1, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0},
-      {.location = 2, .binding = 2, .format = VK_FORMAT_R32G32_SFLOAT, .offset = 0},
-      {.location = 3, .binding = 3, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = 0}};
-
   auto create_info = charlie::GraphicsPipelineCreateInfo{
       .layout = mesh_pipeline_layout_,
       .pipeline_rendering_create_info =
@@ -641,8 +621,6 @@ void Renderer::init_mesh_pipeline()
               .depth_attachment_format = depth_format_,
           },
       .debug_name = "Mesh Graphics Pipeline",
-      .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
-                                         .attribute_descriptions = attribute_descriptions},
       .stages = {{vertex_shader}, {fragment_shader, &specialization_info}},
       .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT}};
 
@@ -920,7 +898,9 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
   std::vector<SubMesh> submeshes;
   for (usize i = 0; i < cpu_mesh.submeshes.size(); ++i) {
     const auto& submesh = cpu_mesh.submeshes[i];
-    static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     const vkh::AllocatedBuffer position_buffer =
         upload_buffer(context_, upload_context_, submesh.positions, buffer_usage,
@@ -1172,10 +1152,30 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   for (u32 i = 0; i < draws_.size(); ++i) {
     const SubMesh& submesh = *draws_[i].submesh;
-    const VkBuffer buffers[] = {submesh.position_buffer.buffer, submesh.normal_buffer.buffer,
-                                submesh.uv_buffer.buffer, submesh.tangent_buffer.buffer};
-    constexpr VkDeviceSize offsets[] = {0, 0, 0, 0};
-    vkCmdBindVertexBuffers(cmd, 0, 4, buffers, offsets);
+    constexpr auto get_buffer_device_address = [](VkDevice device, VkBuffer buffer) {
+      VkBufferDeviceAddressInfo device_address_info{
+          .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = buffer};
+      return vkGetBufferDeviceAddress(device, &device_address_info);
+    };
+
+    const VkDeviceAddress pos_buffer_address =
+        get_buffer_device_address(context_, submesh.position_buffer.buffer);
+    const VkDeviceAddress normal_buffer_address =
+        get_buffer_device_address(context_, submesh.normal_buffer.buffer);
+    const VkDeviceAddress tex_coord_buffer_address =
+        get_buffer_device_address(context_, submesh.uv_buffer.buffer);
+    const VkDeviceAddress tangent_buffer_address =
+        get_buffer_device_address(context_, submesh.tangent_buffer.buffer);
+
+    const MeshPushConstant push_constant{
+        .position_buffer_address = pos_buffer_address,
+        .normal_buffer_address = normal_buffer_address,
+        .tex_coord_buffer_address = tex_coord_buffer_address,
+        .tangent_buffer_address = tangent_buffer_address,
+    };
+    vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(MeshPushConstant), &push_constant);
+
     vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
@@ -1270,24 +1270,6 @@ auto Renderer::add_texture(Texture texture) -> u32
   textures_to_update_.push_back(TextureUpdate{
       .index = texture_index,
   });
-
-  //  VkDescriptorImageInfo image_info{.sampler = texture.sampler == VK_NULL_HANDLE ?
-  //  default_sampler_
-  //                                                                                :
-  //                                                                                texture.sampler,
-  //                                   .imageView = texture.image_view,
-  //                                   .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  //
-  //  VkWriteDescriptorSet descriptor_write = {
-  //      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-  //      .dstSet = bindless_texture_descriptor_set_,
-  //      .dstBinding = bindless_texture_binding,
-  //      .dstArrayElement = texture_index,
-  //      .descriptorCount = 1,
-  //      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-  //      .pImageInfo = &image_info,
-  //  };
-  //  vkUpdateDescriptorSets(context_, 1, &descriptor_write, 0, nullptr);
 
   return texture_index;
 }

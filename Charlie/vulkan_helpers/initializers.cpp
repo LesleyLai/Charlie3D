@@ -80,7 +80,8 @@ auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_
 
   AllocatedBuffer allocated_buffer;
   VKH_TRY(vmaCreateBuffer(context.allocator(), &vk_buffer_create_info, &vma_alloc_info,
-                          &allocated_buffer.buffer, &allocated_buffer.allocation, nullptr));
+                          &allocated_buffer.buffer, &allocated_buffer.allocation,
+                          &allocated_buffer.allocation_info));
 
   if (not buffer_create_info.debug_name.empty() &&
       set_debug_name(context, allocated_buffer.buffer, buffer_create_info.debug_name)) {
@@ -136,7 +137,7 @@ auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_inf
 
   AllocatedImage image;
   VKH_TRY(vmaCreateImage(context.allocator(), &vk_image_create_info, &image_alloc_info,
-                         &image.image, &image.allocation, nullptr));
+                         &image.image, &image.allocation, &image.allocation_info));
 
   if (set_debug_name(context, image.image, image_create_info.debug_name)) {
     report_fail_to_set_debug_name(image_create_info.debug_name);

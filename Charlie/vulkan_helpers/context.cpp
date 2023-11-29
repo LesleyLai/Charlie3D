@@ -94,6 +94,7 @@ Context::Context(charlie::Window& window)
             .descriptorBindingSampledImageUpdateAfterBind = true,
             .descriptorBindingPartiallyBound = true,
             .runtimeDescriptorArray = true,
+            .bufferDeviceAddress = true,
         })
         .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
         .select();
@@ -150,6 +151,7 @@ Context::Context(charlie::Window& window)
   };
 
   const VmaAllocatorCreateInfo allocator_create_info{
+      .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
       .physicalDevice = physical_device_,
       .device = device_,
       .pVulkanFunctions = &vma_vulkan_func,

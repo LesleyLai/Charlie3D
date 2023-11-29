@@ -21,6 +21,7 @@ struct BufferCreateInfo {
 struct [[nodiscard]] AllocatedBuffer {
   VkBuffer buffer = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
+  VmaAllocationInfo allocation_info = {};
 
   explicit(false) operator VkBuffer() { return buffer; } // NOLINT(google-explicit-constructor)
 };

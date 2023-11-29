@@ -18,6 +18,7 @@ class Context;
 struct AllocatedImage {
   VkImage image = {};
   VmaAllocation allocation = {};
+  VmaAllocationInfo allocation_info = {};
 
   explicit(false) operator VkImage() { return image; } // NOLINT(google-explicit-constructor)
 };
