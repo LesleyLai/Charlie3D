@@ -12,7 +12,6 @@ layout (location = 4) in vec3 in_bi_tangent;
 layout (location = 5) in vec4 in_shadow_coord;
 layout (location = 6) in flat int in_material_index;
 
-
 layout (constant_id = 0) const int shadow_mode = 0;
 
 layout (location = 0) out vec4 out_frag_color;
@@ -36,8 +35,8 @@ struct Material {
     float roughness_factor;
 };
 layout (std430, set = 2, binding = 0) readonly buffer MaterialBuffer {
-    Material material[];
-} material_buffer;
+    Material materials[];
+};
 
 layout (set = 3, binding = 10) uniform sampler2D global_textures[];
 
@@ -64,7 +63,7 @@ const vec2 poisson_disk_16[SHADOW_SAMPLE_COUNT] = vec2[](
 );
 
 Material current_material() {
-    return material_buffer.material[in_material_index];
+    return materials[in_material_index];
 }
 
 vec3 calculate_pixel_normal() {

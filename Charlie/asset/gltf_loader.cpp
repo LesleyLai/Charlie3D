@@ -81,7 +81,8 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
 };
 
 [[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
-                                       const fastgltf::Image& image) -> charlie::CPUImage
+                                       const fastgltf::Asset& asset, const fastgltf::Image& image)
+    -> charlie::CPUImage
 {
   return std::visit(
       [&](const auto& data) -> charlie::CPUImage {
@@ -96,16 +97,29 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
           return charlie::load_image_from_file(file_path, name);
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::Vector>) {
           using enum fastgltf::MimeType;
-          // TODO: Handle other Mime types
           BEYOND_ENSURE(data.mimeType == JPEG || data.mimeType == PNG ||
                         data.mimeType == GltfBuffer);
           return charlie::load_image_from_memory(data.bytes, std::string{image.name});
         } else if constexpr (std::is_same_v<DataType, fastgltf::sources::BufferView>) {
           using enum fastgltf::MimeType;
-          // TODO: Handle other Mime types
           BEYOND_ENSURE(data.mimeType == JPEG || data.mimeType == PNG ||
                         data.mimeType == GltfBuffer);
-          beyond::panic("Buffer view is unsupported yet!");
+          const std::size_t buffer_view_index = data.bufferViewIndex;
+          const auto& buffer_view = asset.bufferViews.at(buffer_view_index);
+          const auto& buffer = asset.buffers.at(buffer_view.bufferIndex);
+
+          return std::visit(
+              [&](const auto& arg) -> charlie::CPUImage {
+                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(arg)>,
+                                             fastgltf::sources::Vector>) {
+                  std::span<const uint8_t> bytes(arg.bytes.data() + buffer_view.byteOffset,
+                                                 buffer_view.byteLength);
+                  return charlie::load_image_from_memory(bytes, std::string{image.name});
+                } else {
+                  beyond::panic("Should not happen!");
+                }
+              },
+              buffer.data);
 
         } else {
           beyond::panic("Unsupported image data format!");
@@ -191,10 +205,11 @@ namespace charlie {
 
   std::vector<Task<>> tasks;
   for (usize i = 0; i < asset.images.size(); ++i) {
-    tasks.emplace_back([](charlie::ThreadPool& scheduler, std::filesystem::path gltf_directory,
-                          const fastgltf::Image& image, charlie::CPUImage& output) -> Task<> {
+    tasks.emplace_back([&asset](charlie::ThreadPool& scheduler,
+                                std::filesystem::path gltf_directory, const fastgltf::Image& image,
+                                charlie::CPUImage& output) -> Task<> {
       co_await scheduler.schedule();
-      output = load_raw_image_data(gltf_directory, image);
+      output = load_raw_image_data(gltf_directory, asset, image);
     }(io_thread_pool, file_path.parent_path(), asset.images[i], result.images[i]));
     io_thread_pool.enqueue(tasks.back());
   }

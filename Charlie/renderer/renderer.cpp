@@ -424,7 +424,7 @@ void Renderer::init_descriptors()
   {
     vkh::DescriptorSetLayoutCreateInfo bindless_texture_descriptor_set_layout_create_info{
         .p_next = &layout_binding_flags_create_info,
-        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
         .bindings = texture_bindings,
         .debug_name = "Material Descriptor Set Layout",
     };
