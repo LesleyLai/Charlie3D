@@ -14,7 +14,9 @@
 #include <beyond/types/optional_conversion.hpp>
 #include <beyond/utils/narrowing.hpp>
 
-#include "../utils/thread_pool.hpp"
+#include <beyond/concurrency/thread_pool.hpp>
+
+#include <latch>
 
 namespace fastgltf {
 
@@ -175,7 +177,7 @@ namespace charlie {
 {
   ZoneScoped;
 
-  ThreadPool io_thread_pool{"IO Thread Pool"};
+  beyond::ThreadPool thread_pool;
 
   fastgltf::Parser parser;
 
@@ -203,15 +205,14 @@ namespace charlie {
 
   result.images.resize(asset.images.size());
 
-  std::vector<Task<>> tasks;
+  const auto gltf_directory = file_path.parent_path();
+  std::latch image_loading_latch{narrow<ptrdiff_t>(asset.images.size())};
+
   for (usize i = 0; i < asset.images.size(); ++i) {
-    tasks.emplace_back([&asset](charlie::ThreadPool& scheduler,
-                                std::filesystem::path gltf_directory, const fastgltf::Image& image,
-                                charlie::CPUImage& output) -> Task<> {
-      co_await scheduler.schedule();
-      output = load_raw_image_data(gltf_directory, asset, image);
-    }(io_thread_pool, file_path.parent_path(), asset.images[i], result.images[i]));
-    io_thread_pool.enqueue(tasks.back());
+    thread_pool.async([&, i]() {
+      result.images[i] = load_raw_image_data(gltf_directory, asset, asset.images[i]);
+      image_loading_latch.count_down();
+    });
   }
 
   result.textures.reserve(asset.textures.size());
@@ -310,32 +311,7 @@ namespace charlie {
                  file_path.string());
   }
 
-  // TODO: don't hard code floor here
-  //  {
-  //    result.materials.emplace_back();
-  //    result.meshes.push_back(CPUMesh{
-  //        .name = "Floor",
-  //        .material_index = result.materials.size() - 1,
-  //        .positions =
-  //            {
-  //                Point3{0.5f, 0.0f, 0.5f},   // top right
-  //                Point3{0.5f, 0.0f, -0.5f},  // bottom right
-  //                Point3{-0.5f, 0.0f, -0.5f}, // bottom left
-  //                Point3{-0.5f, 0.0f, 0.5f}   // top left
-  //            },
-  //        .normals = {Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}, Vec3{0, 1, 0}},
-  //        .uv = {Vec2{0, 0}, Vec2{0, 1}, Vec2{1, 0}, Vec2{1, 1}},
-  //        .tangents = {Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0, 1}, Vec4{-1, 0, 0,
-  //        1}}, .indices = {0, 1, 3, 1, 2, 3},
-  //    });
-  //    result.objects.push_back(CPURenderObject{
-  //        .mesh_index = narrow<i32>(result.meshes.size() - 1),
-  //    });
-  //    result.local_transforms.push_back(beyond::translate(0.0f, -1.0f, 0.0f) *
-  //                                      beyond::scale(5.0f, 1.f, 5.0f));
-  //  }
-
-  io_thread_pool.wait();
+  image_loading_latch.wait();
 
   SPDLOG_INFO("GLTF loaded from {}", file_path.string());
   return result;

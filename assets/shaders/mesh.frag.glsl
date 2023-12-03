@@ -244,5 +244,4 @@ void main()
     out_frag_color = vec4(color, 1.0f);
 
     #endif
-
 }

@@ -1,4 +1,5 @@
 #include "thread_pool.hpp"
+#include "beyond/concurrency/thread_pool.hpp"
 
 #ifdef _WIN32
 #include <beyond/utils/assert.hpp>
