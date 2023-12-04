@@ -19,9 +19,7 @@ struct ShaderCompilationOptions {
 
 struct [[nodiscard]] ShaderCompilationResult {
   std::vector<uint32_t> spirv;
-  // TODO
-  // std::vector<std::string> include_files; // paths for all #include files (including indirect
-  // ones)
+  std::vector<std::string> include_files; // paths for all #include files
 };
 
 class ShaderCompiler {

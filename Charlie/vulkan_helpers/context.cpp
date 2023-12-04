@@ -106,7 +106,7 @@ Context::Context(charlie::Window& window)
   physical_device_ = vkb_physical_device.physical_device;
   gpu_properties_ = vkb_physical_device.properties;
 
-  SPDLOG_INFO("Physical device name {}", vkb_physical_device.name);
+  SPDLOG_INFO("Physical device name: {}", vkb_physical_device.name);
 
   const vkb::DeviceBuilder device_builder{vkb_physical_device};
   const auto device_ret = [&]() {

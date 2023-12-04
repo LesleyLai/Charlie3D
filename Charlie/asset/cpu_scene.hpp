@@ -28,7 +28,7 @@ struct CPUMaterial {
 struct CPUTexture {
   std::string name;
   u32 image_index = 0;
-  beyond::optional<u32> sampler_index = 0;
+  beyond::optional<u32> sampler_index = beyond::nullopt;
 };
 
 // Mirrors the scene-graph structure but all data here are on CPU
