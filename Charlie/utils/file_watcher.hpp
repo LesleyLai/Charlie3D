@@ -8,7 +8,7 @@
 namespace charlie {
 
 struct FileWatchInfo {
-  std::filesystem::path directory;
+  std::filesystem::path path; // Can either be a single file or a directory
   beyond::unique_function<void(const std::filesystem::path&)> callback;
 };
 

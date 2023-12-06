@@ -7,6 +7,8 @@
 #include <beyond/utils/assert.hpp>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 #include <Tracy/Tracy.hpp>
 
 #include "../utils/string_map.hpp"
@@ -246,6 +248,44 @@ PipelineManager::~PipelineManager()
   for (auto pipeline : pipelines_) { vkDestroyPipeline(device_, pipeline, nullptr); }
 }
 
+void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
+{
+  ShaderEntry& shader_entry = entry.get();
+
+  SPDLOG_INFO("Reload {}", shader_entry.file_path);
+  ShaderCompiler compiler;
+  auto compilation_res =
+      compiler.compile_shader_from_file(shader_entry.file_path, {.stage = shader_entry.stage});
+  if (not compilation_res.has_value()) return; // has compilation error
+
+  VkShaderModule new_shader_module = vkh::load_shader_module(device_, compilation_res.value().spirv,
+                                                             {.debug_name = shader_entry.file_path})
+                                         .value();
+
+  // Replace shader
+  shader_entry.shader_module = new_shader_module;
+
+  // Update related pipelines!
+  const auto shader_handle = std::bit_cast<ShaderHandle>(&shader_entry);
+  {
+    beyond::optional<std::vector<GraphicsPipelineHandle>&> pipelines_opt =
+        this->pipeline_dependency_map_.at(shader_handle);
+    BEYOND_ENSURE(pipelines_opt.has_value());
+
+    std::vector<GraphicsPipelineHandle>& pipelines = pipelines_opt.value();
+    for (const auto pipeline_handle : pipelines) {
+      // TODO: recreate pipeline asynchronously
+      const auto& create_info = this->pipeline_create_info_cache_->get(pipeline_handle);
+
+      VkPipeline& pipeline = pipelines_.at(pipeline_handle.value());
+      vkDestroyPipeline(device_, pipeline, nullptr);
+      pipeline = create_graphics_pipeline_impl(device_, create_info);
+
+      SPDLOG_INFO("Recreate {}!", create_info.debug_name);
+    }
+  }
+}
+
 [[nodiscard]] auto PipelineManager::add_shader(beyond::ZStringView filename, ShaderStage stage)
     -> ShaderHandle
 {
@@ -253,46 +293,12 @@ PipelineManager::~PipelineManager()
   ZoneText(filename.c_str(), filename.size());
 
   const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
-  std::filesystem::path shader_directory = asset_path / "shaders";
-  std::filesystem::path shader_path = shader_directory / filename.c_str();
+  std::filesystem::path shader_path = asset_path / "shaders" / filename.c_str();
 
   shader_file_watcher_.add_watch(
-      {.directory = shader_directory, .callback = [this](const std::filesystem::path& path) {
+      {.path = shader_path, .callback = [this](const std::filesystem::path& path) {
          this->shaders_->find_shader_entry(path.string()).map([&](ShaderEntry& entry) {
-           SPDLOG_INFO("{} changed", path.string());
-           ShaderCompiler compiler;
-           std::string shader_path_str = path.string();
-           auto compilation_res =
-               compiler.compile_shader_from_file(shader_path_str, {.stage = entry.stage});
-           if (not compilation_res.has_value()) return; // has compilation error
-
-           VkShaderModule new_shader_module =
-               vkh::load_shader_module(device_, compilation_res.value().spirv,
-                                       {.debug_name = shader_path_str})
-                   .value();
-
-           // Replace shader
-           entry.shader_module = new_shader_module;
-
-           // Update related pipelines!
-           const auto shader_handle = std::bit_cast<ShaderHandle>(&entry);
-           {
-             beyond::optional<std::vector<GraphicsPipelineHandle>&> pipelines_opt =
-                 this->pipeline_dependency_map_.at(shader_handle);
-             BEYOND_ENSURE(pipelines_opt.has_value());
-
-             std::vector<GraphicsPipelineHandle>& pipelines = pipelines_opt.value();
-             for (const auto pipeline_handle : pipelines) {
-               // TODO: recreate pipeline asynchronously
-               const auto& create_info = this->pipeline_create_info_cache_->get(pipeline_handle);
-
-               VkPipeline& pipeline = pipelines_.at(pipeline_handle.value());
-               vkDestroyPipeline(device_, pipeline, nullptr);
-               pipeline = create_graphics_pipeline_impl(device_, create_info);
-
-               SPDLOG_INFO("Recreate {}!", create_info.debug_name);
-             }
-           }
+           reload_shader(ref(entry));
          });
        }});
 
@@ -309,7 +315,26 @@ PipelineManager::~PipelineManager()
       shaders_->add_shader(BEYOND_MOV(shader_path_str), ShaderEntry{
                                                             .stage = stage,
                                                             .shader_module = shader_module,
+                                                            .file_path = shader_path_str,
                                                         });
+
+  for (const std::string include_file : compilation_res.value().include_files) {
+    if (auto itr = header_dependency_map_.find(include_file); itr != header_dependency_map_.end()) {
+      itr->second.insert(shader_handle);
+    } else {
+      header_dependency_map_.try_emplace(include_file, std::unordered_set{shader_handle});
+    }
+
+    // Add file watcher for include file
+    shader_file_watcher_.add_watch(
+        {.path = include_file, .callback = [this](const std::filesystem::path& path) {
+           for (const ShaderHandle& shader_handle : header_dependency_map_.at(path.string())) {
+             auto& entry = *std::bit_cast<charlie::ShaderEntry*>(shader_handle);
+             // TODO: need to find correct path
+             reload_shader(ref(entry));
+           }
+         }});
+  }
 
   // Create entry for the shader in the pipeline handle
   pipeline_dependency_map_.try_emplace(shader_handle, std::vector<GraphicsPipelineHandle>{});

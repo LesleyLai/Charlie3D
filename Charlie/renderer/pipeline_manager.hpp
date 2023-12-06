@@ -1,10 +1,9 @@
 #ifndef CHARLIE3D_PIPELINE_MANAGER_HPP
 #define CHARLIE3D_PIPELINE_MANAGER_HPP
 
-#include <any>
-#include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "../utils/file_watcher.hpp"
 #include "../utils/prelude.hpp"
@@ -15,6 +14,7 @@
 #include <beyond/utils/assert.hpp>
 #include <beyond/utils/handle.hpp>
 
+#include "../utils/string_map.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
 #include "../vulkan_helpers/initializers.hpp"
 
@@ -35,6 +35,7 @@ namespace charlie {
 struct ShaderEntry {
   ShaderStage stage = {};
   VkShaderModule shader_module = VK_NULL_HANDLE;
+  std::string file_path;
 };
 
 // A "virtual" graphics pipeline handle is useful to deal with hot reloading
@@ -85,6 +86,9 @@ class PipelineManager {
   // An adjacency list from shader entry to pipelines that depends on those shader entries
   std::unordered_map<ShaderHandle, std::vector<GraphicsPipelineHandle>> pipeline_dependency_map_;
 
+  // An adjacency list from include files to shader entries that depends on those files
+  StringHashMap<std::unordered_set<ShaderHandle>> header_dependency_map_;
+
 public:
   explicit PipelineManager(VkDevice device);
   ~PipelineManager();
@@ -105,6 +109,9 @@ public:
   {
     return pipelines_.at(handle.value());
   }
+
+private:
+  void reload_shader(Ref<ShaderEntry> entry);
 };
 
 } // namespace charlie
