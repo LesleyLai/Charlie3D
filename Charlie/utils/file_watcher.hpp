@@ -7,9 +7,19 @@
 
 namespace charlie {
 
+enum class FileAction {
+  added,
+  removed,
+  modified,
+  renamed_old,
+  renamed_new,
+};
+
+using FileWatcherCallback = beyond::unique_function<void(const std::filesystem::path&, FileAction)>;
+
 struct FileWatchInfo {
   std::filesystem::path path; // Can either be a single file or a directory
-  beyond::unique_function<void(const std::filesystem::path&)> callback;
+  FileWatcherCallback callback;
 };
 
 class FileWatcher {

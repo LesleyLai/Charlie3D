@@ -39,15 +39,13 @@ static void error_exit(LPCSTR lpszFunction)
   beyond::panic(fmt::format("{}", (LPCTSTR)lpDisplayBuf));
 }
 
-using Callback = beyond::unique_function<void(const std::filesystem::path&)>;
-
 struct DirectoryWatcherData {
-  Callback callback;
+  charlie::FileWatcherCallback callback;
 };
 
 struct SingleFileWatchEntry {
   std::string filename;
-  Callback callback;
+  charlie::FileWatcherCallback callback;
 };
 
 struct SingleFileWatchersData {
@@ -80,7 +78,21 @@ static void CALLBACK watch_callback(DWORD error_code, DWORD number_of_bytes_tran
     notify_info = (PFILE_NOTIFY_INFORMATION)&entry.buffer[offset];
     offset += notify_info->NextEntryOffset;
 
-    if (notify_info->Action != FILE_ACTION_MODIFIED) { continue; }
+    const charlie::FileAction action = [&]() {
+      switch (notify_info->Action) {
+      case FILE_ACTION_ADDED:
+        return charlie::FileAction::added;
+      case FILE_ACTION_REMOVED:
+        return charlie::FileAction::removed;
+      case FILE_ACTION_MODIFIED:
+        return charlie::FileAction::modified;
+      case FILE_ACTION_RENAMED_OLD_NAME:
+        return charlie::FileAction::renamed_old;
+      case FILE_ACTION_RENAMED_NEW_NAME:
+        return charlie::FileAction::renamed_new;
+      }
+      beyond::panic("Should not happen!");
+    }();
 
     int callback_filename_size =
         WideCharToMultiByte(CP_ACP, 0, notify_info->FileName,
@@ -91,11 +103,13 @@ static void CALLBACK watch_callback(DWORD error_code, DWORD number_of_bytes_tran
     if (auto* callbacks = std::get_if<SingleFileWatchersData>(&entry.callbacks);
         callbacks != nullptr) {
       for (auto& [filename, callback] : callbacks->files_to_watch) {
-        if (filename == callback_filename) { callback(entry.directory_path / callback_filename); }
+        if (filename == callback_filename) {
+          callback(entry.directory_path / callback_filename, action);
+        }
       }
     } else {
       std::get<DirectoryWatcherData>(entry.callbacks)
-          .callback(entry.directory_path / callback_filename);
+          .callback(entry.directory_path / callback_filename, action);
     }
 
   } while (notify_info->NextEntryOffset != 0);
@@ -105,9 +119,14 @@ static void CALLBACK watch_callback(DWORD error_code, DWORD number_of_bytes_tran
 
 static void refresh_watcher(WatcherEntry& entry)
 {
+  constexpr auto event_filters = FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
+                                 FILE_NOTIFY_CHANGE_ATTRIBUTES | FILE_NOTIFY_CHANGE_SIZE |
+                                 FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_LAST_ACCESS |
+                                 FILE_NOTIFY_CHANGE_CREATION | FILE_NOTIFY_CHANGE_SECURITY;
+
   const bool result =
       ReadDirectoryChangesW(entry.directory_handle, entry.buffer, sizeof(entry.buffer), false,
-                            FILE_NOTIFY_CHANGE_LAST_WRITE, nullptr, &entry, watch_callback);
+                            event_filters, nullptr, &entry, watch_callback);
   if (result == 0) {
     // Display the error message and exit the process
     error_exit(TEXT("ReadDirectoryChangesW"));

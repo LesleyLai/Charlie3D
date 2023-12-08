@@ -296,10 +296,13 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
   std::filesystem::path shader_path = asset_path / "shaders" / filename.c_str();
 
   shader_file_watcher_.add_watch(
-      {.path = shader_path, .callback = [this](const std::filesystem::path& path) {
-         this->shaders_->find_shader_entry(path.string()).map([&](ShaderEntry& entry) {
-           reload_shader(ref(entry));
-         });
+      {.path = shader_path,
+       .callback = [this](const std::filesystem::path& path, const FileAction action) {
+         if (action == FileAction::modified) {
+           this->shaders_->find_shader_entry(path.string()).map([&](ShaderEntry& entry) {
+             reload_shader(ref(entry));
+           });
+         }
        }});
 
   std::string shader_path_str = shader_path.string();
@@ -327,11 +330,14 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
 
     // Add file watcher for include file
     shader_file_watcher_.add_watch(
-        {.path = include_file, .callback = [this](const std::filesystem::path& path) {
-           for (const ShaderHandle& shader_handle : header_dependency_map_.at(path.string())) {
-             auto& entry = *std::bit_cast<charlie::ShaderEntry*>(shader_handle);
-             // TODO: need to find correct path
-             reload_shader(ref(entry));
+        {.path = include_file,
+         .callback = [this](const std::filesystem::path& path, const FileAction action) {
+           if (action == FileAction::modified) {
+             for (const ShaderHandle& shader_handle : header_dependency_map_.at(path.string())) {
+               auto& entry = *std::bit_cast<charlie::ShaderEntry*>(shader_handle);
+               // TODO: need to find correct path
+               reload_shader(ref(entry));
+             }
            }
          }});
   }
