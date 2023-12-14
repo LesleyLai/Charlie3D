@@ -8,7 +8,7 @@ add_library(charlie3d::asset ALIAS charlie3d_asset)
 
 find_package(meshoptimizer REQUIRED)
 find_package(tinyobjloader REQUIRED)
-#find_package(fastgltf REQUIRED)
+find_package(fastgltf REQUIRED)
 find_package(Stb REQUIRED)
 
 target_link_libraries(charlie3d_asset

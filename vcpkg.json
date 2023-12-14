@@ -21,6 +21,10 @@
         "sdl2-binding"
       ]
     },
+    {
+      "name": "fastgltf",
+      "version>=": "0.6.1#1"
+    },
     "meshoptimizer",
     "tracy",
     "catch2"
