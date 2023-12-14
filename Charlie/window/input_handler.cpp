@@ -599,7 +599,7 @@ void InputHandler::handle_events()
   SDL_Event sdl_event;
   while (SDL_PollEvent(&sdl_event)) {
     ImGui_ImplSDL2_ProcessEvent(&sdl_event);
-    const ImGuiIO& io = ImGui::GetIO();
+    const auto& io = ImGui::GetIO();
     if (io.WantCaptureMouse &&
         (sdl_event.type == SDL_MOUSEMOTION || sdl_event.type == SDL_MOUSEBUTTONDOWN ||
          sdl_event.type == SDL_MOUSEBUTTONUP || sdl_event.type == SDL_MOUSEWHEEL)) {

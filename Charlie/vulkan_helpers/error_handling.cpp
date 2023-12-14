@@ -1,6 +1,7 @@
 #include "error_handling.hpp"
 
 #include <vulkan/vk_enum_string_helper.h>
+#include <vulkan/vulkan.h>
 
 namespace vkh {
 

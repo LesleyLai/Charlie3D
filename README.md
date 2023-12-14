@@ -13,7 +13,7 @@ Goals
 
 No goals
 
-- Having elegant and well-designed code. This is a more hacking/prototyping thing
+- Having "clean" code and well-designed software architecture. This is a more hacking/prototyping thing
 - Support GPUs and old drivers that miss critical features
 
 ## Features

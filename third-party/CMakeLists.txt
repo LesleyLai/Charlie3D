@@ -8,6 +8,29 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fetch_vk_bootstrap)
 
+FetchContent_Declare(
+        fetch_vulkan_headers
+        GIT_REPOSITORY "https://github.com/KhronosGroup/Vulkan-Headers.git"
+        GIT_TAG v1.3.273
+        OVERRIDE_FIND_PACKAGE
+)
+FetchContent_MakeAvailable(fetch_vulkan_headers)
+
+FetchContent_Declare(
+        fetch_vulkan_utility_libraries
+        GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Utility-Libraries
+        GIT_TAG v1.3.273
+        OVERRIDE_FIND_PACKAGE
+)
+FetchContent_MakeAvailable(fetch_vulkan_utility_libraries)
+
+FetchContent_Declare(
+        fetch_fastgltf
+        GIT_REPOSITORY https://github.com/spnda/fastgltf
+        GIT_TAG v0.6.1
+)
+FetchContent_MakeAvailable(fetch_fastgltf)
+
 set(VULKAN_SDK_VERSION sdk-1.3.261.0)
 
 FetchContent_Declare(SPIRV-Headers
@@ -60,5 +83,3 @@ set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
 set(SHADERC_SKIP_COPYRIGHT_CHECK ON)
 set(SHADERC_GLSLANG_DIR ${GLSL_SOURCE_DIR})
 FetchContent_MakeAvailable(shaderc)
-
-add_subdirectory(imgui)

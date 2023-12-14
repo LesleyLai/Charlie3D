@@ -1,6 +1,6 @@
 find_package(Vulkan REQUIRED)
-find_package(vulkan-memory-allocator REQUIRED)
-find_package(spdlog REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
 
 add_library(vulkan_helper
@@ -22,8 +22,9 @@ target_link_libraries(vulkan_helper
         charlie3d::compiler_options
         fmt::fmt
         vk-bootstrap::vk-bootstrap
-        #Vulkan::Vulkan
-        vulkan-memory-allocator::vulkan-memory-allocator
+        Vulkan::Headers
+        Vulkan::UtilityHeaders
+        GPUOpen::VulkanMemoryAllocator
         volk::volk
         PRIVATE
         charlie3d::window

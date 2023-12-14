@@ -6,6 +6,8 @@ add_library(charlie3d_renderer
         render_pass.hpp
         imgui_render_pass.cpp
         imgui_render_pass.hpp
+        imgui_impl_vulkan.h
+        imgui_impl_vulkan.cpp
         descriptor_allocator.hpp
         descriptor_allocator.cpp
         uploader.cpp uploader.hpp
@@ -14,7 +16,9 @@ add_library(charlie3d_renderer
         pipeline_manager.hpp)
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
-find_package(SDL2 REQUIRED)
+find_package(SDL2 CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+
 
 target_link_libraries(charlie3d_renderer
         PUBLIC
@@ -24,9 +28,9 @@ target_link_libraries(charlie3d_renderer
         charlie3d::asset
         charlie3d::shader_compiler
         beyond::core
-        third-party::imgui_bindings
+        imgui::imgui
         PRIVATE
-        SDL2::SDL2-static
+        SDL2::SDL2
         charlie3d::compiler_options
         )
 
