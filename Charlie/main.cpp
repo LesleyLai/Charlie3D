@@ -57,8 +57,6 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
 
     ImGui::SeparatorText("Sunlight");
     ImGui::PushID("Sunlight");
-    static float phi_degree = 0;
-
     static float theta = 30.f / 180.f * beyond::float_constants::pi;
     static float phi = 0;
 

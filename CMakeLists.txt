@@ -10,7 +10,7 @@ include("CMakeDependentOption")
 include("cmake/compiler.cmake")
 include("cmake/StaticAnalyzers.cmake")
 
-add_subdirectory(third-party)
+add_subdirectory(deps)
 
 add_subdirectory(Charlie)
 
