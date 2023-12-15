@@ -321,7 +321,7 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
                                                             .file_path = shader_path_str,
                                                         });
 
-  for (const std::string include_file : compilation_res.value().include_files) {
+  for (const std::string& include_file : compilation_res.value().include_files) {
     if (auto itr = header_dependency_map_.find(include_file); itr != header_dependency_map_.end()) {
       itr->second.insert(shader_handle);
     } else {

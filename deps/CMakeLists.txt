@@ -18,6 +18,12 @@ CPMAddPackage(
 CPMAddPackage("gh:KhronosGroup/Vulkan-Utility-Libraries@1.3.273")
 
 CPMAddPackage(
+        NAME SPIRV-Headers
+        GITHUB_REPOSITORY KhronosGroup/SPIRV-Headers
+        GIT_TAG vulkan-sdk-1.3.268.0
+)
+
+CPMAddPackage(
         NAME SPIRV-Tools
         GITHUB_REPOSITORY KhronosGroup/SPIRV-Tools
         GIT_TAG vulkan-sdk-1.3.268.0

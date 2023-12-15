@@ -99,6 +99,11 @@ struct MeshPushConstant {
   VkDeviceAddress tangent_buffer_address = 0;
 };
 
+struct ImageUploadInfo {
+  VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+  u32 mip_levels = 1; // Generate mipmaps if mip_level > 1
+};
+
 class Renderer {
 public:
   explicit Renderer(Window& window, InputHandler& input_handler);
@@ -137,11 +142,6 @@ public:
   [[nodiscard]] auto context() noexcept -> vkh::Context& { return context_; }
 
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
-
-  struct ImageUploadInfo {
-    VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-    u32 mip_levels = 1; // Generate mipmaps if mip_level > 1
-  };
 
   auto upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info = {})
       -> VkImage;
