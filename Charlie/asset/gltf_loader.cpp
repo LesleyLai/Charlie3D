@@ -186,8 +186,13 @@ namespace charlie {
 
   using fastgltf::Options;
 
-  auto maybe_asset = parser.loadGLTF(&data, file_path.parent_path(),
-                                     Options::LoadGLBBuffers | Options::LoadExternalBuffers);
+  const bool is_glb = file_path.extension() == ".glb";
+  const auto directory = file_path.parent_path();
+  auto maybe_asset =
+      is_glb ? parser.loadBinaryGLTF(&data, directory,
+                                     Options::LoadGLBBuffers | Options::LoadExternalBuffers)
+             : parser.loadGLTF(&data, directory,
+                               Options::LoadGLBBuffers | Options::LoadExternalBuffers);
   if (const auto error = maybe_asset.error(); error != fastgltf::Error::None) {
     beyond::panic(fmt::format("Error while loading {}: {}", file_path.string(),
                               fastgltf::getErrorMessage(error)));
