@@ -229,6 +229,8 @@ private:
 
   std::unique_ptr<FrameGraphRenderPass> imgui_render_pass_ = nullptr;
 
+  void update(const charlie::Camera& camera);
+
   void init_frame_data();
   void init_depth_image();
   void init_shadow_map();

@@ -128,10 +128,6 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   ImGui::End();
 }
 
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-
 int main(int argc, const char** argv)
 {
   std::string_view scene_file = "models/gltf_box/box.gltf";

@@ -739,13 +739,59 @@ void Renderer::init_default_texture()
       add_texture(Texture{.image = default_normal_image, .image_view = default_normal_image_view});
 }
 
-void Renderer::render(const charlie::Camera& camera)
+void Renderer::update(const charlie::Camera& camera)
 {
-  ZoneScopedN("Render");
+  ZoneScopedN("Update");
 
   pipeline_manager_->update();
 
   update_textures();
+
+  imgui_render_pass_->pre_render();
+
+  {
+    // Camera
+    const Mat4 view = camera.view_matrix();
+    const Mat4 projection = camera.proj_matrix();
+
+    const GPUCameraData cam_data = {
+        .view = view,
+        .proj = projection,
+        .view_proj = projection * view,
+        .position = camera.position(),
+    };
+
+    const vkh::AllocatedBuffer& camera_buffer = current_frame().camera_buffer;
+
+    void* data = nullptr;
+    vmaMapMemory(context_.allocator(), camera_buffer.allocation, &data);
+    memcpy(data, &cam_data, sizeof(GPUCameraData));
+    vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
+
+    // Scene data
+    const auto dir = Vec3(scene_parameters_.sunlight_direction.xyz);
+    const Vec3 up =
+        abs(dot(dir, Vec3(0.0, 1.0, 0.0))) > 0.9 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
+
+    scene_parameters_.sunlight_view_proj = beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *
+                                           beyond::look_at(-dir, Vec3(0.0), up);
+
+    char* scene_data = nullptr;
+    vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
+
+    const size_t frame_index = frame_number_ % frame_overlap;
+
+    scene_data += context_.align_uniform_buffer_size(sizeof(GPUSceneParameters)) * frame_index;
+    memcpy(scene_data, &scene_parameters_, sizeof(GPUSceneParameters));
+    vmaUnmapMemory(context_.allocator(), scene_parameter_buffer_.allocation);
+  }
+}
+
+void Renderer::render(const charlie::Camera& camera)
+{
+  ZoneScopedN("Render");
+
+  update(camera);
 
   const auto& frame = current_frame();
   constexpr u64 one_second = 1'000'000'000;
@@ -770,8 +816,6 @@ void Renderer::render(const charlie::Camera& camera)
 
   current_frame_deletion_queue().flush();
 
-  imgui_render_pass_->pre_render();
-
   VkCommandBuffer cmd = frame.main_command_buffer;
 
   const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
@@ -789,44 +833,6 @@ void Renderer::render(const charlie::Camera& camera)
       TracyVkZone(frame.tracy_vk_ctx, cmd, "Swapchain");
 
       transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
-
-      {
-        // Camera
-        const Mat4 view = camera.view_matrix();
-        const Mat4 projection = camera.proj_matrix();
-
-        const GPUCameraData cam_data = {
-            .view = view,
-            .proj = projection,
-            .view_proj = projection * view,
-            .position = camera.position(),
-        };
-
-        const vkh::AllocatedBuffer& camera_buffer = current_frame().camera_buffer;
-
-        void* data = nullptr;
-        vmaMapMemory(context_.allocator(), camera_buffer.allocation, &data);
-        memcpy(data, &cam_data, sizeof(GPUCameraData));
-        vmaUnmapMemory(context_.allocator(), camera_buffer.allocation);
-
-        // Scene data
-        const auto dir = Vec3(scene_parameters_.sunlight_direction.xyz);
-        const Vec3 up =
-            abs(dot(dir, Vec3(0.0, 1.0, 0.0))) > 0.9 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
-
-        scene_parameters_.sunlight_view_proj =
-            beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *
-            beyond::look_at(-dir, Vec3(0.0), up);
-
-        char* scene_data = nullptr;
-        vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
-
-        const size_t frame_index = frame_number_ % frame_overlap;
-
-        scene_data += context_.align_uniform_buffer_size(sizeof(GPUSceneParameters)) * frame_index;
-        memcpy(scene_data, &scene_parameters_, sizeof(GPUSceneParameters));
-        vmaUnmapMemory(context_.allocator(), scene_parameter_buffer_.allocation);
-      }
 
       if (enable_shadow_mapping) { draw_shadow(cmd); }
 

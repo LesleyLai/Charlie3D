@@ -94,6 +94,7 @@ Context::Context(charlie::Window& window)
             .descriptorBindingSampledImageUpdateAfterBind = true,
             .descriptorBindingPartiallyBound = true,
             .runtimeDescriptorArray = true,
+            .scalarBlockLayout = true,
             .bufferDeviceAddress = true,
         })
         .set_required_features_13({.synchronization2 = true, .dynamicRendering = true})
