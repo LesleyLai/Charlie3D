@@ -19,9 +19,7 @@ namespace charlie {
 
 struct SubMesh {
   vkh::AllocatedBuffer position_buffer{};
-  vkh::AllocatedBuffer normal_buffer{};
-  vkh::AllocatedBuffer uv_buffer{};
-  vkh::AllocatedBuffer tangent_buffer{};
+  vkh::AllocatedBuffer vertex_buffer{};
 
   vkh::AllocatedBuffer index_buffer{};
   u32 vertices_count{};

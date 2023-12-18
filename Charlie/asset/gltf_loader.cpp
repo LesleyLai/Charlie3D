@@ -290,6 +290,7 @@ namespace charlie {
         tangents.resize(tangent_accessor.count);
         fastgltf::copyFromAccessor<beyond::Vec4>(asset, tangent_accessor, tangents.data());
       });
+      if (tangents.empty()) { tangents.resize(positions.size()); }
 
       // BEYOND_ENSURE(index_accessor.componentType == fastgltf::ComponentType::UnsignedInt);
       std::vector<u32> indices;
@@ -299,16 +300,21 @@ namespace charlie {
       const beyond::optional<u32> material_index =
           to_beyond(primitive.materialIndex).map(beyond::narrow<u32, usize>);
 
+      std::vector<Vertex> vertex_buffer(positions.size());
+      for (size_t i = 0; i < positions.size(); ++i) {
+        // Interleave normal, uv, and tangents
+        vertex_buffer[i] = {
+            .normal = normals[i], .tex_coords = tex_coords[i], .tangents = tangents[i]};
+      }
+
       submeshes.push_back(CPUSubmesh{.material_index = material_index,
-                                     .positions = std::move(positions),
-                                     .normals = std::move(normals),
-                                     .uv = std::move(tex_coords),
-                                     .tangents = std::move(tangents),
-                                     .indices = std::move(indices)});
+                                     .positions = BEYOND_MOV(positions),
+                                     .vertices = BEYOND_MOV(vertex_buffer),
+                                     .indices = BEYOND_MOV(indices)});
     }
 
     result.meshes.push_back(
-        CPUMesh{.name = std::string{mesh.name}, .submeshes = std::move(submeshes)});
+        CPUMesh{.name = std::string{mesh.name}, .submeshes = BEYOND_MOV(submeshes)});
   }
 
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {

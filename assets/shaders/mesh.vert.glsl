@@ -14,30 +14,27 @@ layout (buffer_reference, scalar) readonly buffer PositionBuffer {
     vec3 position[];
 };
 
-layout (buffer_reference, scalar) readonly buffer NormalBuffer {
-    vec3 normal[];
+struct Vertex {
+    vec3 normal;
+    vec2 tex_coord;
+    vec4 tangent;
 };
 
-layout (buffer_reference, scalar) readonly buffer TextureCoordBuffer {
-    vec2 tex_coord[];
+layout (buffer_reference, std430) readonly buffer VertexBuffer {
+    Vertex vertices[];
 };
 
-layout (buffer_reference, scalar) readonly buffer TangentBuffer {
-    vec4 tangent[];
-};
 
 layout (push_constant) uniform constants
 {
     PositionBuffer position_buffer;
-    NormalBuffer normal_buffer;
-    TextureCoordBuffer tex_coord_buffer;
-    TangentBuffer tangent_buffer;
+    VertexBuffer vertex_buffer;
 } PushConstants;
 
 #include "scene_data.h.glsl"
 #include "object_data.h.glsl"
 
-layout (location = 0) out vec3 out_world_pos;
+ layout (location = 0) out vec3 out_world_pos;
 layout (location = 1) out vec2 out_tex_coord;
 layout (location = 2) out vec3 out_normal;
 layout (location = 3) out vec3 out_tangent;
@@ -54,9 +51,10 @@ const mat4 light_space_to_NDC = mat4(
 void main()
 {
     vec3 in_position = PushConstants.position_buffer.position[gl_VertexIndex];
-    vec3 in_normal = PushConstants.normal_buffer.normal[gl_VertexIndex];
-    vec2 in_tex_coord = PushConstants.tex_coord_buffer.tex_coord[gl_VertexIndex];
-    vec4 in_tangent = PushConstants.tangent_buffer.tangent[gl_VertexIndex];
+    Vertex in_vertex = PushConstants.vertex_buffer.vertices[gl_VertexIndex];
+    vec3 in_normal = in_vertex.normal;
+    vec2 in_tex_coord = in_vertex.tex_coord;
+    vec4 in_tangent = in_vertex.tangent;
 
     mat4 model = object_buffer.objects[gl_BaseInstance].model;
     mat4 transform_matrix = camera.view_proj * model;

@@ -21,7 +21,7 @@ auto upward_directory_find(const std::filesystem::path& from, Fn condition)
   return beyond::nullopt;
 }
 
-auto locate_asset_path() -> beyond::optional<std::filesystem::path>
+inline auto locate_asset_path() -> beyond::optional<std::filesystem::path>
 {
   using std::filesystem::path;
   const auto append_asset = [](const path& path) { return path / "assets"; };

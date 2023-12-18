@@ -94,9 +94,7 @@ struct GPUSceneParameters {
 
 struct MeshPushConstant {
   VkDeviceAddress position_buffer_address = 0;
-  VkDeviceAddress normal_buffer_address = 0;
-  VkDeviceAddress tex_coord_buffer_address = 0;
-  VkDeviceAddress tangent_buffer_address = 0;
+  VkDeviceAddress vertex_buffer_address = 0;
 };
 
 struct ImageUploadInfo {

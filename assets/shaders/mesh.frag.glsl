@@ -202,8 +202,8 @@ void main()
     float metallic = metallic_roughness.r * material.metallic_factor;
     float perceptual_roughness = metallic_roughness.g * material.roughness_factor;
 
-    vec3 normal = calculate_pixel_normal();
-    normal = in_normal;
+    //vec3 normal = calculate_pixel_normal();
+    vec3 normal = in_normal;
 
     // lighting
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;

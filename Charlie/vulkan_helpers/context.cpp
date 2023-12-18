@@ -79,11 +79,12 @@ Context::Context(charlie::Window& window)
 
   auto phys_device_ret = [&]() {
     ZoneScopedN("Select physical device");
+    const char* required_extensions[] = {VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+                                         VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
     return phys_device_selector.set_surface(surface_)
         .allow_any_gpu_device_type(false)
         .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
-        .add_required_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
-        .add_required_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
+        .add_required_extensions(beyond::size(required_extensions), required_extensions)
         .set_required_features({
             .fillModeNonSolid = true,
         })

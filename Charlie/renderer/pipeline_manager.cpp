@@ -226,7 +226,7 @@ struct PipelineCreateInfoCache {
       new_shader_info.push_back(shader_info);
     }
 
-    create_info.stages = std::move(new_shader_info);
+    create_info.stages = BEYOND_MOV(new_shader_info);
     graphics_pipeline_create_infos.push_back(create_info);
     return GraphicsPipelineHandle{narrow<u32>(graphics_pipeline_create_infos.size() - 1)};
   }

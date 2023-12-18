@@ -13,15 +13,25 @@
 
 #include "../utils/prelude.hpp"
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
+
 namespace charlie {
+
+// Interleaved vertex attributes except position (which is in a stand-alone stream)
+struct Vertex {
+  alignas(Vec4) Vec3 normal;
+  alignas(Vec4) Vec2 tex_coords;
+  alignas(Vec4) Vec4 tangents;
+};
 
 struct CPUSubmesh {
   beyond::optional<u32> material_index;
 
   std::vector<Point3> positions;
-  std::vector<Vec3> normals;
-  std::vector<Vec2> uv;
-  std::vector<Vec4> tangents;
+  std::vector<Vertex> vertices;
 
   std::vector<u32> indices;
   beyond::AABB3 bounding_box; // object space bounding box
@@ -33,5 +43,9 @@ struct CPUMesh {
 };
 
 } // namespace charlie
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif // CHARLIE3D_CPU_MESH_HPP

@@ -904,37 +904,24 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
   std::vector<SubMesh> submeshes;
   for (usize i = 0; i < cpu_mesh.submeshes.size(); ++i) {
     const auto& submesh = cpu_mesh.submeshes[i];
-    static constexpr auto buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                                         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    static constexpr auto vertex_buffer_usage =
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     const vkh::AllocatedBuffer position_buffer =
-        upload_buffer(context_, upload_context_, submesh.positions, buffer_usage,
+        upload_buffer(context_, upload_context_, submesh.positions, vertex_buffer_usage,
                       fmt::format("{} Position ({})", cpu_mesh.name, i))
             .value();
-    const vkh::AllocatedBuffer normal_buffer =
-        upload_buffer(context_, upload_context_, submesh.normals, buffer_usage,
-                      fmt::format("{} Normal ({})", cpu_mesh.name, i))
+    const vkh::AllocatedBuffer vertex_buffer =
+        upload_buffer(context_, upload_context_, submesh.vertices, vertex_buffer_usage,
+                      fmt::format("{} Vertex ({})", cpu_mesh.name, i))
             .value();
-    const vkh::AllocatedBuffer uv_buffer =
-        upload_buffer(context_, upload_context_, submesh.uv, buffer_usage,
-                      fmt::format("{} Texcoord ({})", cpu_mesh.name, i))
-            .value();
-
-    const vkh::AllocatedBuffer tangent_buffer =
-        upload_buffer(context_, upload_context_, submesh.tangents, buffer_usage,
-                      fmt::format("{} Tangent ({})", cpu_mesh.name, i))
-            .value();
-
     const vkh::AllocatedBuffer index_buffer =
         upload_buffer(context_, upload_context_, submesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                       fmt::format("{} Index ({})", cpu_mesh.name, i))
             .value();
 
     submeshes.push_back(SubMesh{.position_buffer = position_buffer,
-                                .normal_buffer = normal_buffer,
-                                .uv_buffer = uv_buffer,
-                                .tangent_buffer = tangent_buffer,
+                                .vertex_buffer = vertex_buffer,
                                 .index_buffer = index_buffer,
                                 .vertices_count = narrow<u32>(submesh.positions.size()),
                                 .index_count = narrow<u32>(submesh.indices.size()),
@@ -1130,7 +1117,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   for (usize i = 0; i < draws_.size(); ++i) {
     const RenderObject& render_object = draws_[i];
     object_model_matrix_data[i] = render_object.model_matrix;
-    object_material_index_data[i] = render_object.submesh->material_index;
+    object_material_index_data[i] = narrow<i32>(render_object.submesh->material_index);
   }
 
   context_.unmap(current_frame().model_matrix_buffer);
@@ -1166,18 +1153,12 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
     const VkDeviceAddress pos_buffer_address =
         get_buffer_device_address(context_, submesh.position_buffer.buffer);
-    const VkDeviceAddress normal_buffer_address =
-        get_buffer_device_address(context_, submesh.normal_buffer.buffer);
-    const VkDeviceAddress tex_coord_buffer_address =
-        get_buffer_device_address(context_, submesh.uv_buffer.buffer);
-    const VkDeviceAddress tangent_buffer_address =
-        get_buffer_device_address(context_, submesh.tangent_buffer.buffer);
+    const VkDeviceAddress vertex_buffer_address =
+        get_buffer_device_address(context_, submesh.vertex_buffer.buffer);
 
     const MeshPushConstant push_constant{
         .position_buffer_address = pos_buffer_address,
-        .normal_buffer_address = normal_buffer_address,
-        .tex_coord_buffer_address = tex_coord_buffer_address,
-        .tangent_buffer_address = tangent_buffer_address,
+        .vertex_buffer_address = vertex_buffer_address,
     };
     vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
                        sizeof(MeshPushConstant), &push_constant);

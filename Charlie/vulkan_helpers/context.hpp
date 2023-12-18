@@ -21,7 +21,7 @@ class Context {
   VkDebugUtilsMessengerEXT debug_messenger_{};
   VkSurfaceKHR surface_{};
   VkPhysicalDevice physical_device_{};
-  VkPhysicalDeviceProperties gpu_properties_;
+  VkPhysicalDeviceProperties gpu_properties_{};
   VkDevice device_{};
   VkQueue graphics_queue_{};
   VkQueue compute_queue_{};
