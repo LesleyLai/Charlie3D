@@ -104,21 +104,17 @@ namespace charlie {
   }
 
   std::unordered_map<uint32_t, RenderComponent> render_components;
-  for (u32 i = 0; i < cpu_scene.objects.size(); ++i) {
-    const auto& object = cpu_scene.objects[i];
-    if (object.mesh_index >= 0) {
-      const auto mesh_handle = mesh_storage[narrow<u32>(object.mesh_index)];
+
+  for (u32 i = 0; i < cpu_scene.nodes.local_transforms.size(); ++i) {
+    if (const i32 mesh_index = cpu_scene.nodes.mesh_indices[i]; mesh_index >= 0) {
+      const auto mesh_handle = mesh_storage[mesh_index];
       render_components.insert({i, RenderComponent{.mesh = mesh_handle}});
     }
   }
 
-  auto local_transforms = std::move(cpu_scene.local_transforms);
-  std::vector<beyond::Mat4> global_transforms(local_transforms);
-  // TODO: generate global transform from local transform
-
   return Scene{
-      .local_transforms = std::move(local_transforms),
-      .global_transforms = std::move(global_transforms),
+      .local_transforms = std::move(cpu_scene.nodes.local_transforms),
+      .global_transforms = std::move(cpu_scene.nodes.global_transforms),
       .render_components = std::move(render_components),
   };
 }

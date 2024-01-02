@@ -10,7 +10,7 @@ layout (set = 0, binding = 0) uniform CameraBuffer {
     vec3 position;
 } camera;
 
-layout (buffer_reference, scalar) readonly buffer PositionBuffer {
+layout (buffer_reference, scalar) readonly restrict buffer PositionBuffer {
     vec3 position[];
 };
 
@@ -20,7 +20,7 @@ struct Vertex {
     vec4 tangent;
 };
 
-layout (buffer_reference, std430) readonly buffer VertexBuffer {
+layout (buffer_reference, std430) readonly restrict buffer VertexBuffer {
     Vertex vertices[];
 };
 
@@ -34,7 +34,7 @@ layout (push_constant) uniform constants
 #include "scene_data.h.glsl"
 #include "object_data.h.glsl"
 
- layout (location = 0) out vec3 out_world_pos;
+layout (location = 0) out vec3 out_world_pos;
 layout (location = 1) out vec2 out_tex_coord;
 layout (location = 2) out vec3 out_normal;
 layout (location = 3) out vec3 out_tangent;

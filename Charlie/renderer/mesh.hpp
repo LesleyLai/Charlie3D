@@ -6,9 +6,6 @@
 
 #include <beyond/math/vector.hpp>
 
-#include <array>
-#include <span>
-
 namespace vkh {
 
 class Context;
@@ -20,7 +17,6 @@ namespace charlie {
 struct SubMesh {
   vkh::AllocatedBuffer position_buffer{};
   vkh::AllocatedBuffer vertex_buffer{};
-
   vkh::AllocatedBuffer index_buffer{};
   u32 vertices_count{};
   u32 index_count{};

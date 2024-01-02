@@ -201,11 +201,25 @@ namespace charlie {
 
   CPUScene result;
 
-  for (auto& node : asset.nodes) {
-    const auto transform = get_node_transform(node);
-    const i32 mesh_index = to_beyond(node.meshIndex).map(beyond::narrow<i32, usize>).value_or(-1);
-    result.objects.push_back({.mesh_index = mesh_index});
-    result.local_transforms.push_back(transform);
+  // Populate child-to-parent relationship
+  std::vector<i32> parent_indices(asset.nodes.size(), -1);
+  for (const auto& [i, node] : std::views::enumerate(asset.nodes)) {
+    for (usize child_index : node.children) {
+      parent_indices.at(narrow<i32>(child_index)) = narrow<i32>(i);
+      BEYOND_ENSURE_MSG(child_index > i, "GLTF asset does not have topological ordering");
+    }
+  }
+
+  for (const auto& [i, node] : std::views::enumerate(asset.nodes)) {
+    const auto local_transform = get_node_transform(node);
+    const i32 mesh_index = to_beyond(node.meshIndex).map(narrow<i32, usize>).value_or(-1);
+
+    result.add_node(NodeInfo{
+        .name = std::string{node.name},
+        .local_transform = local_transform,
+        .parent_index = parent_indices.at(i),
+        .mesh_index = mesh_index,
+    });
   }
 
   result.images.resize(asset.images.size());
@@ -213,9 +227,9 @@ namespace charlie {
   const auto gltf_directory = file_path.parent_path();
   std::latch image_loading_latch{narrow<ptrdiff_t>(asset.images.size())};
 
-  for (usize i = 0; i < asset.images.size(); ++i) {
+  for (const auto& [i, image] : std::views::enumerate(asset.images)) {
     thread_pool.async([&, i]() {
-      result.images[i] = load_raw_image_data(gltf_directory, asset, asset.images[i]);
+      result.images[i] = load_raw_image_data(gltf_directory, asset, image);
       image_loading_latch.count_down();
     });
   }

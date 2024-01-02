@@ -34,7 +34,7 @@ struct Material {
     float metallic_factor;
     float roughness_factor;
 };
-layout (std430, set = 2, binding = 0) readonly buffer MaterialBuffer {
+layout (std430, set = 2, binding = 0) readonly restrict buffer MaterialBuffer {
     Material materials[];
 };
 
