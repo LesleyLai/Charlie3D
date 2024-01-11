@@ -908,7 +908,8 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     const vkh::AllocatedBuffer position_buffer =
-        upload_buffer(context_, upload_context_, submesh.positions, vertex_buffer_usage,
+        upload_buffer(context_, upload_context_, submesh.positions,
+                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vertex_buffer_usage,
                       fmt::format("{} Position ({})", cpu_mesh.name, i))
             .value();
     const vkh::AllocatedBuffer vertex_buffer =

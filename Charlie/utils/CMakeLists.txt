@@ -3,9 +3,6 @@ add_library(charlie3d_utils
         framerate_counter.cpp framerate_counter.hpp
         prelude.hpp
         file.hpp
-        thread_pool.hpp
-        thread_pool.cpp
-        task.hpp
         file_watcher.hpp
         $<$<BOOL:${WIN32}>:file_watcher_impl_win32.cpp>
         string_map.hpp)
