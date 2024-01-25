@@ -6,8 +6,6 @@
 #include "../Charlie/utils/file_watcher.hpp"
 #include <beyond/utils/assert.hpp>
 
-const static auto test_folder = std::filesystem::current_path() / "temp" / "file_watcher_test";
-
 struct FileActionCounter {
   int added = 0;
   int removed = 0;
@@ -27,6 +25,8 @@ struct FileActionCounter {
 
 TEST_CASE("Filewatcher test")
 {
+  const static auto test_folder = std::filesystem::current_path() / "temp" / "file_watcher_test";
+
   if (std::filesystem::exists(test_folder)) { std::filesystem::remove_all(test_folder); }
   std::filesystem::create_directories(test_folder);
 

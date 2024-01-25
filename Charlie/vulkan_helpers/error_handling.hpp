@@ -10,7 +10,7 @@
 #define VK_CHECK(x)                                                                                \
   do {                                                                                             \
     const VkResult err = x;                                                                        \
-    if (err) {                                                                                     \
+    if (err < 0) { /* Only negative codes are runtime errors */                                    \
       fmt::print(stderr, "Vulkan error: {} [{}] at {}:{}\n",                                       \
                  static_cast<std::underlying_type_t<VkResult>>(err), vkh::to_string(err),          \
                  __FILE__, __LINE__);                                                              \
