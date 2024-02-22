@@ -193,9 +193,10 @@ void main()
 
     uint albedo_texture_index = material.albedo_texture_index;
     vec4 albedo = material.base_color_factor * texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
-    if (albedo.a < 0.1) {
-        discard;
-    }
+    // alpha cutoff
+    //    if (albedo.a < 0.1) {
+    //        discard;
+    //    }
     vec3 base_color = albedo.rgb;
 
     vec2 metallic_roughness = texture(global_textures[nonuniformEXT(material.metallic_roughness_texture_index)], in_tex_coord).bg;

@@ -15,6 +15,7 @@
 #include <beyond/utils/handle.hpp>
 
 #include "../utils/string_map.hpp"
+#include "../vulkan_helpers/blending.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
 #include "../vulkan_helpers/initializers.hpp"
 
@@ -71,6 +72,8 @@ struct GraphicsPipelineCreateInfo {
   vkh::PipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
   beyond::StaticVector<ShaderStageCreateInfo, 6> stages;
   RasterizationStateCreateInfo rasterization_state;
+
+  VkPipelineColorBlendAttachmentState color_blending = vkh::color_blend_attachment_disable();
 };
 
 class PipelineManager {

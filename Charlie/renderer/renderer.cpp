@@ -629,6 +629,14 @@ void Renderer::init_mesh_pipeline()
   constant_data.shadow_mode = 0;
   create_info.debug_name = "Mesh Graphics Pipeline (without shadow)";
   mesh_pipeline_without_shadow_ = pipeline_manager_->create_graphics_pipeline(create_info);
+
+  create_info.color_blending = vkh::color_blend_attachment_additive();
+  constant_data.shadow_mode = 1;
+  mesh_pipeline_transparent_ = pipeline_manager_->create_graphics_pipeline(create_info);
+  constant_data.shadow_mode = 0;
+  create_info.debug_name = "Mesh Graphics Pipeline (without shadow)";
+  mesh_pipeline_transparent_without_shadow_ =
+      pipeline_manager_->create_graphics_pipeline(create_info);
 }
 
 void Renderer::init_shadow_pipeline()

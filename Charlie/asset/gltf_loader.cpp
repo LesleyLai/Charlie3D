@@ -68,6 +68,18 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
   const beyond::optional<uint32_t> occlusion_texture_index =
       beyond::from_std(material.occlusionTexture.transform(get_texture_index));
 
+  const auto material_mode = [&]() {
+    switch (material.alphaMode) {
+    case fastgltf::AlphaMode::Opaque:
+      return charlie::MaterialMode::opaque;
+    case fastgltf::AlphaMode::Mask:
+      return charlie::MaterialMode::mask;
+    case fastgltf::AlphaMode::Blend:
+      return charlie::MaterialMode::blend;
+    }
+    return charlie::MaterialMode::opaque;
+  }();
+
   return charlie::CPUMaterial{
       .base_color_factor = {material.pbrData.baseColorFactor[0],
                             material.pbrData.baseColorFactor[1],
@@ -79,6 +91,7 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
       .normal_texture_index = normal_texture_index,
       .metallic_roughness_texture_index = metallic_roughness_texture_index,
       .occlusion_texture_index = occlusion_texture_index,
+      .material_mode = material_mode,
   };
 };
 

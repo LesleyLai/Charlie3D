@@ -12,6 +12,7 @@
 
 #include "../utils/asset_path.hpp"
 #include "../utils/string_map.hpp"
+#include "../vulkan_helpers/blending.hpp"
 
 namespace {
 
@@ -95,13 +96,9 @@ auto create_graphics_pipeline_impl(VkDevice device,
       .sampleShadingEnable = VK_FALSE,
   };
 
-  static constexpr VkPipelineColorBlendAttachmentState color_blend_attachment{
-      .blendEnable = VK_FALSE,
-      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-  };
+  const VkPipelineColorBlendAttachmentState& color_blend_attachment = create_info.color_blending;
 
-  static constexpr VkPipelineColorBlendStateCreateInfo color_blending{
+  const VkPipelineColorBlendStateCreateInfo color_blending{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
       .logicOpEnable = VK_FALSE,
       .logicOp = VK_LOGIC_OP_COPY,
@@ -112,7 +109,6 @@ auto create_graphics_pipeline_impl(VkDevice device,
 
   static constexpr VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .pNext = nullptr,
       .depthTestEnable = VK_TRUE,
       .depthWriteEnable = VK_TRUE,
       .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,

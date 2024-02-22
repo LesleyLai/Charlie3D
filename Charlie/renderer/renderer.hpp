@@ -206,6 +206,9 @@ private:
   GraphicsPipelineHandle mesh_pipeline_without_shadow_;
   GraphicsPipelineHandle mesh_pipeline_;
 
+  GraphicsPipelineHandle mesh_pipeline_transparent_;
+  GraphicsPipelineHandle mesh_pipeline_transparent_without_shadow_;
+
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<Material> materials_;
   vkh::AllocatedBuffer material_buffer_;
