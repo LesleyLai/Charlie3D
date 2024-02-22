@@ -3,7 +3,7 @@
 #include "../asset/gltf_loader.hpp"
 #include "../asset/obj_loader.hpp"
 
-#include "../utils/configuration.hpp"
+#include "../utils/asset_path.hpp"
 
 #include "../vulkan_helpers/initializers.hpp"
 
@@ -21,8 +21,7 @@ namespace charlie {
 
   std::filesystem::path file_path = filename;
   if (file_path.is_relative()) {
-    const auto& assets_path =
-        Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+    const auto& assets_path = get_asset_path();
     file_path = assets_path / file_path;
   }
 

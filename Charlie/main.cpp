@@ -7,7 +7,6 @@
 
 #include "renderer/scene.hpp"
 
-#include "utils/configuration.hpp"
 #include "utils/file.hpp"
 #include "utils/file_watcher.hpp"
 #include "utils/framerate_counter.hpp"
@@ -21,14 +20,6 @@
 #include <tracy/Tracy.hpp>
 
 #include <chrono>
-
-void set_asset_path()
-{
-  const auto current_path = std::filesystem::current_path();
-  auto asset_path = charlie::locate_asset_path().expect("Cannot find assets folder!");
-
-  Configurations::instance().set(CONFIG_ASSETS_PATH, asset_path);
-}
 
 static bool hide_control_panel = false;
 
@@ -132,11 +123,7 @@ int main(int argc, const char** argv)
 {
   std::string_view scene_file = "models/gltf_box/box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
-
-  set_asset_path();
-
-  const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
-
+  
   auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D",
                                                           {.resizable = true, .maximized = true});
 

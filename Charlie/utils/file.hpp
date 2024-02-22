@@ -21,18 +21,6 @@ auto upward_directory_find(const std::filesystem::path& from, Fn condition)
   return beyond::nullopt;
 }
 
-inline auto locate_asset_path() -> beyond::optional<std::filesystem::path>
-{
-  using std::filesystem::path;
-  const auto append_asset = [](const path& path) { return path / "assets"; };
-  const auto parent_path = upward_directory_find(
-      std::filesystem::current_path(), [&](const std::filesystem::path& path) {
-        const auto assets_path = append_asset(path);
-        return exists(assets_path) && is_directory(assets_path);
-      });
-  return parent_path.map([&](const path& path) { return append_asset(path); });
-}
-
 } // namespace charlie
 
 #endif // CHARLIE3D_FILE_HPP

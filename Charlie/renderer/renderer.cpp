@@ -14,7 +14,7 @@
 #include "camera.hpp"
 #include "mesh.hpp"
 
-#include "../utils/configuration.hpp"
+#include "../utils/asset_path.hpp"
 #include "imgui_render_pass.hpp"
 
 #include <spdlog/spdlog.h>
@@ -568,7 +568,7 @@ void Renderer::init_mesh_pipeline()
 {
   ZoneScoped;
 
-  const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+  const auto asset_path = get_asset_path();
   const std::filesystem::path shader_directory = asset_path / "shaders";
 
   const ShaderHandle vertex_shader =

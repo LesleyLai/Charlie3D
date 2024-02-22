@@ -1,6 +1,6 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-add_executable(charlie3d_test configurations_test.cpp file_watcher_test.cpp)
+add_executable(charlie3d_test file_watcher_test.cpp)
 
 find_package(Catch2 REQUIRED)
 target_link_libraries(charlie3d_test PRIVATE charlie3d::window charlie3d::renderer Catch2::Catch2WithMain)

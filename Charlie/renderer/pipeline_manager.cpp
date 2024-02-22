@@ -1,5 +1,4 @@
 #include "pipeline_manager.hpp"
-#include "../utils/configuration.hpp"
 
 #include "../vulkan_helpers/context.hpp"
 #include "../vulkan_helpers/debug_utils.hpp"
@@ -11,6 +10,7 @@
 
 #include <Tracy/Tracy.hpp>
 
+#include "../utils/asset_path.hpp"
 #include "../utils/string_map.hpp"
 
 namespace {
@@ -292,7 +292,7 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
   ZoneScoped;
   ZoneText(filename.c_str(), filename.size());
 
-  const auto asset_path = Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+  const auto asset_path = get_asset_path();
   std::filesystem::path shader_path = asset_path / "shaders" / filename.c_str();
 
   shader_file_watcher_.add_watch(

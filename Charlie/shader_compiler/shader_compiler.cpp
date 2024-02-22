@@ -17,7 +17,7 @@
 #include <array>
 #include <string>
 
-#include "../utils/configuration.hpp"
+#include "../utils/asset_path.hpp"
 
 namespace charlie {
 
@@ -27,8 +27,7 @@ struct ShaderCompilerImpl {
 
   ShaderCompilerImpl()
   {
-    const auto asset_path =
-        Configurations::instance().get<std::filesystem::path>(CONFIG_ASSETS_PATH);
+    const auto asset_path = get_asset_path();
     shader_directory = asset_path / "shaders";
   }
 };
