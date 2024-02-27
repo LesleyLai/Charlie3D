@@ -211,6 +211,8 @@ private:
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<Material> materials_;
+  std::vector<AlphaMode> material_alpha_modes_;
+
   vkh::AllocatedBuffer material_buffer_;
   VkDescriptorSet material_descriptor_set_ = VK_NULL_HANDLE;
 
@@ -222,7 +224,8 @@ private:
   };
   std::vector<TextureUpdate> textures_to_update_;
 
-  std::vector<RenderObject> draws_;
+  std::vector<RenderObject> draws_solid_objects_;
+  std::vector<RenderObject> draws_transparent_objects_;
 
   std::unique_ptr<Scene> scene_;
   GPUSceneParameters scene_parameters_;

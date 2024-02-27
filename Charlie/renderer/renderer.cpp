@@ -1104,78 +1104,147 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   const size_t frame_index = frame_number_ % frame_overlap;
 
-  // Render objects
-  draws_.clear();
+  draws_solid_objects_.clear();
+  draws_transparent_objects_.clear();
+
+  // populate draws
   for (const auto [node_index, render_component] : scene_->render_components) {
     const Mesh& mesh = meshes_.try_get(render_component.mesh).expect("Cannot find mesh by handle!");
 
     for (const auto& submesh : mesh.submeshes) {
-      draws_.push_back(RenderObject{.submesh = &submesh,
-                                    .model_matrix = scene_->global_transforms.at(node_index)});
+
+      const AlphaMode alpha_mode = material_alpha_modes_.at(submesh.material_index);
+
+      const RenderObject object{.submesh = &submesh,
+                                .model_matrix = scene_->global_transforms.at(node_index)};
+
+      if (alpha_mode == AlphaMode::blend) {
+        draws_transparent_objects_.push_back(object);
+      } else {
+        draws_solid_objects_.push_back(object);
+      }
     }
   }
 
-  // Copy to object buffer
+  // Copy to object buffer for solid objects
   auto* object_model_matrix_data =
       beyond::narrow<Mat4*>(context_.map(current_frame().model_matrix_buffer).value());
   auto* object_material_index_data =
       beyond::narrow<i32*>(context_.map(current_frame().material_index_buffer).value());
-
-  const usize object_count = draws_.size();
-  BEYOND_ENSURE(object_count <= max_object_count);
-  for (usize i = 0; i < draws_.size(); ++i) {
-    const RenderObject& render_object = draws_[i];
+  BEYOND_ENSURE(draws_solid_objects_.size() <= max_object_count);
+  for (usize i = 0; i < draws_solid_objects_.size(); ++i) {
+    const RenderObject& render_object = draws_solid_objects_[i];
     object_model_matrix_data[i] = render_object.model_matrix;
     object_material_index_data[i] = narrow<i32>(render_object.submesh->material_index);
   }
 
+  // Render solid objects
+  {
+    if (enable_shadow_mapping) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline_manager_->get_pipeline(mesh_pipeline_));
+    } else {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline_manager_->get_pipeline(mesh_pipeline_without_shadow_));
+    }
+
+    const u32 uniform_offset =
+        beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
+        beyond::narrow<u32>(frame_index);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
+                            &current_frame().global_descriptor_set, 1, &uniform_offset);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
+                            &current_frame().object_descriptor_set, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
+                            &material_descriptor_set_, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
+                            &bindless_texture_descriptor_set_, 0, nullptr);
+
+    for (u32 i = 0; i < draws_solid_objects_.size(); ++i) {
+      const SubMesh& submesh = *draws_solid_objects_[i].submesh;
+      constexpr auto get_buffer_device_address = [](VkDevice device, VkBuffer buffer) {
+        VkBufferDeviceAddressInfo device_address_info{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = buffer};
+        return vkGetBufferDeviceAddress(device, &device_address_info);
+      };
+
+      const VkDeviceAddress pos_buffer_address =
+          get_buffer_device_address(context_, submesh.position_buffer.buffer);
+      const VkDeviceAddress vertex_buffer_address =
+          get_buffer_device_address(context_, submesh.vertex_buffer.buffer);
+
+      const MeshPushConstant push_constant{
+          .position_buffer_address = pos_buffer_address,
+          .vertex_buffer_address = vertex_buffer_address,
+      };
+      vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                         sizeof(MeshPushConstant), &push_constant);
+
+      vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+      vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
+    }
+  }
+
+  // draw transparent object
+
+  // Copy to object buffer for transparent objects
+  BEYOND_ENSURE(draws_transparent_objects_.size() <= max_object_count);
+  for (usize i = 0; i < draws_transparent_objects_.size(); ++i) {
+    const RenderObject& render_object = draws_transparent_objects_[i];
+    object_model_matrix_data[i] = render_object.model_matrix;
+    object_material_index_data[i] = narrow<i32>(render_object.submesh->material_index);
+  }
+
+  {
+    if (enable_shadow_mapping) {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline_manager_->get_pipeline(mesh_pipeline_transparent_));
+    } else {
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline_manager_->get_pipeline(mesh_pipeline_transparent_without_shadow_));
+    }
+
+    const u32 uniform_offset =
+        beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
+        beyond::narrow<u32>(frame_index);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
+                            &current_frame().global_descriptor_set, 1, &uniform_offset);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
+                            &current_frame().object_descriptor_set, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
+                            &material_descriptor_set_, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
+                            &bindless_texture_descriptor_set_, 0, nullptr);
+
+    for (u32 i = 0; i < draws_transparent_objects_.size(); ++i) {
+      const SubMesh& submesh = *draws_transparent_objects_[i].submesh;
+      constexpr auto get_buffer_device_address = [](VkDevice device, VkBuffer buffer) {
+        VkBufferDeviceAddressInfo device_address_info{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = buffer};
+        return vkGetBufferDeviceAddress(device, &device_address_info);
+      };
+
+      const VkDeviceAddress pos_buffer_address =
+          get_buffer_device_address(context_, submesh.position_buffer.buffer);
+      const VkDeviceAddress vertex_buffer_address =
+          get_buffer_device_address(context_, submesh.vertex_buffer.buffer);
+
+      const MeshPushConstant push_constant{
+          .position_buffer_address = pos_buffer_address,
+          .vertex_buffer_address = vertex_buffer_address,
+      };
+      vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                         sizeof(MeshPushConstant), &push_constant);
+
+      vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+      vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
+    }
+  }
+
   context_.unmap(current_frame().model_matrix_buffer);
   context_.unmap(current_frame().material_index_buffer);
-
-  if (enable_shadow_mapping) {
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline_manager_->get_pipeline(mesh_pipeline_));
-  } else {
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline_manager_->get_pipeline(mesh_pipeline_without_shadow_));
-  }
-
-  const u32 uniform_offset =
-      beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
-      beyond::narrow<u32>(frame_index);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
-                          &current_frame().global_descriptor_set, 1, &uniform_offset);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
-                          &current_frame().object_descriptor_set, 0, nullptr);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
-                          &material_descriptor_set_, 0, nullptr);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
-                          &bindless_texture_descriptor_set_, 0, nullptr);
-
-  for (u32 i = 0; i < draws_.size(); ++i) {
-    const SubMesh& submesh = *draws_[i].submesh;
-    constexpr auto get_buffer_device_address = [](VkDevice device, VkBuffer buffer) {
-      VkBufferDeviceAddressInfo device_address_info{
-          .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = buffer};
-      return vkGetBufferDeviceAddress(device, &device_address_info);
-    };
-
-    const VkDeviceAddress pos_buffer_address =
-        get_buffer_device_address(context_, submesh.position_buffer.buffer);
-    const VkDeviceAddress vertex_buffer_address =
-        get_buffer_device_address(context_, submesh.vertex_buffer.buffer);
-
-    const MeshPushConstant push_constant{
-        .position_buffer_address = pos_buffer_address,
-        .vertex_buffer_address = vertex_buffer_address,
-    };
-    vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(MeshPushConstant), &push_constant);
-
-    vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
-  }
 
   vkCmdEndRendering(cmd);
 }
@@ -1291,6 +1360,10 @@ auto Renderer::add_material(const CPUMaterial& material_info) -> u32
       .metallic_factor = material_info.metallic_factor,
       .roughness_factor = material_info.roughness_factor,
   });
+
+  material_alpha_modes_.push_back(material_info.alpha_mode);
+
+  BEYOND_ASSERT(materials_.size() == material_alpha_modes_.size());
 
   return narrow<u32>(materials_.size() - 1);
 }

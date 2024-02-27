@@ -86,17 +86,15 @@ namespace charlie {
   {
     ZoneScopedN("Upload materials");
 
-    for (const CPUMaterial& material : cpu_scene.materials) {
-      [[maybe_unused]] u32 material_index = renderer.add_material(CPUMaterial{
-          .base_color_factor = material.base_color_factor,
-          .metallic_factor = material.metallic_factor,
-          .roughness_factor = material.roughness_factor,
-          .albedo_texture_index = material.albedo_texture_index.map(lookup_texture_index),
-          .normal_texture_index = material.normal_texture_index.map(lookup_texture_index),
-          .metallic_roughness_texture_index =
-              material.metallic_roughness_texture_index.map(lookup_texture_index),
-          .occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index),
-      });
+    for (CPUMaterial material : cpu_scene.materials) {
+      // TODO: offset texture index in a function
+
+      material.albedo_texture_index = material.albedo_texture_index.map(lookup_texture_index);
+      material.normal_texture_index = material.normal_texture_index.map(lookup_texture_index);
+      material.metallic_roughness_texture_index =
+          material.metallic_roughness_texture_index.map(lookup_texture_index);
+      material.occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index);
+      [[maybe_unused]] u32 material_index = renderer.add_material(material);
     }
 
     renderer.upload_materials();

@@ -11,7 +11,7 @@
 
 namespace charlie {
 
-enum class MaterialMode { opaque, mask, blend };
+enum class AlphaMode { opaque, mask, blend };
 
 struct CPUMaterial {
   Vec4 base_color_factor;
@@ -22,7 +22,7 @@ struct CPUMaterial {
   beyond::optional<u32> metallic_roughness_texture_index;
   beyond::optional<u32> occlusion_texture_index;
 
-  MaterialMode material_mode = MaterialMode::opaque;
+  AlphaMode alpha_mode = AlphaMode::opaque;
 };
 
 struct CPUTexture {
