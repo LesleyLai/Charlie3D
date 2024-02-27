@@ -104,7 +104,7 @@ namespace charlie {
 
   for (u32 i = 0; i < cpu_scene.nodes.local_transforms.size(); ++i) {
     if (const i32 mesh_index = cpu_scene.nodes.mesh_indices[i]; mesh_index >= 0) {
-      const auto mesh_handle = mesh_storage[mesh_index];
+      const auto mesh_handle = mesh_storage[static_cast<usize>(mesh_index)];
       render_components.insert({i, RenderComponent{.mesh = mesh_handle}});
     }
   }

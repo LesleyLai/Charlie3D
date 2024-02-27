@@ -20,6 +20,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <chrono>
+#include <string_view>
 
 static bool hide_control_panel = false;
 
@@ -30,7 +31,15 @@ void draw_gui(charlie::Resolution resolution, charlie::Renderer& renderer, charl
   ImGui_ImplSDL2_NewFrame();
   ImGui::NewFrame();
 
-  // ImGui::ShowDemoWindow();
+  if (ImGui::BeginMainMenuBar()) {
+    if (ImGui::BeginMenu("File")) {
+      if (ImGui::MenuItem("Open Model", "Ctrl+O")) {}
+      ImGui::EndMenu();
+    }
+    ImGui::EndMainMenuBar();
+  }
+
+  ImGui::ShowDemoWindow();
 
   if (hide_control_panel) { return; }
 
@@ -123,8 +132,8 @@ int main(int argc, const char** argv)
 {
   std::string_view scene_file = "models/gltf_box/box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
-  
-  auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D",
+
+  auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D Model Viewer",
                                                           {.resizable = true, .maximized = true});
 
   auto input_handler = charlie::InputHandler{};

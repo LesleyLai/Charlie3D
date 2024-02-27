@@ -24,15 +24,15 @@ struct MeshHandle : beyond::GenerationalHandle<MeshHandle, u32, 16> {
 };
 
 struct RenderComponent {
-  u32 transform_index = static_cast<u32>(-1);
   MeshHandle mesh;
 };
 
+// Scene representation on CPU
+// This is an ECS-like structure where each scene node is represented as an index
 struct Scene {
   std::vector<Mat4> local_transforms; // Cached local transformation for each node
   std::vector<Mat4> global_transforms;
 
-  std::vector<RenderComponent> opaque_objects;
   std::unordered_map<u32, RenderComponent> render_components;
 };
 

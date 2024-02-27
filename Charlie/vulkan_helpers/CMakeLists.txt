@@ -16,7 +16,7 @@ add_library(vulkan_helper
         header_only_impl.cpp
         image.hpp
         required_field.hpp
-        error_handling.cpp initializers.cpp initializers.hpp blending.hpp)
+        error_handling.cpp initializers.cpp initializers.hpp blending.hpp bda.hpp bda.cpp)
 target_link_libraries(vulkan_helper
         PUBLIC
         charlie3d::compiler_options

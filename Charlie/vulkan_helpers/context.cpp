@@ -1,5 +1,7 @@
 #include "context.hpp"
 
+#include <beyond/utils/panic.hpp>
+
 #include "buffer.hpp"
 #include "error_handling.hpp"
 

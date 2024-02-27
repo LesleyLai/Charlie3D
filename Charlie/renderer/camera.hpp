@@ -2,7 +2,6 @@
 #define CHARLIE3D_CAMERA_HPP
 
 #include <beyond/math/angle.hpp>
-#include <beyond/math/matrix.hpp>
 #include <beyond/math/point.hpp>
 
 #include <chrono>
@@ -28,9 +27,9 @@ private:
 public:
   explicit Camera(CameraController& controller) : controller_{&controller} {}
 
-  [[nodiscard]] auto view_matrix() const -> beyond::Mat4;
-  [[nodiscard]] auto proj_matrix() const -> beyond::Mat4;
-  [[nodiscard]] auto position() const -> beyond::Vec3;
+  [[nodiscard]] auto view_matrix() const -> Mat4;
+  [[nodiscard]] auto proj_matrix() const -> Mat4;
+  [[nodiscard]] auto position() const -> Vec3;
 
   void draw_gui();
   void on_input_event(const Event& event, const InputStates& states);
@@ -96,6 +95,7 @@ private:
 
   static constexpr Vec3 up_ = beyond::Vec3{0, 1, 0};
 
+  // IPoint2
   IPoint2 old_mouse_pos_;
 
   static constexpr f32 initial_pan_speed = 1.0f;
