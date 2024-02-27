@@ -700,7 +700,7 @@ void Renderer::init_default_texture()
       .name = "Default Albedo Texture Image",
       .width = 1,
       .height = 1,
-      .compoments = 4,
+      .components = 4,
       .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
   };
   std::fill(cpu_image.data.get(), cpu_image.data.get() + 4, 255);
@@ -723,7 +723,7 @@ void Renderer::init_default_texture()
       .name = "Default Normal Texture Image",
       .width = 1,
       .height = 1,
-      .compoments = 4,
+      .components = 4,
       .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
   };
   cpu_image2.data[0] = 127;

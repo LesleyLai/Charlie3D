@@ -10,7 +10,7 @@ struct CPUImage {
   std::string name;
   uint32_t width = 0;
   uint32_t height = 0;
-  uint32_t compoments = 0;
+  uint32_t components = 0;
   std::unique_ptr<uint8_t[]> data;
 };
 

@@ -26,7 +26,7 @@ namespace charlie {
       .name = image_name,
       .width = beyond::narrow<uint32_t>(width),
       .height = beyond::narrow<uint32_t>(height),
-      .compoments = beyond::narrow<uint32_t>(components),
+      .components = beyond::narrow<uint32_t>(components),
       .data = std::unique_ptr<uint8_t[]>(pixels),
   };
 } // namespace charlie
@@ -45,7 +45,7 @@ namespace charlie {
       .name = std::move(image_name),
       .width = beyond::narrow<uint32_t>(width),
       .height = beyond::narrow<uint32_t>(height),
-      .compoments = beyond::narrow<uint32_t>(components),
+      .components = beyond::narrow<uint32_t>(components),
       .data = std::unique_ptr<uint8_t[]>(pixels),
   };
 }
