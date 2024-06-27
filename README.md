@@ -1,19 +1,20 @@
 # Charlie3D
 
-Charlie 3D is my personal R&D rendering framework in Vulkan. It is built on top of
+Charlie 3D is my personal R&D rendering framework in Vulkan. It is constructed on top of
 my [beyond-core](https://github.com/Beyond-Engine/Core) library.
 
 ## Goals and no-goals
 
 Goals
 
-- Be flexible enough for my personal projects and graphics experiments
-- Implement different rendering techniques in a modular and reusable fashion
+- Flexibility for personal projects and graphics experiments
+- Modular and reusable implementation of various rendering techniques
 - As platform-agnostic as possible
 
 No goals
 
-- Having "clean" code and well-designed software architecture. This is a more hacking/prototyping thing
+- Serving as a game engine
+- Maintaining "clean" code and well-designed software architecture; this is intended for hacking and prototyping
 - Support GPUs and old drivers that miss critical features
 
 ## Features
@@ -39,8 +40,11 @@ No goals
 - GLTF and Obj file loading: Wrapping around [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader)
   and [fastgltf](https://github.com/spnda/fastgltf)
 
-### Utilities
+### Interactions
 
 - A versatile camera implementation that support both arcball and first-person control
 - [Dear Imgui](https://github.com/ocornut/imgui) integration
+
+### Utilities
+
 - [Tracy](https://github.com/wolfpld/tracy) Profiler integration
