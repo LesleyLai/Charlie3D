@@ -29,8 +29,10 @@ static void imgui_slider_degree(const char* label, beyond::Radian* v, beyond::De
   *v = beyond::Degree{val};
 }
 
-void Camera::draw_gui()
+void Camera::draw_gui_window()
 {
+  ImGui::Begin("Camera");
+
   controller_->draw_gui();
 
   ImGui::SeparatorText("Perspective projection:");
@@ -46,6 +48,8 @@ void Camera::draw_gui()
 
     controller_->reset();
   }
+
+  ImGui::End();
 }
 
 void Camera::update(std::chrono::steady_clock::duration delta_time)

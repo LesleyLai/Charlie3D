@@ -164,6 +164,8 @@ public:
 
   void resize();
 
+  void draw_gui_lighting_window();
+
   u32 default_albedo_texture_index = static_cast<u32>(~0);
   u32 default_normal_texture_index = static_cast<u32>(~0);
 

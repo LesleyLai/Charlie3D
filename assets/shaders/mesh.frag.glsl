@@ -81,7 +81,7 @@ void main()
     uint albedo_texture_index = material.albedo_texture_index;
     vec4 albedo = material.base_color_factor * texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
     // alpha cutoff
-    //    if (albedo.a < 0.1) {
+    //    if (albedo.a < 0.5) {
     //        discard;
     //    }
     vec3 base_color = albedo.rgb;

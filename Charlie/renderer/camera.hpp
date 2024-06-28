@@ -31,7 +31,7 @@ public:
   [[nodiscard]] auto proj_matrix() const -> Mat4;
   [[nodiscard]] auto position() const -> Vec3;
 
-  void draw_gui();
+  void draw_gui_window();
   void on_input_event(const Event& event, const InputStates& states);
 
   void update(std::chrono::steady_clock::duration delta_time);

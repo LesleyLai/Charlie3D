@@ -34,6 +34,13 @@ struct Scene {
   std::vector<Mat4> global_transforms;
 
   std::unordered_map<u32, RenderComponent> render_components;
+
+  [[nodiscard]] auto node_count() const -> u32
+  {
+    const auto size = local_transforms.size();
+    BEYOND_ENSURE(global_transforms.size() == size);
+    return narrow<u32>(size);
+  }
 };
 
 [[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene;
