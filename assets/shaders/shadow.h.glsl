@@ -106,11 +106,15 @@ float shadow_PCSS(vec4 shadow_coord, vec2 texel_size, float light_size) {
 }
 
 // Returns a visibility between [0, 1]
-float shadow_mapping(vec4 shadow_coord) {
+float shadow_mapping(vec4 shadow_coord, uint shadow_mode) {
     ivec2 shadow_map_size = textureSize(shadow_map, 0);
     vec2 shadow_texel_size = vec2(1.0) / shadow_map_size;
 
-    //return shadow_map_proj(shadow_coord);
-    //return shadow_PCF(shadow_coord, shadow_map_size, 0.0);
-    return shadow_PCSS(shadow_coord, shadow_texel_size, sun_light_size);
+    if (shadow_mode == 1) {
+        return shadow_map_proj(shadow_coord);
+    } else if (shadow_mode == 2) {
+        return shadow_PCF(shadow_coord, shadow_texel_size, 1.0);
+    } else { // 3
+        return shadow_PCSS(shadow_coord, shadow_texel_size, sun_light_size);
+    }
 }

@@ -90,6 +90,13 @@ struct GPUSceneParameters {
   Vec4 sunlight_direction = {0, -1, -1, 0.1f}; // w is used for ambient strength
   Vec4 sunlight_color = {1, 1, 1, 5};          // w for sunlight intensity
   Mat4 sunlight_view_proj;
+
+  // Shadow mode
+  // 0: no shadow
+  // 1: shadow map
+  // 2: shadow map pcf
+  // 3: shadow map PCSS
+  u32 sunlight_shadow_mode = 3;
 };
 
 struct MeshPushConstant {
@@ -141,8 +148,8 @@ public:
 
   [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
 
-  auto upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info = {})
-      -> VkImage;
+  auto upload_image(const charlie::CPUImage& cpu_image,
+                    const ImageUploadInfo& upload_info = {}) -> VkImage;
 
   // Returns texture index
   auto add_texture(Texture texture) -> u32;
@@ -159,8 +166,6 @@ public:
 
   u32 default_albedo_texture_index = static_cast<u32>(~0);
   u32 default_normal_texture_index = static_cast<u32>(~0);
-
-  bool enable_shadow_mapping = true;
 
 private:
   Window* window_ = nullptr;
@@ -203,11 +208,8 @@ private:
   GraphicsPipelineHandle shadow_map_pipeline_;
 
   VkPipelineLayout mesh_pipeline_layout_ = VK_NULL_HANDLE;
-  GraphicsPipelineHandle mesh_pipeline_without_shadow_;
   GraphicsPipelineHandle mesh_pipeline_;
-
   GraphicsPipelineHandle mesh_pipeline_transparent_;
-  GraphicsPipelineHandle mesh_pipeline_transparent_without_shadow_;
 
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<Material> materials_;

@@ -165,8 +165,8 @@ static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution i
   vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
 }
 
-auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info)
-    -> VkImage
+auto Renderer::upload_image(const charlie::CPUImage& cpu_image,
+                            const ImageUploadInfo& upload_info) -> VkImage
 {
   ZoneScoped;
 
@@ -597,23 +597,6 @@ void Renderer::init_mesh_pipeline()
   VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
                                   &mesh_pipeline_layout_));
 
-  struct ConstantData {
-    int shadow_mode = 0;
-  } constant_data;
-
-  VkSpecializationMapEntry map_entry = {
-      .constantID = 0,
-      .offset = 0,
-      .size = sizeof(int),
-  };
-
-  VkSpecializationInfo specialization_info = {
-      .mapEntryCount = 1,
-      .pMapEntries = &map_entry,
-      .dataSize = sizeof(constant_data),
-      .pData = &constant_data,
-  };
-
   auto create_info = charlie::GraphicsPipelineCreateInfo{
       .layout = mesh_pipeline_layout_,
       .pipeline_rendering_create_info =
@@ -622,22 +605,14 @@ void Renderer::init_mesh_pipeline()
               .depth_attachment_format = depth_format_,
           },
       .debug_name = "Mesh Graphics Pipeline",
-      .stages = {{vertex_shader}, {fragment_shader, &specialization_info}},
+      .stages = {{vertex_shader}, {fragment_shader}},
       .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT}};
 
-  constant_data.shadow_mode = 1;
   mesh_pipeline_ = pipeline_manager_->create_graphics_pipeline(create_info);
-  constant_data.shadow_mode = 0;
-  create_info.debug_name = "Mesh Graphics Pipeline (without shadow)";
-  mesh_pipeline_without_shadow_ = pipeline_manager_->create_graphics_pipeline(create_info);
 
   create_info.color_blending = vkh::color_blend_attachment_additive();
-  constant_data.shadow_mode = 1;
+  create_info.debug_name = "Mesh Graphics Pipeline (Transparent)";
   mesh_pipeline_transparent_ = pipeline_manager_->create_graphics_pipeline(create_info);
-  constant_data.shadow_mode = 0;
-  create_info.debug_name = "Mesh Graphics Pipeline (without shadow)";
-  mesh_pipeline_transparent_without_shadow_ =
-      pipeline_manager_->create_graphics_pipeline(create_info);
 }
 
 void Renderer::init_shadow_pipeline()
@@ -843,7 +818,7 @@ void Renderer::render(const charlie::Camera& camera)
 
       transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
 
-      if (enable_shadow_mapping) { draw_shadow(cmd); }
+      if (scene_parameters_.sunlight_shadow_mode != 0) { draw_shadow(cmd); }
 
       draw_scene(cmd, current_swapchain_image_view);
 
@@ -1154,8 +1129,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   // draw solid objects
   {
-    const auto pipeline_handle =
-        enable_shadow_mapping ? mesh_pipeline_ : mesh_pipeline_without_shadow_;
+    const auto pipeline_handle = mesh_pipeline_;
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       pipeline_manager_->get_pipeline(pipeline_handle));
 
@@ -1189,8 +1163,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   // draw transparent object
   {
-    const auto pipeline_handle = enable_shadow_mapping ? mesh_pipeline_transparent_
-                                                       : mesh_pipeline_transparent_without_shadow_;
+    const auto pipeline_handle = mesh_pipeline_transparent_;
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       pipeline_manager_->get_pipeline(pipeline_handle));
 

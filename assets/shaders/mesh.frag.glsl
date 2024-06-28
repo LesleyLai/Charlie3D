@@ -13,8 +13,6 @@ layout (location = 4) in vec3 in_bi_tangent;
 layout (location = 5) in vec4 in_shadow_coord;
 layout (location = 6) in flat int in_material_index;
 
-layout (constant_id = 0) const int shadow_mode = 0;
-
 layout (location = 0) out vec4 out_frag_color;
 
 layout (set = 0, binding = 0) uniform CameraBuffer {
@@ -92,8 +90,8 @@ void main()
     float metallic = metallic_roughness.r * material.metallic_factor;
     float perceptual_roughness = metallic_roughness.g * material.roughness_factor;
 
-    //vec3 normal = calculate_pixel_normal();
-    vec3 normal = in_normal;
+    vec3 normal = calculate_pixel_normal();
+    //vec3 normal = in_normal;
 
     // lighting
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
@@ -123,8 +121,10 @@ void main()
     vec3 luminance = F * sunlight_color * illuminance;
 
     float visibility = 1.0;
-    if (shadow_mode == 1) {
-        visibility = shadow_mapping(in_shadow_coord);
+
+    uint shadow_mode = scene_data.sunlight_shadow_mode;
+    if (shadow_mode > 0) {
+        visibility = shadow_mapping(in_shadow_coord, shadow_mode);
     }
 
     vec3 Lo = ambient + luminance * visibility;

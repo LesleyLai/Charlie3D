@@ -19,7 +19,9 @@
 
 #include <tracy/Tracy.hpp>
 
+#include <beyond/utils/narrowing.hpp>
 #include <beyond/utils/zstring_view.hpp>
+
 #include <chrono>
 #include <string_view>
 
@@ -72,8 +74,8 @@ void draw_gui_stats(charlie::Renderer& renderer, std::chrono::steady_clock::dura
   framerate_counter.update(delta_time);
   const auto& scene = renderer.scene();
 
-  ImGui::LabelText("Viewport", "%ux%u", static_cast<uint32_t>(viewport.Size.x),
-                   static_cast<uint32_t>(viewport.Size.y));
+  ImGui::LabelText("Viewport", "%ux%u", beyond::narrow<uint32_t>(viewport.Size.x),
+                   beyond::narrow<uint32_t>(viewport.Size.y));
 
   ImGui::SeparatorText("Scene Data");
   ImGui::LabelText("Nodes", "%zu", scene.local_transforms.size());
@@ -83,6 +85,35 @@ void draw_gui_stats(charlie::Renderer& renderer, std::chrono::steady_clock::dura
   ImGui::LabelText("ms/frame", "%.2f", framerate_counter.average_ms_per_frame);
 
   ImGui::End();
+}
+
+void draw_gui_shadow_options(beyond::Ref<uint32_t> in_shadow_mode)
+{
+  int shadow_mode = beyond::narrow<int>(in_shadow_mode.get());
+
+  int enable_shadow_map = shadow_mode > 0;
+  ImGui::RadioButton("Disabled", &enable_shadow_map, 0);
+  ImGui::SameLine();
+  ImGui::RadioButton("Shadow Map", &enable_shadow_map, 1);
+
+  if (enable_shadow_map == 1 &&
+      ImGui::TreeNodeEx("Shadow Mapping Options", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+    ImGui::RadioButton("Hard Shadow", &shadow_mode, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("PCF", &shadow_mode, 2);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Percentage-Closer Filtering is a technique to produce anti-aliased shadow");
+    }
+    ImGui::SameLine();
+    ImGui::RadioButton("PCSS", &shadow_mode, 3);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Percentage‐Closer Soft Shadows"); }
+
+    ImGui::TreePop();
+  }
+
+  in_shadow_mode.get() = beyond::narrow<uint32_t>(shadow_mode);
 }
 
 void draw_gui(charlie::Renderer& renderer, charlie::Camera& camera,
@@ -99,10 +130,6 @@ void draw_gui(charlie::Renderer& renderer, charlie::Camera& camera,
 
   if (hide_control_panel) { return; }
 
-  // const float control_panel_width = ImGui::GetFontSize() * 30.f;
-  // ImGui::SetNextWindowPos(ImVec2(beyond::narrow<float>(resolution.width) - control_panel_width,
-  // 0)); ImGui::SetNextWindowSize(ImVec2(control_panel_width,
-  // beyond::narrow<float>(resolution.height)));
   ImGui::Begin("Environment Lighting");
 
   auto& scene_parameters = renderer.scene_parameters();
@@ -129,30 +156,7 @@ void draw_gui(charlie::Renderer& renderer, charlie::Camera& camera,
 
   ImGui::SeparatorText("Sunlight Shadow");
 
-  int shadow_mode = renderer.enable_shadow_mapping ? 1 : 0;
-  ImGui::RadioButton("Disabled", &shadow_mode, 0);
-  ImGui::SameLine();
-  ImGui::RadioButton("Shadow Map", &shadow_mode, 1);
-
-  renderer.enable_shadow_mapping = shadow_mode == 1;
-
-  //    if (shadow_mode == 1 &&
-  //        ImGui::TreeNodeEx("Shadow Mapping Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-  //      static bool enable_pcf = true;
-  //      ImGui::Checkbox("PCF", &enable_pcf);
-  //      if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Percentage-Closer Filtering (PCF)"); }
-  //
-  //      if (enable_pcf) {
-  //        ImGui::SeparatorText("PCF Options");
-  //        static int pcf_samples = 5;
-  //        ImGui::SliderInt("PCF Samples", &pcf_samples, 1, 16);
-  //
-  //        static float pcf_radius = 0.005f;
-  //        ImGui::SliderFloat("PCF Radius", &pcf_radius, 0, 0.01f, "%.4f");
-  //      }
-  //
-  //      ImGui::TreePop();
-  //    }
+  draw_gui_shadow_options(beyond::ref(scene_parameters.sunlight_shadow_mode));
 
   ImGui::PopID();
   ImGui::End();
@@ -164,7 +168,7 @@ void draw_gui(charlie::Renderer& renderer, charlie::Camera& camera,
   draw_gui_stats(renderer, delta_time, *viewport);
 }
 
-int main(int argc, const char** argv)
+auto main(int argc, const char** argv) -> int
 {
   std::string_view scene_file = "models/gltf_box/box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
