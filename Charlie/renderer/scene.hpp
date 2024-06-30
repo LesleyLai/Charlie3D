@@ -15,6 +15,8 @@
 
 #include <beyond/container/slot_map.hpp>
 
+#include "../asset/cpu_scene.hpp"
+
 namespace charlie {
 
 class Renderer;
@@ -27,11 +29,13 @@ struct RenderComponent {
   MeshHandle mesh;
 };
 
-// Scene representation on CPU
+// Runtime scene representation
 // This is an ECS-like structure where each scene node is represented as an index
 struct Scene {
   std::vector<Mat4> local_transforms; // Cached local transformation for each node
   std::vector<Mat4> global_transforms;
+  // std::vector<NodeCoordinate> hierarchy;
+  std::vector<std::string> names;
 
   std::unordered_map<u32, RenderComponent> render_components;
 

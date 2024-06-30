@@ -18,6 +18,13 @@
 
 #include <latch>
 
+using beyond::Mat4;
+using beyond::Vec3;
+using charlie::i32;
+using charlie::narrow;
+using charlie::u32;
+using charlie::usize;
+
 namespace fastgltf {
 
 template <>
@@ -96,8 +103,8 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
 };
 
 [[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
-                                       const fastgltf::Asset& asset, const fastgltf::Image& image)
-    -> charlie::CPUImage
+                                       const fastgltf::Asset& asset,
+                                       const fastgltf::Image& image) -> charlie::CPUImage
 {
   return std::visit(
       [&](const auto& data) -> charlie::CPUImage {
@@ -143,48 +150,104 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
       image.data);
 }
 
-} // anonymous namespace
+// Calculate whether each node has no parent
+[[nodiscard]] auto calculate_is_root(std::span<const fastgltf::Node> nodes) -> std::vector<bool>
+{
+  std::vector<bool> is_root(nodes.size(), true);
+  for (const auto& [i, node] : std::views::enumerate(nodes)) {
+    for (charlie::usize child_index : node.children) { is_root.at(child_index) = false; }
+  }
+  return is_root;
+}
 
-namespace charlie {
-
-[[nodiscard]] auto get_node_transform(const fastgltf::Node& node) -> beyond::Mat4
+[[nodiscard]] auto get_node_transform(const fastgltf::Node& node) -> Mat4
 {
   if (const auto* transform_ptr = std::get_if<fastgltf::Node::TransformMatrix>(&node.transform);
       transform_ptr != nullptr) {
     const auto transform_arr = *transform_ptr;
 
-    return beyond::Mat4{transform_arr[0],  transform_arr[1],  transform_arr[2],  transform_arr[3],
-                        transform_arr[4],  transform_arr[5],  transform_arr[6],  transform_arr[7],
-                        transform_arr[8],  transform_arr[9],  transform_arr[10], transform_arr[11],
-                        transform_arr[12], transform_arr[13], transform_arr[14], transform_arr[15]};
+    return Mat4{transform_arr[0],  transform_arr[1],  transform_arr[2],  transform_arr[3],
+                transform_arr[4],  transform_arr[5],  transform_arr[6],  transform_arr[7],
+                transform_arr[8],  transform_arr[9],  transform_arr[10], transform_arr[11],
+                transform_arr[12], transform_arr[13], transform_arr[14], transform_arr[15]};
 
   } else {
     const auto transform = std::get<fastgltf::Node::TRS>(node.transform);
-    const beyond::Vec3 translation{transform.translation[0], transform.translation[1],
-                                   transform.translation[2]};
+    const Vec3 translation{transform.translation[0], transform.translation[1],
+                           transform.translation[2]};
     //    const beyond::Quat rotation{transform.rotation[3], transform.rotation[0],
     //    transform.rotation[1],
     //                                transform.rotation[2]};
-    const beyond::Vec3 scale{transform.scale[0], transform.scale[1], transform.scale[2]};
+    const Vec3 scale{transform.scale[0], transform.scale[1], transform.scale[2]};
 
     // TODO: proper handle TRS
     return beyond::translate(translation) * beyond::scale(scale);
   }
 }
 
-//[[nodiscard]] auto calculate_bounding_box(std::span<const beyond::Point3> positions)
-//    -> beyond::AABB3
-//{
-//
-//  beyond::Point3 min{1e20f, 1e20f, 1e20f};
-//  beyond::Point3 max{-1e20f, -1e20f, -1e20f};
-//  for (const auto& position : positions) {
-//    min = beyond::min(min, position);
-//    max = beyond::max(max, position);
-//  }
-//
-//  return beyond::AABB3{min, max};
-//}
+void add_node(const fastgltf::Node& node, std::span<const fastgltf::Node> inputs,
+              charlie::Nodes& output, std::vector<i32>& parent_indices, i32 parent_index = -1)
+{
+  output.names.push_back(std::string{node.name});
+  parent_indices.push_back(parent_index);
+
+  const auto local_transform = get_node_transform(node);
+  output.local_transforms.push_back(local_transform);
+
+  const i32 mesh_index = to_beyond(node.meshIndex).map(narrow<i32, usize>).value_or(-1);
+  output.mesh_indices.push_back(mesh_index);
+
+  BEYOND_ENSURE(output.names.size() == output.local_transforms.size());
+  BEYOND_ENSURE(output.names.size() == output.mesh_indices.size());
+
+  const i32 new_node_index = narrow<i32>(output.names.size() - 1);
+  for (auto child_index : node.children) {
+    add_node(inputs[child_index], inputs, output, parent_indices, new_node_index);
+  }
+}
+
+auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nodes
+{
+  charlie::Nodes result;
+
+  std::vector<i32> parent_indices;
+
+  const usize node_count = asset_nodes.size();
+
+  result.names.reserve(node_count);
+  result.local_transforms.reserve(node_count);
+  result.mesh_indices.reserve(node_count);
+
+  const std::vector<bool> node_is_root = calculate_is_root(asset_nodes);
+  BEYOND_ENSURE(node_is_root.size() == node_count);
+  for (const auto [i, node] : std::views::enumerate(asset_nodes)) {
+    if (node_is_root[i]) { add_node(node, asset_nodes, result, parent_indices); }
+  }
+
+  // generate global transforms
+  result.global_transforms = std::vector<Mat4>(asset_nodes.size(), Mat4::identity());
+  for (usize i = 0; i < node_count; ++i) {
+    // If there is a parent
+    const i32 parent_index = parent_indices.at(i);
+    BEYOND_ENSURE_MSG(parent_index < narrow<i32>(i),
+                      "Scene graph nodes are not topologically sorted");
+
+    Mat4& global_transform = result.global_transforms.at(i);
+    const Mat4 local_transform = result.local_transforms.at(i);
+    if (parent_index >= 0) {
+      const Mat4 parent_global_transform = result.global_transforms.at(parent_index);
+      global_transform = local_transform * parent_global_transform;
+    } else {
+      global_transform = local_transform;
+    }
+  }
+
+  return result;
+}
+
+} // anonymous namespace
+
+namespace charlie {
 
 [[nodiscard]] auto load_gltf(const std::filesystem::path& file_path) -> CPUScene
 {
@@ -213,27 +276,7 @@ namespace charlie {
   fastgltf::Asset& asset = maybe_asset.get();
 
   CPUScene result;
-
-  // Populate child-to-parent relationship
-  std::vector<i32> parent_indices(asset.nodes.size(), -1);
-  for (const auto& [i, node] : std::views::enumerate(asset.nodes)) {
-    for (usize child_index : node.children) {
-      parent_indices.at(narrow<i32>(child_index)) = narrow<i32>(i);
-      BEYOND_ENSURE_MSG(child_index > i, "GLTF asset does not have topological ordering");
-    }
-  }
-
-  for (const auto& [i, node] : std::views::enumerate(asset.nodes)) {
-    const auto local_transform = get_node_transform(node);
-    const i32 mesh_index = to_beyond(node.meshIndex).map(narrow<i32, usize>).value_or(-1);
-
-    result.add_node(NodeInfo{
-        .name = std::string{node.name},
-        .local_transform = local_transform,
-        .parent_index = parent_indices.at(i),
-        .mesh_index = mesh_index,
-    });
-  }
+  result.nodes = populate_nodes(asset.nodes);
 
   result.images.resize(asset.images.size());
 

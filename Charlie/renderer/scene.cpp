@@ -112,6 +112,7 @@ namespace charlie {
   return Scene{
       .local_transforms = std::move(cpu_scene.nodes.local_transforms),
       .global_transforms = std::move(cpu_scene.nodes.global_transforms),
+      .names = std::move(cpu_scene.nodes.names),
       .render_components = std::move(render_components),
   };
 }

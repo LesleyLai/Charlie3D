@@ -62,8 +62,6 @@ vec3 reinhard_tone_mapping(vec3 radiance) {
 }
 
 
-
-
 void main()
 {
     #ifdef VISUALIZE_SHADOW_MAP
@@ -81,17 +79,17 @@ void main()
     uint albedo_texture_index = material.albedo_texture_index;
     vec4 albedo = material.base_color_factor * texture(global_textures[nonuniformEXT(albedo_texture_index)], in_tex_coord);
     // alpha cutoff
-    //    if (albedo.a < 0.5) {
-    //        discard;
-    //    }
+    if (albedo.a < 0.5) {
+        discard;
+    }
     vec3 base_color = albedo.rgb;
 
     vec2 metallic_roughness = texture(global_textures[nonuniformEXT(material.metallic_roughness_texture_index)], in_tex_coord).bg;
     float metallic = metallic_roughness.r * material.metallic_factor;
     float perceptual_roughness = metallic_roughness.g * material.roughness_factor;
 
-    vec3 normal = calculate_pixel_normal();
-    //vec3 normal = in_normal;
+    //vec3 normal = calculate_pixel_normal();
+    vec3 normal = in_normal;
 
     // lighting
     vec3 sunlight_direction = scene_data.sunlight_direction.xyz;
