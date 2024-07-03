@@ -53,14 +53,14 @@ template <typename T> auto to_beyond(fastgltf::OptionalWithFlagValue<T> opt) -> 
 auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
 {
   return {.name = std::string{texture.name},
-          .image_index = beyond::narrow<uint32_t>(texture.imageIndex.value()),
-          .sampler_index = to_beyond(texture.samplerIndex).map(beyond::narrow<uint32_t, size_t>)};
+          .image_index = narrow<uint32_t>(texture.imageIndex.value()),
+          .sampler_index = to_beyond(texture.samplerIndex).map(narrow<uint32_t, size_t>)};
 }
 
 auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
 {
   static constexpr auto get_texture_index = [](const fastgltf::TextureInfo& texture) -> uint32_t {
-    return beyond::narrow<uint32_t>(texture.textureIndex);
+    return narrow<uint32_t>(texture.textureIndex);
   };
 
   const beyond::optional<uint32_t> albedo_texture_index =
@@ -99,6 +99,7 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
       .metallic_roughness_texture_index = metallic_roughness_texture_index,
       .occlusion_texture_index = occlusion_texture_index,
       .alpha_mode = alpha_mode,
+      .alpha_cutoff = material.alphaCutoff,
   };
 };
 
@@ -164,13 +165,7 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
 {
   if (const auto* transform_ptr = std::get_if<fastgltf::Node::TransformMatrix>(&node.transform);
       transform_ptr != nullptr) {
-    const auto transform_arr = *transform_ptr;
-
-    return Mat4{transform_arr[0],  transform_arr[1],  transform_arr[2],  transform_arr[3],
-                transform_arr[4],  transform_arr[5],  transform_arr[6],  transform_arr[7],
-                transform_arr[8],  transform_arr[9],  transform_arr[10], transform_arr[11],
-                transform_arr[12], transform_arr[13], transform_arr[14], transform_arr[15]};
-
+    return Mat4::from_span(*transform_ptr);
   } else {
     const auto transform = std::get<fastgltf::Node::TRS>(node.transform);
     const Vec3 translation{transform.translation[0], transform.translation[1],
@@ -206,6 +201,30 @@ void add_node(const fastgltf::Node& node, std::span<const fastgltf::Node> inputs
   }
 }
 
+[[nodiscard]]
+auto populate_global_transforms(std::span<const i32> parent_indices,
+                                std::span<const Mat4> local_transforms) -> std::vector<Mat4>
+{
+  // generate global transforms
+  std::vector<Mat4> global_transforms(local_transforms.begin(), local_transforms.end());
+
+  BEYOND_ENSURE(local_transforms.size() == parent_indices.size());
+  for (usize i = 0; i < local_transforms.size(); ++i) {
+    // If there is a parent
+    const i32 parent_index = parent_indices[i];
+    BEYOND_ENSURE_MSG(parent_index < narrow<i32>(i),
+                      "Scene graph nodes are not topologically sorted");
+
+    const Mat4 local_transform = local_transforms[i];
+    if (parent_index >= 0) {
+      const Mat4 parent_global_transform = global_transforms[parent_index];
+      global_transforms[i] = local_transform * parent_global_transform;
+    }
+  }
+  return global_transforms;
+}
+
+[[nodiscard]]
 auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nodes
 {
   charlie::Nodes result;
@@ -225,23 +244,7 @@ auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nod
   }
 
   // generate global transforms
-  result.global_transforms = std::vector<Mat4>(asset_nodes.size(), Mat4::identity());
-  for (usize i = 0; i < node_count; ++i) {
-    // If there is a parent
-    const i32 parent_index = parent_indices.at(i);
-    BEYOND_ENSURE_MSG(parent_index < narrow<i32>(i),
-                      "Scene graph nodes are not topologically sorted");
-
-    Mat4& global_transform = result.global_transforms.at(i);
-    const Mat4 local_transform = result.local_transforms.at(i);
-    if (parent_index >= 0) {
-      const Mat4 parent_global_transform = result.global_transforms.at(parent_index);
-      global_transform = local_transform * parent_global_transform;
-    } else {
-      global_transform = local_transform;
-    }
-  }
-
+  result.global_transforms = populate_global_transforms(parent_indices, result.local_transforms);
   return result;
 }
 

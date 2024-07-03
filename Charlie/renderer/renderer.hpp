@@ -52,6 +52,8 @@ struct Material {
   u32 occlusion_texture_index = 0xdeadbeef;
   f32 metallic_factor = 1.0f;
   f32 roughness_factor = 1.0f;
+  f32 alpha_cutoff = 1.0f;
+  f32 _padding = 0.0f;
 };
 
 struct RenderObject {

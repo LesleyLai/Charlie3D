@@ -1302,10 +1302,11 @@ auto Renderer::add_material(const CPUMaterial& material_info) -> u32
       .occlusion_texture_index = occlusion_texture_index,
       .metallic_factor = material_info.metallic_factor,
       .roughness_factor = material_info.roughness_factor,
+      .alpha_cutoff =
+          material_info.alpha_mode == AlphaMode::mask ? material_info.alpha_cutoff : 0.0f,
   });
 
   material_alpha_modes_.push_back(material_info.alpha_mode);
-
   BEYOND_ASSERT(materials_.size() == material_alpha_modes_.size());
 
   return narrow<u32>(materials_.size() - 1);

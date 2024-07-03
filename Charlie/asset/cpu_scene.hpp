@@ -23,6 +23,7 @@ struct CPUMaterial {
   beyond::optional<u32> occlusion_texture_index;
 
   AlphaMode alpha_mode = AlphaMode::opaque;
+  float alpha_cutoff = 0.0f; // Only considered when alpha mode is mask
 };
 
 struct CPUTexture {
@@ -30,14 +31,6 @@ struct CPUTexture {
   u32 image_index = 0;
   beyond::optional<u32> sampler_index = beyond::nullopt;
 };
-
-//// Information about a node's location in the tree
-// struct NodeCoordinate {
-//   i32 parent_ = -1; // -1 for no parent
-//   i32 first_child_ = -1;
-//   i32 next_sibling_ = -1;
-//   i32 level_ = -1; // cached level
-// };
 
 // SOA for a node structure
 struct Nodes {
