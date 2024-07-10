@@ -10,13 +10,14 @@ namespace {
 
 [[nodiscard]] auto create_pool(VkDevice device,
                                const charlie::DescriptorAllocator::PoolSizes& pool_sizes,
-                               uint32_t count, VkDescriptorPoolCreateFlags flags)
-    -> vkh::Expected<VkDescriptorPool>
+                               uint32_t count,
+                               VkDescriptorPoolCreateFlags flags) -> vkh::Expected<VkDescriptorPool>
 {
   std::vector<VkDescriptorPoolSize> sizes;
   sizes.reserve(pool_sizes.sizes.size());
   for (auto [type, weight] : pool_sizes.sizes) {
-    sizes.push_back({type, uint32_t(weight * count)});
+    std::uint32_t descriptor_count = static_cast<uint32_t>(weight * beyond::narrow<float>(count));
+    sizes.push_back({type, descriptor_count});
   }
 
   return vkh::create_descriptor_pool(
@@ -168,8 +169,8 @@ auto DescriptorLayoutCache::DescriptorLayoutInfo::hash() const -> usize
 
   for (const VkDescriptorSetLayoutBinding& b : bindings) {
     // pack the binding data into a single int64. Not fully correct but it's ok
-    const usize binding_hash =
-        b.binding | b.descriptorType << 8 | b.descriptorCount << 16 | b.stageFlags << 24;
+    const usize binding_hash = b.binding | static_cast<u32>(b.descriptorType) << 8u |
+                               b.descriptorCount << 16u | b.stageFlags << 24u;
 
     // shuffle the packed binding data and xor it with the main hash
     result ^= hash<usize>()(binding_hash);
@@ -185,8 +186,8 @@ DescriptorBuilder::DescriptorBuilder(DescriptorLayoutCache& layout_cache,
 }
 
 auto DescriptorBuilder::bind_buffer(uint32_t binding, const VkDescriptorBufferInfo& buffer_info,
-                                    VkDescriptorType type, VkShaderStageFlags stage_flags)
-    -> DescriptorBuilder&
+                                    VkDescriptorType type,
+                                    VkShaderStageFlags stage_flags) -> DescriptorBuilder&
 {
   bindings_.push_back(VkDescriptorSetLayoutBinding{
       .binding = binding,
@@ -206,8 +207,8 @@ auto DescriptorBuilder::bind_buffer(uint32_t binding, const VkDescriptorBufferIn
 }
 
 auto DescriptorBuilder::bind_image(uint32_t binding, const VkDescriptorImageInfo& image_info,
-                                   VkDescriptorType type, VkShaderStageFlags stage_flags)
-    -> DescriptorBuilder&
+                                   VkDescriptorType type,
+                                   VkShaderStageFlags stage_flags) -> DescriptorBuilder&
 {
   bindings_.push_back(VkDescriptorSetLayoutBinding{
       .binding = binding,

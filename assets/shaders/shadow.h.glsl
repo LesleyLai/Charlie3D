@@ -1,3 +1,8 @@
+#ifndef CHARLIE3D_SHADOW_GLSL
+#define CHARLIE3D_SHADOW_GLSL
+
+#include "prelude.h.glsl"
+
 layout (set = 0, binding = 2) uniform sampler2D shadow_map;
 
 const float sun_light_size = 20.0f;
@@ -59,7 +64,7 @@ float shadow_PCF(vec4 shadow_coord, vec2 texel_size, float scale) {
     float visibility = 0.0;
     for (int i = 0; i < SHADOW_SAMPLE_COUNT; ++i) {
         int index = int(random4(vec4(shadow_coord.xyz, i)) * 16.0) % 16;
-        float rotate = random4(vec4(shadow_coord.xyz, i)) * 3.1415926 * 2.0;
+        float rotate = random4(vec4(shadow_coord.xyz, i)) * TWO_PI;
 
         vec2 offset = poisson_disk_16[i] * scale * texel_size;
         offset = rotation2d(rotate) * offset;
@@ -115,6 +120,8 @@ float shadow_mapping(vec4 shadow_coord, uint shadow_mode) {
     } else if (shadow_mode == 2) {
         return shadow_PCF(shadow_coord, shadow_texel_size, 1.0);
     } else { // 3
-        return shadow_PCSS(shadow_coord, shadow_texel_size, sun_light_size);
+             return shadow_PCSS(shadow_coord, shadow_texel_size, sun_light_size);
     }
 }
+
+#endif // CHARLIE3D_SHADOW_GLSL

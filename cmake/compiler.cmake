@@ -13,7 +13,7 @@ option(CHARLIE3D_WARNING_AS_ERROR "Treats compiler warnings as errors" ON)
 if (MSVC)
     target_compile_options(charlie3d_compiler_options INTERFACE /W4 "/permissive-"
             /wd4819 # Disable "The file contains a character that cannot be represented in the current code page"
-            )
+    )
     if (CHARLIE3D_WARNING_AS_ERROR)
         target_compile_options(charlie3d_compiler_options INTERFACE /WX)
     endif ()
@@ -23,7 +23,6 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             -Wextra
             -Wno-missing-field-initializers
             -Wnon-virtual-dtor
-            -Wold-style-cast
             -Wcast-align
             -Wunused
             -Woverloaded-virtual
@@ -31,7 +30,6 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             -Wconversion
             -Wsign-conversion
             -Wnull-dereference
-            -Wdouble-promotion
             -Wformat=2)
     if (CHARLIE3D_WARNING_AS_ERROR)
         target_compile_options(charlie3d_compiler_options INTERFACE -Werror)
@@ -44,7 +42,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
                 -Wduplicated-branches
                 -Wlogical-op
                 -Wuseless-cast
-                )
+        )
     endif ()
 endif ()
 
@@ -63,7 +61,7 @@ if (CHARLIE3D_ENABLE_PCH)
             <cmath>
             <cstddef>
             <type_traits>
-            )
+    )
 endif ()
 
 option(CHARLIE3D_USE_ASAN "Enable the Address Sanitizers" OFF)

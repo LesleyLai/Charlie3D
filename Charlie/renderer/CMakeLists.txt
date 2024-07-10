@@ -14,11 +14,20 @@ add_library(charlie3d_renderer
         scene.cpp scene.hpp
         pipeline_manager.cpp
         pipeline_manager.hpp)
+
+# Disable warnings for imgui impl files
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties(
+            imgui_impl_vulkan.h imgui_impl_vulkan.cpp
+            PROPERTIES
+            COMPILE_FLAGS "-w"
+    )
+endif ()
+
 add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(SDL2 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
-
 
 target_link_libraries(charlie3d_renderer
         PUBLIC
@@ -32,7 +41,8 @@ target_link_libraries(charlie3d_renderer
         PRIVATE
         SDL2::SDL2
         charlie3d::compiler_options
-        )
+)
+
 
 #include(../../cmake/CompileShader.cmake)
 ##compile_shader(mesh_vert_shader

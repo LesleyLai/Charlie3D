@@ -17,8 +17,6 @@ namespace {
 
 void draw_gui_main_menu()
 {
-  static constexpr beyond::ZStringView default_ini_path = "config/default_layout.ini";
-
   if (ImGui::BeginMainMenuBar()) {
     if (ImGui::BeginMenu("File")) {
       if (ImGui::MenuItem("Open Model", "Ctrl+O")) {}

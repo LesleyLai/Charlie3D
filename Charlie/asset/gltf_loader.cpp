@@ -9,6 +9,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <beyond/math/matrix.hpp>
+#include <beyond/math/rotor.hpp>
 #include <beyond/math/transform.hpp>
 #include <beyond/types/optional.hpp>
 #include <beyond/types/optional_conversion.hpp>
@@ -168,15 +169,16 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
     return Mat4::from_span(*transform_ptr);
   } else {
     const auto transform = std::get<fastgltf::Node::TRS>(node.transform);
-    const Vec3 translation{transform.translation[0], transform.translation[1],
-                           transform.translation[2]};
-    //    const beyond::Quat rotation{transform.rotation[3], transform.rotation[0],
-    //    transform.rotation[1],
-    //                                transform.rotation[2]};
-    const Vec3 scale{transform.scale[0], transform.scale[1], transform.scale[2]};
+    const Vec3 translation{transform.translation};
 
-    // TODO: proper handle TRS
-    return beyond::translate(translation) * beyond::scale(scale);
+    const auto rotation = beyond::Rotor3::from_quaternion(
+        transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]);
+    const auto rotation_mat = Mat4{rotation.to_mat3()};
+
+    const Vec3 scale{transform.scale};
+
+    // T * R * S
+    return beyond::translate(translation) * rotation_mat * beyond::scale(scale);
   }
 }
 
@@ -218,7 +220,7 @@ auto populate_global_transforms(std::span<const i32> parent_indices,
     const Mat4 local_transform = local_transforms[i];
     if (parent_index >= 0) {
       const Mat4 parent_global_transform = global_transforms[parent_index];
-      global_transforms[i] = local_transform * parent_global_transform;
+      global_transforms[i] = parent_global_transform * local_transform;
     }
   }
   return global_transforms;
@@ -300,8 +302,7 @@ namespace charlie {
   std::ranges::transform(asset.materials, std::back_inserter(result.materials), to_cpu_material);
 
   for (const auto& mesh : asset.meshes) {
-    // Each gltf primitive is treated as an own mesh
-
+    // Each gltf primitive is treated as a submesh
     std::vector<CPUSubmesh> submeshes;
     submeshes.reserve(mesh.primitives.size());
     for (const auto& primitive : mesh.primitives) {

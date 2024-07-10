@@ -34,7 +34,6 @@ struct CPUSubmesh {
   std::vector<Vertex> vertices;
 
   std::vector<u32> indices;
-  beyond::AABB3 bounding_box; // object space bounding box
 };
 
 struct CPUMesh {
