@@ -1,5 +1,6 @@
 find_package(SDL2 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 
 add_library(charlie3d_window
         window.hpp
@@ -17,6 +18,6 @@ target_link_libraries(charlie3d_window
         beyond::core
         PRIVATE
         imgui::imgui
-        )
+)
 
 target_compile_definitions(charlie3d_window PUBLIC SDL_MAIN_HANDLED)

@@ -168,6 +168,8 @@ public:
 
   void draw_gui_lighting_window();
 
+  [[nodiscard]] auto image_count() const -> usize { return images_.size(); }
+
   u32 default_albedo_texture_index = static_cast<u32>(~0);
   u32 default_normal_texture_index = static_cast<u32>(~0);
 

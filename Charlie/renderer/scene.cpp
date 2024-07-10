@@ -15,7 +15,7 @@
 
 namespace charlie {
 
-[[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene
+[[nodiscard]] auto load_cpu_scene(std::string_view filename) -> CPUScene
 {
   ZoneScoped;
 
@@ -25,23 +25,18 @@ namespace charlie {
     file_path = assets_path / file_path;
   }
 
-  CPUScene cpu_scene = [&]() {
-    if (file_path.extension() == ".obj") {
-      return load_obj(file_path);
-    } else if (file_path.extension() == ".gltf" || file_path.extension() == ".glb") {
-      return load_gltf(file_path);
-    } else {
-      beyond::panic("Unknown scene format!");
-    }
-  }();
-
-  std::vector<MeshHandle> mesh_storage;
-  {
-    ZoneScopedN("Upload mesh");
-    mesh_storage.reserve(cpu_scene.meshes.size());
-    std::ranges::transform(cpu_scene.meshes, std::back_inserter(mesh_storage),
-                           [&](const CPUMesh& mesh) { return renderer.upload_mesh_data(mesh); });
+  if (file_path.extension() == ".obj") {
+    return load_obj(file_path);
+  } else if (file_path.extension() == ".gltf" || file_path.extension() == ".glb") {
+    return load_gltf(file_path);
+  } else {
+    beyond::panic("Unknown scene format!");
   }
+}
+
+[[nodiscard]] auto upload_scene(CPUScene&& cpu_scene, Renderer& renderer) -> Scene
+{
+  ZoneScoped;
 
   std::vector<VkImage> images(cpu_scene.images.size(), VK_NULL_HANDLE);
   std::vector<VkImageView> image_views(cpu_scene.images.size(), VK_NULL_HANDLE);
@@ -83,21 +78,27 @@ namespace charlie {
     return texture_indices_map.at(local_index);
   };
 
+  std::vector<uint32_t> material_index_map(cpu_scene.materials.size());
   {
     ZoneScopedN("Upload materials");
 
-    for (CPUMaterial material : cpu_scene.materials) {
-      // TODO: offset texture index in a function
-
-      material.albedo_texture_index = material.albedo_texture_index.map(lookup_texture_index);
-      material.normal_texture_index = material.normal_texture_index.map(lookup_texture_index);
-      material.metallic_roughness_texture_index =
-          material.metallic_roughness_texture_index.map(lookup_texture_index);
-      material.occlusion_texture_index = material.occlusion_texture_index.map(lookup_texture_index);
-      [[maybe_unused]] u32 material_index = renderer.add_material(material);
+    for (const auto& [i, material] : std::views::enumerate(cpu_scene.materials)) {
+      charlie::offset_material_texture_index(ref(material), lookup_texture_index);
+      material_index_map[narrow<usize>(i)] = renderer.add_material(material);
     }
 
     renderer.upload_materials();
+  }
+  // Offset material indices
+  offset_material_indices(ref(cpu_scene),
+                          [&](u32 i) { return narrow<u32>(material_index_map[i]); });
+
+  std::vector<MeshHandle> mesh_storage;
+  {
+    ZoneScopedN("Upload mesh");
+    mesh_storage.reserve(cpu_scene.meshes.size());
+    std::ranges::transform(cpu_scene.meshes, std::back_inserter(mesh_storage),
+                           [&](const CPUMesh& mesh) { return renderer.upload_mesh_data(mesh); });
   }
 
   std::unordered_map<uint32_t, RenderComponent> render_components;
@@ -115,6 +116,13 @@ namespace charlie {
       .names = std::move(cpu_scene.nodes.names),
       .render_components = std::move(render_components),
   };
+}
+
+[[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene
+{
+  ZoneScoped;
+
+  return upload_scene(load_cpu_scene(filename), renderer);
 }
 
 } // namespace charlie

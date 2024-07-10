@@ -10,23 +10,36 @@
 #include "renderer/camera.hpp"
 #include "renderer/renderer.hpp"
 
+#include "renderer/scene.hpp"
+
+#include "tinyfiledialogs.h"
+
 using beyond::narrow;
 using beyond::u32;
 
 namespace {
 
-void draw_gui_main_menu()
+void draw_gui_main_menu(charlie::Renderer& renderer)
 {
   if (ImGui::BeginMainMenuBar()) {
     if (ImGui::BeginMenu("File")) {
-      if (ImGui::MenuItem("Open Model", "Ctrl+O")) {}
+      if (ImGui::MenuItem("Open Model", "Ctrl+O")) {
+        const char* filter_patterns[] = {"*.gltf", ".glb", "*.obj"};
+        const auto* result =
+            tinyfd_openFileDialog("title", nullptr, narrow<int>(std::size(filter_patterns)),
+                                  filter_patterns, "image files", 0);
+        if (result != nullptr) {
+          renderer.set_scene(
+              std::make_unique<charlie::Scene>(charlie::load_scene(result, renderer)));
+        }
+      }
       ImGui::EndMenu();
     }
     ImGui::EndMainMenuBar();
   }
 }
 
-void draw_gui_main_window(const ImGuiViewport& viewport)
+void draw_gui_main_window(charlie::Renderer& renderer, const ImGuiViewport& viewport)
 {
   ImGui::SetNextWindowPos(viewport.Pos);
   ImGui::SetNextWindowSize(viewport.Size);
@@ -44,7 +57,7 @@ void draw_gui_main_window(const ImGuiViewport& viewport)
   ImGui::Begin("DockSpace", nullptr, window_flags);
   ImGui::PopStyleVar(3);
 
-  draw_gui_main_menu();
+  draw_gui_main_menu(renderer);
 
   ImGuiID dockspace_id = ImGui::GetID("Dockspace");
   ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode;
@@ -149,7 +162,7 @@ void GUI::draw(const std::chrono::steady_clock::duration delta_time)
   ImGui::NewFrame();
 
   ImGuiViewport* viewport = ImGui::GetMainViewport();
-  draw_gui_main_window(*viewport);
+  draw_gui_main_window(renderer_, *viewport);
 
   const charlie::Resolution res{.width = narrow<u32>(viewport->Size.x),
                                 .height = narrow<u32>(viewport->Size.y)};

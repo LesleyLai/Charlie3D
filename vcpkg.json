@@ -27,6 +27,7 @@
     },
     "meshoptimizer",
     "tracy",
+    "tinyfiledialogs",
     "catch2"
   ],
   "builtin-baseline": "eb33d2f7583405fca184bcdf7fdd5828ec88ac05"

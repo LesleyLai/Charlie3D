@@ -26,6 +26,14 @@ struct CPUMaterial {
   float alpha_cutoff = 0.0f; // Only considered when alpha mode is mask
 };
 
+template <typename Func> auto offset_material_texture_index(Ref<CPUMaterial> material, Func func)
+{
+  material->albedo_texture_index = material->albedo_texture_index.map(func);
+  material->normal_texture_index = material->normal_texture_index.map(func);
+  material->metallic_roughness_texture_index = material->metallic_roughness_texture_index.map(func);
+  material->occlusion_texture_index = material->occlusion_texture_index.map(func);
+}
+
 struct CPUTexture {
   std::string name;
   u32 image_index = 0;
@@ -58,6 +66,16 @@ struct CPUScene {
   std::vector<CPUImage> images;
   std::vector<CPUTexture> textures;
 };
+
+template <typename Func> void offset_material_indices(Ref<CPUScene> scene, Func func)
+{
+  // Offset material indices
+  for (auto& mesh : scene->meshes) {
+    for (auto& submesh : mesh.submeshes) {
+      submesh.material_index = submesh.material_index.map(func);
+    }
+  }
+}
 
 } // namespace charlie
 

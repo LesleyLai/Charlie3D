@@ -28,6 +28,7 @@ add_library(charlie3d::renderer ALIAS charlie3d_renderer)
 
 find_package(SDL2 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 
 target_link_libraries(charlie3d_renderer
         PUBLIC
