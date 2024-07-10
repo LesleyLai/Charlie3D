@@ -1,8 +1,10 @@
 #include "renderer.hpp"
 
 #include "../vulkan_helpers/bda.hpp"
+#include "../vulkan_helpers/error_handling.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
 #include "../vulkan_helpers/initializers.hpp"
+
 #include "descriptor_allocator.hpp"
 
 #include "../shader_compiler/shader_compiler.hpp"
@@ -197,8 +199,8 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image,
   context.unmap(staging_buffer);
 
   const VkExtent3D image_extent = {
-      .width = beyond::narrow<uint32_t>(cpu_image.width),
-      .height = beyond::narrow<uint32_t>(cpu_image.height),
+      .width = beyond::narrow<u32>(cpu_image.width),
+      .height = beyond::narrow<u32>(cpu_image.height),
       .depth = 1,
   };
 
@@ -207,17 +209,23 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image,
 
   const auto image_debug_name =
       cpu_image.name.empty() ? fmt::format("{} Image", cpu_image.name) : "Image";
-  vkh::AllocatedImage allocated_image =
-      vkh::create_image(context,
-                        vkh::ImageCreateInfo{
-                            .format = upload_info.format,
-                            .extent = image_extent,
-                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                            .mip_levels = mip_levels,
-                            .debug_name = image_debug_name,
-                        })
-          .expect("Failed to create image");
+  vkh::AllocatedImage allocated_image = [&]() {
+    auto image = vkh::create_image(context, vkh::ImageCreateInfo{
+                                                .format = upload_info.format,
+                                                .extent = image_extent,
+                                                .usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+                                                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                                .mip_levels = mip_levels,
+                                                .debug_name = image_debug_name,
+                                            });
+
+    if (not image.has_value()) {
+      beyond::panic(fmt::format("Failed to create image: {}", vkh::to_string(image.error())));
+    }
+
+    return image.value();
+  }();
 
   immediate_submit(context, upload_context, [&](VkCommandBuffer cmd) {
     const VkImageSubresourceRange range = {
@@ -894,7 +902,7 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
     const vkh::AllocatedBuffer position_buffer =
         upload_buffer(context_, upload_context_, submesh.positions,
                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vertex_buffer_usage,
-                      fmt::format("{} Position ({})", cpu_mesh.name, i))
+                      fmt::format("{} Vertex Position ({})", cpu_mesh.name, i))
             .value();
     const vkh::AllocatedBuffer vertex_buffer =
         upload_buffer(context_, upload_context_, submesh.vertices, vertex_buffer_usage,

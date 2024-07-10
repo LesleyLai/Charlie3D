@@ -11,7 +11,10 @@
 
 #include "renderer.hpp"
 
+#include <spdlog/spdlog.h>
 #include <tracy/Tracy.hpp>
+
+#include <fmt/chrono.h>
 
 namespace charlie {
 
@@ -122,7 +125,13 @@ namespace charlie {
 {
   ZoneScoped;
 
-  return upload_scene(load_cpu_scene(filename), renderer);
+  const auto start = std::chrono::steady_clock::now();
+  Scene scene = upload_scene(load_cpu_scene(filename), renderer);
+  const auto finish = std::chrono::steady_clock::now();
+
+  SPDLOG_INFO("Load {} in {}", filename, std::chrono::duration<double, std::milli>{finish - start});
+
+  return scene;
 }
 
 } // namespace charlie

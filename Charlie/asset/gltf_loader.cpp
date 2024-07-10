@@ -377,8 +377,9 @@ namespace charlie {
       std::vector<Vertex> vertex_buffer(positions.size());
       for (size_t i = 0; i < positions.size(); ++i) {
         // Interleave normal, uv, and tangents
-        vertex_buffer[i] = {
-            .normal = normals[i], .tex_coords = tex_coords[i], .tangents = tangents[i]};
+        vertex_buffer[i] = {.normal = float32x3_to_oct(normals[i]),
+                            .tex_coords = tex_coords[i],
+                            .tangents = tangents[i]};
       }
 
       submeshes.push_back(CPUSubmesh{.material_index = material_index,
@@ -398,7 +399,6 @@ namespace charlie {
 
   image_loading_latch.wait();
 
-  SPDLOG_INFO("GLTF loaded from {}", file_path.string());
   return result;
 }
 

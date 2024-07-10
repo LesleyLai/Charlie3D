@@ -24,10 +24,10 @@ void draw_gui_main_menu(charlie::Renderer& renderer)
   if (ImGui::BeginMainMenuBar()) {
     if (ImGui::BeginMenu("File")) {
       if (ImGui::MenuItem("Open Model", "Ctrl+O")) {
-        const char* filter_patterns[] = {"*.gltf", ".glb", "*.obj"};
+        const char* filter_patterns[] = {"*.gltf", "*.glb", "*.obj"};
         const auto* result =
             tinyfd_openFileDialog("title", nullptr, narrow<int>(std::size(filter_patterns)),
-                                  filter_patterns, "image files", 0);
+                                  filter_patterns, "model files", 0);
         if (result != nullptr) {
           renderer.set_scene(
               std::make_unique<charlie::Scene>(charlie::load_scene(result, renderer)));

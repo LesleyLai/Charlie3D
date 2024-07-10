@@ -16,4 +16,4 @@ target_link_libraries(charlie3d_utils
         beyond::core
         spdlog::spdlog
         Tracy::TracyClient
-        )
+)
