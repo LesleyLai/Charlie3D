@@ -893,35 +893,40 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
 
 [[nodiscard]] auto Renderer::upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle
 {
+  static constexpr auto vertex_buffer_usage =
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+  const vkh::AllocatedBuffer position_buffer =
+      upload_buffer(context_, upload_context_, cpu_mesh.positions,
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vertex_buffer_usage,
+                    fmt::format("{} Vertex Position", cpu_mesh.name))
+          .value();
+  const vkh::AllocatedBuffer vertex_buffer =
+      upload_buffer(context_, upload_context_, cpu_mesh.vertices, vertex_buffer_usage,
+                    fmt::format("{} Vertex", cpu_mesh.name))
+          .value();
+  const vkh::AllocatedBuffer index_buffer =
+      upload_buffer(context_, upload_context_, cpu_mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                    fmt::format("{} Index", cpu_mesh.name))
+          .value();
+
   std::vector<SubMesh> submeshes;
+  submeshes.reserve(cpu_mesh.submeshes.size());
   for (usize i = 0; i < cpu_mesh.submeshes.size(); ++i) {
     const auto& submesh = cpu_mesh.submeshes[i];
-    static constexpr auto vertex_buffer_usage =
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
-    const vkh::AllocatedBuffer position_buffer =
-        upload_buffer(context_, upload_context_, submesh.positions,
-                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | vertex_buffer_usage,
-                      fmt::format("{} Vertex Position ({})", cpu_mesh.name, i))
-            .value();
-    const vkh::AllocatedBuffer vertex_buffer =
-        upload_buffer(context_, upload_context_, submesh.vertices, vertex_buffer_usage,
-                      fmt::format("{} Vertex ({})", cpu_mesh.name, i))
-            .value();
-    const vkh::AllocatedBuffer index_buffer =
-        upload_buffer(context_, upload_context_, submesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                      fmt::format("{} Index ({})", cpu_mesh.name, i))
-            .value();
-
-    submeshes.push_back(SubMesh{.position_buffer = position_buffer,
-                                .vertex_buffer = vertex_buffer,
-                                .index_buffer = index_buffer,
-                                .vertices_count = narrow<u32>(submesh.positions.size()),
-                                .index_count = narrow<u32>(submesh.indices.size()),
+    submeshes.push_back(SubMesh{.vertex_offset = submesh.vertex_offset,
+                                .index_offset = submesh.index_offset,
+                                .index_count = submesh.index_count,
                                 .material_index = submesh.material_index.value()});
   }
 
-  return meshes_.insert(Mesh{.submeshes = std::move(submeshes)});
+  return meshes_.insert(Mesh{
+      .position_buffer = position_buffer,
+      .vertex_buffer = vertex_buffer,
+      .index_buffer = index_buffer,
+      .submeshes = std::move(submeshes),
+  });
 }
 
 void Renderer::draw_shadow(VkCommandBuffer cmd)
@@ -1010,10 +1015,12 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
     const auto& mesh = meshes_.try_get(mesh_handle).expect("Cannot find mesh by handle");
 
     static constexpr VkDeviceSize vertex_offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.position_buffer.buffer, &vertex_offset);
+    vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
     for (const auto& submesh : mesh.submeshes) {
-      vkCmdBindVertexBuffers(cmd, 0, 1, &submesh.position_buffer.buffer, &vertex_offset);
-      vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-      vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, node_index);
+      vkCmdDrawIndexed(cmd, submesh.index_count, 1, submesh.index_offset,
+                       narrow<i32>(submesh.vertex_offset), node_index);
     }
   }
 
@@ -1099,7 +1106,8 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
       const AlphaMode alpha_mode = material_alpha_modes_.at(submesh.material_index);
 
-      const RenderObject object{.submesh = &submesh,
+      const RenderObject object{.mesh = &mesh,
+                                .submesh = &submesh,
                                 .model_matrix = scene_->global_transforms.at(node_index)};
 
       if (alpha_mode == AlphaMode::blend) {
@@ -1142,11 +1150,12 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
                       pipeline_manager_->get_pipeline(pipeline_handle));
 
     for (u32 i = 0; i < draws_solid_objects_.size(); ++i) {
+      const Mesh& mesh = *draws_solid_objects_[i].mesh;
       const SubMesh& submesh = *draws_solid_objects_[i].submesh;
       const VkDeviceAddress pos_buffer_address =
-          vkh::get_buffer_device_address(context_, submesh.position_buffer.buffer);
+          vkh::get_buffer_device_address(context_, mesh.position_buffer.buffer);
       const VkDeviceAddress vertex_buffer_address =
-          vkh::get_buffer_device_address(context_, submesh.vertex_buffer.buffer);
+          vkh::get_buffer_device_address(context_, mesh.vertex_buffer.buffer);
 
       const MeshPushConstant push_constant{
           .position_buffer_address = pos_buffer_address,
@@ -1155,9 +1164,9 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
                          sizeof(MeshPushConstant), &push_constant);
 
-      vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+      vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-      vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
+      vkCmdDrawIndexed(cmd, submesh.index_count, 1, submesh.index_offset, submesh.vertex_offset, i);
     }
   }
 
@@ -1176,11 +1185,12 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
                       pipeline_manager_->get_pipeline(pipeline_handle));
 
     for (u32 i = 0; i < draws_transparent_objects_.size(); ++i) {
+      const Mesh& mesh = *draws_transparent_objects_[i].mesh;
       const SubMesh& submesh = *draws_transparent_objects_[i].submesh;
       const VkDeviceAddress pos_buffer_address =
-          vkh::get_buffer_device_address(context_, submesh.position_buffer.buffer);
+          vkh::get_buffer_device_address(context_, mesh.position_buffer.buffer);
       const VkDeviceAddress vertex_buffer_address =
-          vkh::get_buffer_device_address(context_, submesh.vertex_buffer.buffer);
+          vkh::get_buffer_device_address(context_, mesh.vertex_buffer.buffer);
 
       const MeshPushConstant push_constant{
           .position_buffer_address = pos_buffer_address,
@@ -1189,8 +1199,8 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
                          sizeof(MeshPushConstant), &push_constant);
 
-      vkCmdBindIndexBuffer(cmd, submesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-      vkCmdDrawIndexed(cmd, submesh.index_count, 1, 0, 0, i);
+      vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+      vkCmdDrawIndexed(cmd, submesh.index_count, 1, submesh.index_offset, submesh.vertex_offset, i);
     }
   }
 
@@ -1211,9 +1221,7 @@ Renderer::~Renderer()
   for (auto texture : textures_) { vkDestroyImageView(context_, texture.image_view, nullptr); }
   for (auto image : images_) { vkh::destroy_image(context_, image); }
 
-  for (auto& mesh : meshes_.values()) {
-    for (auto& submesh : mesh.submeshes) { destroy_submesh(context_, submesh); }
-  }
+  for (auto& mesh : meshes_.values()) { destroy_mesh(context_, mesh); }
 
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);

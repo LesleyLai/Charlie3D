@@ -1,5 +1,7 @@
 #include "gltf_loader.hpp"
 
+#include "../utils/prelude.hpp"
+
 #include <fastgltf/parser.hpp>
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
@@ -23,10 +25,12 @@ using beyond::Mat4;
 using beyond::Vec3;
 using beyond::Vec4;
 
-using charlie::i32;
-using charlie::narrow;
-using charlie::u32;
-using charlie::usize;
+using beyond::Point3;
+
+using beyond::i32;
+using beyond::narrow;
+using beyond::u32;
+using beyond::usize;
 
 namespace fastgltf {
 
@@ -283,6 +287,46 @@ auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nod
   return result;
 }
 
+// Append to a std::vector by an accessor
+template <typename T>
+[[nodiscard]]
+auto append_from_accessor(const fastgltf::Asset& asset, const fastgltf::Accessor& accessor,
+                          beyond::Ref<std::vector<T>> result)
+{
+  BEYOND_ENSURE(accessor.type == fastgltf::ElementTraits<T>::type);
+
+  const usize offset = result->size();
+  result->resize(offset + accessor.count);
+  fastgltf::copyFromAccessor<T>(asset, accessor, result->data() + offset);
+}
+
+template <typename T>
+[[nodiscard]]
+auto from_accessor(const fastgltf::Asset& asset,
+                   const fastgltf::Accessor& accessor) -> std::vector<T>
+{
+  std::vector<beyond::Vec3> result;
+  append_from_accessor(asset, accessor, beyond::ref(result));
+  return result;
+}
+
+// Fill a std::vector of size `vertex_count` from an accessor. If the accessor doesn't exist, fill
+// it with dummy memory
+template <typename T>
+[[nodiscard]] auto from_maybe_accessor(const fastgltf::Asset& asset,
+                                       beyond::optional<usize> accessor_id, usize vertex_count)
+{
+  std::vector<T> result;
+  accessor_id
+      .map([&](size_t id) {
+        const auto& accessor = asset.accessors.at(id);
+        BEYOND_ENSURE(accessor.count == vertex_count);
+        append_from_accessor(asset, accessor, beyond::ref(result));
+      })
+      .or_else([&] { result.resize(vertex_count); });
+  return result;
+}
+
 // Convert mesh from fastgltf format to charlie::CPUMesh
 auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMesh>
 {
@@ -297,9 +341,17 @@ auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMes
 
     // Each gltf primitive is treated as a submesh
     std::vector<charlie::CPUSubmesh> submeshes;
+    std::vector<Point3> positions;
+    std::vector<charlie::Vertex> vertices;
+    std::vector<u32> indices;
+
     submeshes.reserve(mesh.primitives.size());
     for (const auto& primitive : mesh.primitives) {
-      BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
+      BEYOND_ENSURE_MSG(positions.size() == vertices.size(),
+                        "Have the same numbers of element for vertex buffer SOA");
+
+      BEYOND_ENSURE_MSG(primitive.type == fastgltf::PrimitiveType::Triangles,
+                        "Non triangle-list mesh is not supported");
       constexpr auto find_attribute_id = [](const fastgltf::Primitive& primitive,
                                             std::string_view name) -> beyond::optional<usize> {
         if (const auto itr = primitive.findAttribute(name); itr != primitive.attributes.end()) {
@@ -317,7 +369,8 @@ auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMes
       const beyond::optional<usize> texture_coord_accessor_id =
           find_attribute_id(primitive, "TEXCOORD_0");
 
-      // TODO: handle meshes without index accessor
+      BEYOND_ENSURE_MSG(primitive.indicesAccessor.has_value(),
+                        "Meshes without index accessor is not supported");
       const usize index_accessor_id = primitive.indicesAccessor.value();
 
       const fastgltf::Accessor& position_accessor = asset.accessors.at(position_accessor_id);
@@ -326,63 +379,51 @@ auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMes
 
       using fastgltf::AccessorType;
       BEYOND_ENSURE(position_accessor.type == AccessorType::Vec3);
-      BEYOND_ENSURE(normal_accessor.type == AccessorType::Vec3);
       BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
 
-      std::vector<beyond::Point3> positions;
-      positions.resize(position_accessor.count);
-      fastgltf::copyFromAccessor<beyond::Point3>(asset, position_accessor, positions.data());
+      const auto vertex_count = position_accessor.count;
+      const auto vertex_offset = positions.size();
 
-      std::vector<beyond::Vec3> normals;
-      normals.resize(normal_accessor.count);
-      fastgltf::copyFromAccessor<beyond::Vec3>(asset, normal_accessor, normals.data());
+      append_from_accessor(asset, position_accessor, beyond::ref(positions));
 
-      std::vector<beyond::Vec2> tex_coords;
-      texture_coord_accessor_id
-          .map([&](size_t id) {
-            const auto& texture_coord_accessor = asset.accessors.at(id);
-            BEYOND_ENSURE(texture_coord_accessor.type == AccessorType::Vec2);
-
-            tex_coords.resize(texture_coord_accessor.count);
-            fastgltf::copyFromAccessor<beyond::Vec2>(asset, texture_coord_accessor,
-                                                     tex_coords.data());
-          })
-          .or_else([&] { tex_coords.resize(positions.size()); });
-
-      std::vector<beyond::Vec4> tangents;
-      tangent_accessor_id.map([&](size_t id) {
-        const auto& tangent_accessor = asset.accessors.at(id);
-        BEYOND_ENSURE(tangent_accessor.type == AccessorType::Vec4);
-
-        tangents.resize(tangent_accessor.count);
-        fastgltf::copyFromAccessor<beyond::Vec4>(asset, tangent_accessor, tangents.data());
-      });
-      if (tangents.empty()) { tangents.resize(positions.size()); }
+      const auto normals = from_accessor<beyond::Vec3>(asset, normal_accessor);
+      const auto tex_coords =
+          from_maybe_accessor<beyond::Vec2>(asset, texture_coord_accessor_id, vertex_count);
+      const auto tangents =
+          from_maybe_accessor<beyond::Vec4>(asset, tangent_accessor_id, vertex_count);
 
       // BEYOND_ENSURE(index_accessor.componentType == fastgltf::ComponentType::UnsignedInt);
-      std::vector<u32> indices;
-      indices.resize(index_accessor.count);
-      fastgltf::copyFromAccessor<u32>(asset, index_accessor, indices.data());
+      const auto index_count = narrow<u32>(index_accessor.count);
+      const auto index_offset = narrow<u32>(indices.size());
+      append_from_accessor<u32>(asset, index_accessor, beyond::ref(indices));
 
       const beyond::optional<u32> material_index =
           to_beyond(primitive.materialIndex).map(beyond::narrow<u32, usize>);
 
-      std::vector<charlie::Vertex> vertex_buffer(positions.size());
-      for (size_t i = 0; i < positions.size(); ++i) {
-        // Interleave normal, uv, and tangents
-        vertex_buffer[i] = {.normal = charlie::vec3_to_oct(normals[i]),
-                            .tex_coords = tex_coords[i],
-                            .tangents = tangents[i]};
+      BEYOND_ENSURE(vertices.size() == vertex_offset);
+
+      vertices.reserve(vertex_offset + vertex_count);
+      for (size_t i = 0; i < vertex_count; ++i) {
+        vertices.push_back(charlie::Vertex{.normal = charlie::vec3_to_oct(normals[i]),
+                                           .tex_coords = tex_coords[i],
+                                           .tangents = tangents[i]});
       }
 
-      submeshes.push_back(charlie::CPUSubmesh{.material_index = material_index,
-                                              .positions = BEYOND_MOV(positions),
-                                              .vertices = BEYOND_MOV(vertex_buffer),
-                                              .indices = BEYOND_MOV(indices)});
+      submeshes.push_back(charlie::CPUSubmesh{
+          .material_index = material_index,
+          .vertex_offset = narrow<u32>(vertex_offset),
+          .index_offset = index_offset,
+          .index_count = index_count,
+      });
     }
 
-    meshes.push_back(
-        charlie::CPUMesh{.name = std::string{mesh.name}, .submeshes = BEYOND_MOV(submeshes)});
+    meshes.push_back(charlie::CPUMesh{
+        .name = std::string{mesh.name},
+        .submeshes = BEYOND_MOV(submeshes),
+        .positions = BEYOND_MOV(positions),
+        .vertices = BEYOND_MOV(vertices),
+        .indices = BEYOND_MOV(indices),
+    });
   }
   return meshes;
 }

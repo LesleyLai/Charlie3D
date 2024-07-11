@@ -15,20 +15,21 @@ class Context;
 namespace charlie {
 
 struct SubMesh {
-  vkh::AllocatedBuffer position_buffer{};
-  vkh::AllocatedBuffer vertex_buffer{};
-  vkh::AllocatedBuffer index_buffer{};
-  u32 vertices_count{};
-  u32 index_count{};
+  u32 vertex_offset = 0;
+  u32 index_offset = 0;
+  u32 index_count = 0;
 
   u32 material_index = 0;
 };
 
 struct Mesh {
+  vkh::AllocatedBuffer position_buffer{};
+  vkh::AllocatedBuffer vertex_buffer{};
+  vkh::AllocatedBuffer index_buffer{};
   std::vector<SubMesh> submeshes;
 };
 
-void destroy_submesh(vkh::Context& context, SubMesh& submesh);
+void destroy_mesh(vkh::Context& context, Mesh& submesh);
 
 } // namespace charlie
 

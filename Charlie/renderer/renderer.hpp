@@ -61,6 +61,7 @@ struct Material {
 };
 
 struct RenderObject {
+  const Mesh* mesh = nullptr;
   const SubMesh* submesh = nullptr;
   Mat4 model_matrix;
 };

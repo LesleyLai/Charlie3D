@@ -30,7 +30,7 @@ auto main(int argc, const char** argv) -> int
   std::string_view scene_file = "models/gltf_box/box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
 
-  auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D Model Viewer",
+  auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D",
                                                           {.resizable = true, .maximized = true});
 
   auto input_handler = charlie::InputHandler{};

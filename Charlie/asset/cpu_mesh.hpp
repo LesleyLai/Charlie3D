@@ -51,15 +51,18 @@ struct Vertex {
 struct CPUSubmesh {
   beyond::optional<u32> material_index;
 
-  std::vector<Point3> positions;
-  std::vector<Vertex> vertices;
-
-  std::vector<u32> indices;
+  u32 vertex_offset = 0;
+  u32 index_offset = 0;
+  u32 index_count = 0;
 };
 
 struct CPUMesh {
   std::string name;
   std::vector<CPUSubmesh> submeshes;
+
+  std::vector<Point3> positions; // Seperate position from Rest of the vertex attributes
+  std::vector<Vertex> vertices;
+  std::vector<u32> indices;
 };
 
 } // namespace charlie
