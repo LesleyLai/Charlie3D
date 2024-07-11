@@ -700,7 +700,7 @@ void Renderer::init_default_texture()
            .debug_name = "Default Albedo Texture Image View"})
           .value();
 
-  default_albedo_texture_index =
+  default_white_texture_index =
       add_texture(Texture{.image = default_albedo_image, .image_view = default_albedo_image_view});
 
   CPUImage cpu_image2{
@@ -1293,14 +1293,15 @@ auto Renderer::add_texture(Texture texture) -> u32
 auto Renderer::add_material(const CPUMaterial& material_info) -> u32
 {
   const u32 albedo_texture_index =
-      material_info.albedo_texture_index.value_or(default_albedo_texture_index);
+      material_info.albedo_texture_index.value_or(default_white_texture_index);
   const u32 normal_texture_index =
       material_info.normal_texture_index.value_or(default_normal_texture_index);
-  // TODO: Can I use default albedo for metallic roughness?
   const u32 metallic_roughness_texture_index =
-      material_info.metallic_roughness_texture_index.value_or(default_albedo_texture_index);
+      material_info.metallic_roughness_texture_index.value_or(default_white_texture_index);
   const u32 occlusion_texture_index =
-      material_info.occlusion_texture_index.value_or(default_albedo_texture_index);
+      material_info.occlusion_texture_index.value_or(default_white_texture_index);
+  const u32 emissive_texture_index =
+      material_info.emissive_texture_index.value_or(default_white_texture_index);
 
   materials_.push_back(Material{
       .base_color_factor = material_info.base_color_factor,
@@ -1308,6 +1309,8 @@ auto Renderer::add_material(const CPUMaterial& material_info) -> u32
       .normal_texture_index = normal_texture_index,
       .metallic_roughness_texture_index = metallic_roughness_texture_index,
       .occlusion_texture_index = occlusion_texture_index,
+      .emissive_factor = material_info.emissive_factor,
+      .emissive_texture_index = emissive_texture_index,
       .metallic_factor = material_info.metallic_factor,
       .roughness_factor = material_info.roughness_factor,
       .alpha_cutoff =

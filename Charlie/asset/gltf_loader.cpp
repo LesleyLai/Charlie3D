@@ -76,6 +76,9 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
   const beyond::optional<uint32_t> occlusion_texture_index =
       beyond::from_std(material.occlusionTexture.transform(get_texture_index));
 
+  const beyond::optional<uint32_t> emissive_texture_index =
+      beyond::from_std(material.emissiveTexture.transform(get_texture_index));
+
   const auto alpha_mode = [&]() {
     switch (material.alphaMode) {
     case fastgltf::AlphaMode::Opaque:
@@ -99,6 +102,8 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
       .normal_texture_index = normal_texture_index,
       .metallic_roughness_texture_index = metallic_roughness_texture_index,
       .occlusion_texture_index = occlusion_texture_index,
+      .emissive_texture_index = emissive_texture_index,
+      .emissive_factor = Vec3{material.emissiveFactor},
       .alpha_mode = alpha_mode,
       .alpha_cutoff = material.alphaCutoff,
   };
@@ -283,11 +288,10 @@ namespace charlie {
   CPUScene result;
   result.nodes = populate_nodes(asset.nodes);
 
-  result.images.resize(asset.images.size());
-
   const auto gltf_directory = file_path.parent_path();
   std::latch image_loading_latch{narrow<ptrdiff_t>(asset.images.size())};
 
+  result.images.resize(asset.images.size());
   for (const auto& [i, image] : std::views::enumerate(asset.images)) {
     thread_pool.async([&, i]() {
       result.images[i] = load_raw_image_data(gltf_directory, asset, image);
@@ -377,7 +381,7 @@ namespace charlie {
       std::vector<Vertex> vertex_buffer(positions.size());
       for (size_t i = 0; i < positions.size(); ++i) {
         // Interleave normal, uv, and tangents
-        vertex_buffer[i] = {.normal = float32x3_to_oct(normals[i]),
+        vertex_buffer[i] = {.normal = vec3_to_oct(normals[i]),
                             .tex_coords = tex_coords[i],
                             .tangents = tangents[i]};
       }

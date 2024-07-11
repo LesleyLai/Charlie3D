@@ -28,13 +28,17 @@ struct Material {
     uint normal_texture_index;
     uint metallic_roughness_texture_index;
     uint occlusion_texture_index;
+
+    vec3 emissive_factor;
+    uint emissive_texture_index;
+
     float metallic_factor;
     float roughness_factor;
     float alpha_cutoff;
     float padding;
 };
 layout (std430, set = 2, binding = 0) readonly restrict buffer MaterialBuffer {
-    Material materials[];
+    readonly Material materials[];
 };
 
 layout (set = 3, binding = 10) uniform sampler2D global_textures[];
@@ -63,6 +67,9 @@ vec3 reinhard_tone_mapping(vec3 radiance) {
     return radiance / (radiance + vec3(1.0));
 }
 
+vec3 calculate_emission(in Material material) {
+    return texture(global_textures[nonuniformEXT(material.emissive_texture_index)], in_tex_coord).xyz * material.emissive_factor;
+}
 
 void main()
 {
@@ -119,13 +126,14 @@ void main()
     vec3 luminance = F * sunlight_color * illuminance;
 
     float visibility = 1.0;
-
     uint shadow_mode = scene_data.sunlight_shadow_mode;
     if (shadow_mode > 0) {
         visibility = shadow_mapping(in_shadow_coord, shadow_mode);
     }
 
-    vec3 Lo = ambient + luminance * visibility;
+    vec3 emission = calculate_emission(material);
+
+    vec3 Lo = ambient + emission + luminance * visibility;
 
     vec3 color = reinhard_tone_mapping(Lo);
     out_frag_color = vec4(color, 1.0f);

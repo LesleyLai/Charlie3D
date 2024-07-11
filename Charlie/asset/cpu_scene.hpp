@@ -22,6 +22,9 @@ struct CPUMaterial {
   beyond::optional<u32> metallic_roughness_texture_index;
   beyond::optional<u32> occlusion_texture_index;
 
+  beyond::optional<u32> emissive_texture_index;
+  Vec3 emissive_factor;
+
   AlphaMode alpha_mode = AlphaMode::opaque;
   float alpha_cutoff = 0.0f; // Only considered when alpha mode is mask
 };
@@ -32,6 +35,7 @@ template <typename Func> auto offset_material_texture_index(Ref<CPUMaterial> mat
   material->normal_texture_index = material->normal_texture_index.map(func);
   material->metallic_roughness_texture_index = material->metallic_roughness_texture_index.map(func);
   material->occlusion_texture_index = material->occlusion_texture_index.map(func);
+  material->emissive_texture_index = material->emissive_texture_index.map(func);
 }
 
 struct CPUTexture {

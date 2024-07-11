@@ -50,6 +50,10 @@ struct Material {
   u32 normal_texture_index = 0xdeadbeef;
   u32 metallic_roughness_texture_index = 0xdeadbeef;
   u32 occlusion_texture_index = 0xdeadbeef;
+
+  Vec3 emissive_factor;
+  u32 emissive_texture_index = 0xdeafbeef;
+
   f32 metallic_factor = 1.0f;
   f32 roughness_factor = 1.0f;
   f32 alpha_cutoff = 1.0f;
@@ -170,7 +174,7 @@ public:
 
   [[nodiscard]] auto image_count() const -> usize { return images_.size(); }
 
-  u32 default_albedo_texture_index = static_cast<u32>(~0);
+  u32 default_white_texture_index = static_cast<u32>(~0);
   u32 default_normal_texture_index = static_cast<u32>(~0);
 
 private:

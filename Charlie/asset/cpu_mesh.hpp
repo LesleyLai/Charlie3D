@@ -29,13 +29,13 @@ struct Vertex {
 };
 
 // TODO: test this
-[[nodiscard]] inline auto sign_not_zero(Vec2 v)
+[[nodiscard]] constexpr auto sign_not_zero(Vec2 v)
 {
   return Vec2((v.x >= 0.0f) ? +1.0f : -1.0f, (v.y >= 0.0f) ? +1.0f : -1.0f);
 }
 
 // TODO: test this
-[[nodiscard]] inline auto float32x3_to_oct(Vec3 v) -> Vec2
+[[nodiscard]] inline auto vec3_to_oct(Vec3 v) -> Vec2
 {
   const Vec2 p = Vec2{v.x, v.y} * (1.0f / (abs(v.x) + abs(v.y) + abs(v.z)));
   if (v.z <= 0.0f) {

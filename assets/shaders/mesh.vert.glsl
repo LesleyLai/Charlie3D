@@ -14,15 +14,15 @@ layout (buffer_reference, scalar) readonly restrict buffer PositionBuffer {
     vec3 position[];
 };
 
-vec2 signNotZero(vec2 v)
+vec2 sign_not_zero(vec2 v)
 {
     return vec2((v.x >= 0.0) ? + 1.0 : -1.0, (v.y >= 0.0) ? + 1.0 : -1.0);
 }
 
-vec3 oct_to_float32x3(vec2 e)
+vec3 vec3_from_oct(vec2 e)
 {
     vec3 v = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
-    if (v.z < 0) v.xy = (1.0 - abs(v.yx)) * signNotZero(v.xy);
+    if (v.z < 0) v.xy = (1.0 - abs(v.yx)) * sign_not_zero(v.xy);
     return normalize(v);
 }
 
@@ -64,7 +64,7 @@ void main()
 {
     vec3 in_position = PushConstants.position_buffer.position[gl_VertexIndex];
     Vertex in_vertex = PushConstants.vertex_buffer.vertices[gl_VertexIndex];
-    vec3 in_normal = oct_to_float32x3(in_vertex.normal);
+    vec3 in_normal = vec3_from_oct(in_vertex.normal);
     vec2 in_tex_coord = in_vertex.tex_coord;
     vec4 in_tangent = in_vertex.tangent;
 
