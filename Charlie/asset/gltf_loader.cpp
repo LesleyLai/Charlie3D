@@ -21,6 +21,8 @@
 
 using beyond::Mat4;
 using beyond::Vec3;
+using beyond::Vec4;
+
 using charlie::i32;
 using charlie::narrow;
 using charlie::u32;
@@ -51,11 +53,50 @@ template <typename T> auto to_beyond(fastgltf::OptionalWithFlagValue<T> opt) -> 
   return beyond::nullopt;
 }
 
+[[nodiscard]]
+auto parse_gltf_from_file(const std::filesystem::path& file_path)
+    -> fastgltf::Expected<fastgltf::Asset>
+{
+  fastgltf::Parser parser;
+
+  using fastgltf::Options;
+
+  fastgltf::GltfDataBuffer data;
+  {
+    ZoneScopedN("Load GLTF from File");
+    data.loadFromFile(file_path);
+  }
+
+  const bool is_glb = file_path.extension() == ".glb";
+  const auto directory = file_path.parent_path();
+
+  {
+    ZoneScopedN("Parse GLTF");
+    return is_glb ? parser.loadBinaryGLTF(&data, directory,
+                                          Options::LoadGLBBuffers | Options::LoadExternalBuffers)
+                  : parser.loadGLTF(&data, directory,
+                                    Options::LoadGLBBuffers | Options::LoadExternalBuffers);
+  }
+}
+
 auto to_cpu_texture(const fastgltf::Texture& texture) -> charlie::CPUTexture
 {
   return {.name = std::string{texture.name},
           .image_index = narrow<uint32_t>(texture.imageIndex.value()),
           .sampler_index = to_beyond(texture.samplerIndex).map(narrow<uint32_t, size_t>)};
+}
+
+[[nodiscard]] auto from_fastgltf(fastgltf::AlphaMode alpha_mode) -> charlie::AlphaMode
+{
+  switch (alpha_mode) {
+  case fastgltf::AlphaMode::Opaque:
+    return charlie::AlphaMode::opaque;
+  case fastgltf::AlphaMode::Mask:
+    return charlie::AlphaMode::mask;
+  case fastgltf::AlphaMode::Blend:
+    return charlie::AlphaMode::blend;
+  }
+  return charlie::AlphaMode::opaque;
 }
 
 auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
@@ -79,23 +120,10 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
   const beyond::optional<uint32_t> emissive_texture_index =
       beyond::from_std(material.emissiveTexture.transform(get_texture_index));
 
-  const auto alpha_mode = [&]() {
-    switch (material.alphaMode) {
-    case fastgltf::AlphaMode::Opaque:
-      return charlie::AlphaMode::opaque;
-    case fastgltf::AlphaMode::Mask:
-      return charlie::AlphaMode::mask;
-    case fastgltf::AlphaMode::Blend:
-      return charlie::AlphaMode::blend;
-    }
-    return charlie::AlphaMode::opaque;
-  }();
+  const auto alpha_mode = from_fastgltf(material.alphaMode);
 
   return charlie::CPUMaterial{
-      .base_color_factor = {material.pbrData.baseColorFactor[0],
-                            material.pbrData.baseColorFactor[1],
-                            material.pbrData.baseColorFactor[2],
-                            material.pbrData.baseColorFactor[3]},
+      .base_color_factor = beyond::Vec4{material.pbrData.baseColorFactor},
       .metallic_factor = material.pbrData.metallicFactor,
       .roughness_factor = material.pbrData.roughnessFactor,
       .albedo_texture_index = albedo_texture_index,
@@ -255,59 +283,20 @@ auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nod
   return result;
 }
 
-} // anonymous namespace
-
-namespace charlie {
-
-[[nodiscard]] auto load_gltf(const std::filesystem::path& file_path) -> CPUScene
+// Convert mesh from fastgltf format to charlie::CPUMesh
+auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMesh>
 {
-  ZoneScoped;
+  ZoneScopedN("Convert Meshes");
 
-  beyond::ThreadPool thread_pool;
-
-  fastgltf::Parser parser;
-
-  fastgltf::GltfDataBuffer data;
-  data.loadFromFile(file_path);
-
-  using fastgltf::Options;
-
-  const bool is_glb = file_path.extension() == ".glb";
-  const auto directory = file_path.parent_path();
-  auto maybe_asset =
-      is_glb ? parser.loadBinaryGLTF(&data, directory,
-                                     Options::LoadGLBBuffers | Options::LoadExternalBuffers)
-             : parser.loadGLTF(&data, directory,
-                               Options::LoadGLBBuffers | Options::LoadExternalBuffers);
-  if (const auto error = maybe_asset.error(); error != fastgltf::Error::None) {
-    beyond::panic(fmt::format("Error while loading {}: {}", file_path.string(),
-                              fastgltf::getErrorMessage(error)));
-  }
-  fastgltf::Asset& asset = maybe_asset.get();
-
-  CPUScene result;
-  result.nodes = populate_nodes(asset.nodes);
-
-  const auto gltf_directory = file_path.parent_path();
-  std::latch image_loading_latch{narrow<ptrdiff_t>(asset.images.size())};
-
-  result.images.resize(asset.images.size());
-  for (const auto& [i, image] : std::views::enumerate(asset.images)) {
-    thread_pool.async([&, i]() {
-      result.images[i] = load_raw_image_data(gltf_directory, asset, image);
-      image_loading_latch.count_down();
-    });
-  }
-
-  result.textures.reserve(asset.textures.size());
-  std::ranges::transform(asset.textures, std::back_inserter(result.textures), to_cpu_texture);
-
-  result.materials.reserve(asset.materials.size());
-  std::ranges::transform(asset.materials, std::back_inserter(result.materials), to_cpu_material);
+  std::vector<charlie::CPUMesh> meshes;
+  meshes.reserve(asset.meshes.size());
 
   for (const auto& mesh : asset.meshes) {
+    ZoneScopedN("Convert Mesh");
+    ZoneText(mesh.name.data(), mesh.name.size());
+
     // Each gltf primitive is treated as a submesh
-    std::vector<CPUSubmesh> submeshes;
+    std::vector<charlie::CPUSubmesh> submeshes;
     submeshes.reserve(mesh.primitives.size());
     for (const auto& primitive : mesh.primitives) {
       BEYOND_ENSURE(primitive.type == fastgltf::PrimitiveType::Triangles);
@@ -378,23 +367,70 @@ namespace charlie {
       const beyond::optional<u32> material_index =
           to_beyond(primitive.materialIndex).map(beyond::narrow<u32, usize>);
 
-      std::vector<Vertex> vertex_buffer(positions.size());
+      std::vector<charlie::Vertex> vertex_buffer(positions.size());
       for (size_t i = 0; i < positions.size(); ++i) {
         // Interleave normal, uv, and tangents
-        vertex_buffer[i] = {.normal = vec3_to_oct(normals[i]),
+        vertex_buffer[i] = {.normal = charlie::vec3_to_oct(normals[i]),
                             .tex_coords = tex_coords[i],
                             .tangents = tangents[i]};
       }
 
-      submeshes.push_back(CPUSubmesh{.material_index = material_index,
-                                     .positions = BEYOND_MOV(positions),
-                                     .vertices = BEYOND_MOV(vertex_buffer),
-                                     .indices = BEYOND_MOV(indices)});
+      submeshes.push_back(charlie::CPUSubmesh{.material_index = material_index,
+                                              .positions = BEYOND_MOV(positions),
+                                              .vertices = BEYOND_MOV(vertex_buffer),
+                                              .indices = BEYOND_MOV(indices)});
     }
 
-    result.meshes.push_back(
-        CPUMesh{.name = std::string{mesh.name}, .submeshes = BEYOND_MOV(submeshes)});
+    meshes.push_back(
+        charlie::CPUMesh{.name = std::string{mesh.name}, .submeshes = BEYOND_MOV(submeshes)});
   }
+  return meshes;
+}
+
+} // anonymous namespace
+
+namespace charlie {
+
+static beyond::ThreadPool bg_thread_pool;
+
+[[nodiscard]] auto load_gltf(const std::filesystem::path& file_path) -> CPUScene
+{
+  ZoneScoped;
+
+  auto maybe_asset = parse_gltf_from_file(file_path);
+  if (const auto error = maybe_asset.error(); error != fastgltf::Error::None) {
+    beyond::panic(fmt::format("Error while loading {}: {}", file_path.string(),
+                              fastgltf::getErrorMessage(error)));
+  }
+  fastgltf::Asset& asset = maybe_asset.get();
+
+  CPUScene result;
+  result.nodes = populate_nodes(asset.nodes);
+
+  const auto gltf_directory = file_path.parent_path();
+  std::latch image_loading_latch{narrow<ptrdiff_t>(asset.images.size())};
+
+  result.images.resize(asset.images.size());
+  for (const auto& [i, image] : std::views::enumerate(asset.images)) {
+    bg_thread_pool.async([&, i]() {
+      result.images[i] = load_raw_image_data(gltf_directory, asset, image);
+      image_loading_latch.count_down();
+    });
+  }
+
+  {
+    ZoneScopedN("Convert Textures");
+    result.textures.reserve(asset.textures.size());
+    std::ranges::transform(asset.textures, std::back_inserter(result.textures), to_cpu_texture);
+  }
+
+  {
+    ZoneScopedN("Convert Materials");
+    result.materials.reserve(asset.materials.size());
+    std::ranges::transform(asset.materials, std::back_inserter(result.materials), to_cpu_material);
+  }
+
+  result.meshes = convert_meshes(asset);
 
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {
     SPDLOG_ERROR("GLTF validation error {} from {}", fastgltf::getErrorName(error),
