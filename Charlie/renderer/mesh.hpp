@@ -23,9 +23,6 @@ struct SubMesh {
 };
 
 struct Mesh {
-  vkh::AllocatedBuffer position_buffer{};
-  vkh::AllocatedBuffer vertex_buffer{};
-  vkh::AllocatedBuffer index_buffer{};
   std::vector<SubMesh> submeshes;
 };
 

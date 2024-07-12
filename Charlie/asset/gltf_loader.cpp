@@ -305,7 +305,7 @@ template <typename T>
 auto from_accessor(const fastgltf::Asset& asset,
                    const fastgltf::Accessor& accessor) -> std::vector<T>
 {
-  std::vector<beyond::Vec3> result;
+  std::vector<T> result;
   append_from_accessor(asset, accessor, beyond::ref(result));
   return result;
 }
@@ -328,28 +328,35 @@ template <typename T>
 }
 
 // Convert mesh from fastgltf format to charlie::CPUMesh
-auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMesh>
+auto convert_meshes(const fastgltf::Asset& asset,
+                    beyond::Ref<charlie::CPUMeshBuffers> buffers) -> std::vector<charlie::CPUMesh>
 {
   ZoneScopedN("Convert Meshes");
 
   std::vector<charlie::CPUMesh> meshes;
   meshes.reserve(asset.meshes.size());
 
+  struct SubmeshIntermediateData {
+    beyond::optional<u32> material_index;
+    std::vector<Point3> positions;
+    std::vector<charlie::Vertex> vertices;
+    std::vector<u32> indices;
+  };
+
+  // TODO: mesh name
+  std::vector<std::vector<SubmeshIntermediateData>> meshes_intermediate;
+  u32 total_vertex_count = 0;
+  u32 total_index_count = 0;
+
   for (const auto& mesh : asset.meshes) {
     ZoneScopedN("Convert Mesh");
     ZoneText(mesh.name.data(), mesh.name.size());
 
     // Each gltf primitive is treated as a submesh
-    std::vector<charlie::CPUSubmesh> submeshes;
-    std::vector<Point3> positions;
-    std::vector<charlie::Vertex> vertices;
-    std::vector<u32> indices;
+    std::vector<SubmeshIntermediateData> submeshes_intermediate;
+    submeshes_intermediate.reserve(mesh.primitives.size());
 
-    submeshes.reserve(mesh.primitives.size());
     for (const auto& primitive : mesh.primitives) {
-      BEYOND_ENSURE_MSG(positions.size() == vertices.size(),
-                        "Have the same numbers of element for vertex buffer SOA");
-
       BEYOND_ENSURE_MSG(primitive.type == fastgltf::PrimitiveType::Triangles,
                         "Non triangle-list mesh is not supported");
       constexpr auto find_attribute_id = [](const fastgltf::Primitive& primitive,
@@ -382,9 +389,8 @@ auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMes
       BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
 
       const auto vertex_count = position_accessor.count;
-      const auto vertex_offset = positions.size();
 
-      append_from_accessor(asset, position_accessor, beyond::ref(positions));
+      auto positions = from_accessor<beyond::Point3>(asset, position_accessor);
 
       const auto normals = from_accessor<beyond::Vec3>(asset, normal_accessor);
       const auto tex_coords =
@@ -392,37 +398,58 @@ auto convert_meshes(const fastgltf::Asset& asset) -> std::vector<charlie::CPUMes
       const auto tangents =
           from_maybe_accessor<beyond::Vec4>(asset, tangent_accessor_id, vertex_count);
 
-      // BEYOND_ENSURE(index_accessor.componentType == fastgltf::ComponentType::UnsignedInt);
-      const auto index_count = narrow<u32>(index_accessor.count);
-      const auto index_offset = narrow<u32>(indices.size());
-      append_from_accessor<u32>(asset, index_accessor, beyond::ref(indices));
+      auto indices = from_accessor<u32>(asset, index_accessor);
 
       const beyond::optional<u32> material_index =
           to_beyond(primitive.materialIndex).map(beyond::narrow<u32, usize>);
 
-      BEYOND_ENSURE(vertices.size() == vertex_offset);
-
-      vertices.reserve(vertex_offset + vertex_count);
+      std::vector<charlie::Vertex> vertices;
+      vertices.reserve(vertex_count);
       for (size_t i = 0; i < vertex_count; ++i) {
         vertices.push_back(charlie::Vertex{.normal = charlie::vec3_to_oct(normals[i]),
                                            .tex_coords = tex_coords[i],
                                            .tangents = tangents[i]});
       }
 
-      submeshes.push_back(charlie::CPUSubmesh{
+      submeshes_intermediate.push_back(SubmeshIntermediateData{
           .material_index = material_index,
-          .vertex_offset = narrow<u32>(vertex_offset),
-          .index_offset = index_offset,
-          .index_count = index_count,
+          .positions = BEYOND_MOV(positions),
+          .vertices = BEYOND_MOV(vertices),
+          .indices = BEYOND_MOV(indices),
       });
+
+      total_vertex_count += vertex_count;
+      total_index_count += narrow<u32>(index_accessor.count);
     }
 
+    meshes_intermediate.push_back(submeshes_intermediate);
+  }
+
+  buffers->positions.resize(total_vertex_count);
+  buffers->vertices.resize(total_vertex_count);
+  buffers->indices.resize(total_index_count);
+
+  std::size_t vertex_offset = 0;
+  std::size_t index_offset = 0;
+  for (const auto& mesh_intermediate : meshes_intermediate) {
+    std::vector<charlie::CPUSubmesh> submeshes;
+    for (const auto& submesh_intermediate : mesh_intermediate) {
+      submeshes.push_back(charlie::CPUSubmesh{
+          .material_index = submesh_intermediate.material_index,
+          .vertex_offset = beyond::narrow<u32>(vertex_offset),
+          .index_offset = beyond::narrow<u32>(index_offset),
+          .index_count = beyond::narrow<u32>(submesh_intermediate.indices.size()),
+      });
+
+      std::ranges::copy(submesh_intermediate.positions, buffers->positions.data() + vertex_offset);
+      std::ranges::copy(submesh_intermediate.vertices, buffers->vertices.data() + vertex_offset);
+      std::ranges::copy(submesh_intermediate.indices, buffers->indices.data() + index_offset);
+
+      vertex_offset += submesh_intermediate.vertices.size();
+      index_offset += submesh_intermediate.indices.size();
+    }
     meshes.push_back(charlie::CPUMesh{
-        .name = std::string{mesh.name},
-        .submeshes = BEYOND_MOV(submeshes),
-        .positions = BEYOND_MOV(positions),
-        .vertices = BEYOND_MOV(vertices),
-        .indices = BEYOND_MOV(indices),
+        .submeshes = std::move(submeshes),
     });
   }
   return meshes;
@@ -471,7 +498,7 @@ static beyond::ThreadPool bg_thread_pool;
     std::ranges::transform(asset.materials, std::back_inserter(result.materials), to_cpu_material);
   }
 
-  result.meshes = convert_meshes(asset);
+  result.meshes = convert_meshes(asset, beyond::ref(result.buffers));
 
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {
     SPDLOG_ERROR("GLTF validation error {} from {}", fastgltf::getErrorName(error),

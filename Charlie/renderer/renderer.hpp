@@ -116,6 +116,13 @@ struct ImageUploadInfo {
   u32 mip_levels = 1; // Generate mipmaps if mip_level > 1
 };
 
+// Buffers for mesh data
+struct MeshBuffers {
+  vkh::AllocatedBuffer position_buffer;
+  vkh::AllocatedBuffer vertex_buffer;
+  vkh::AllocatedBuffer index_buffer;
+};
+
 class Renderer {
 public:
   explicit Renderer(Window& window, InputHandler& input_handler);
@@ -153,13 +160,21 @@ public:
 
   [[nodiscard]] auto context() noexcept -> vkh::Context& { return context_; }
 
-  [[nodiscard]] auto upload_mesh_data(const CPUMesh& cpu_mesh) -> MeshHandle;
+  /**
+   * Upload the vertex/index buffers of a mesh to the GPU
+   *
+   * The name is the debug name used for renderdoc
+   */
+  [[nodiscard]] auto upload_mesh_buffer(const CPUMeshBuffers& buffers,
+                                        std::string_view name) -> MeshBuffers;
 
-  auto upload_image(const charlie::CPUImage& cpu_image,
-                    const ImageUploadInfo& upload_info = {}) -> VkImage;
+  [[nodiscard]] auto add_mesh(const CPUMesh& mesh) -> MeshHandle;
+
+  [[nodiscard]] auto upload_image(const charlie::CPUImage& cpu_image,
+                                  const ImageUploadInfo& upload_info = {}) -> VkImage;
 
   // Returns texture index
-  auto add_texture(Texture texture) -> u32;
+  [[nodiscard]] auto add_texture(Texture texture) -> u32;
 
   [[nodiscard]] auto add_material(const CPUMaterial& material_info) -> u32;
   void upload_materials();

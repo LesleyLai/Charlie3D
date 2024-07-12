@@ -98,10 +98,10 @@ namespace charlie {
 
   std::vector<MeshHandle> mesh_storage;
   {
-    ZoneScopedN("Upload mesh");
+    ZoneScopedN("Adds mesh");
     mesh_storage.reserve(cpu_scene.meshes.size());
     std::ranges::transform(cpu_scene.meshes, std::back_inserter(mesh_storage),
-                           [&](const CPUMesh& mesh) { return renderer.upload_mesh_data(mesh); });
+                           [&](const CPUMesh& mesh) { return renderer.add_mesh(mesh); });
   }
 
   std::unordered_map<uint32_t, RenderComponent> render_components;
@@ -113,11 +113,20 @@ namespace charlie {
     }
   }
 
+  // TODO: better name
+  auto buffers = renderer.upload_mesh_buffer(cpu_scene.buffers, "Scene");
+
   return Scene{
       .local_transforms = std::move(cpu_scene.nodes.local_transforms),
       .global_transforms = std::move(cpu_scene.nodes.global_transforms),
       .names = std::move(cpu_scene.nodes.names),
+
+      .position_buffer = buffers.position_buffer,
+      .vertex_buffer = buffers.vertex_buffer,
+      .index_buffer = buffers.index_buffer,
+
       .render_components = std::move(render_components),
+
   };
 }
 

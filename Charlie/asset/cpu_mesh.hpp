@@ -59,7 +59,11 @@ struct CPUSubmesh {
 struct CPUMesh {
   std::string name;
   std::vector<CPUSubmesh> submeshes;
+};
 
+// Buffers for a single combined mesh
+// Each gltf/glb/obj file has concatenated buffers
+struct CPUMeshBuffers {
   std::vector<Point3> positions; // Seperate position from Rest of the vertex attributes
   std::vector<Vertex> vertices;
   std::vector<u32> indices;

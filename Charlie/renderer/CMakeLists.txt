@@ -1,6 +1,6 @@
 add_library(charlie3d_renderer
         renderer.hpp renderer.cpp
-        mesh.hpp mesh.cpp
+        mesh.hpp
         camera.cpp camera.hpp
         deletion_queue.hpp
         render_pass.hpp

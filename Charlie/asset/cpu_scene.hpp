@@ -65,6 +65,9 @@ struct CPUScene {
   Nodes nodes;
   std::vector<u32> root_node_indices; // index of root nodes
 
+  // Combined buffer for CPU meshes
+  CPUMeshBuffers buffers;
+
   std::vector<CPUMesh> meshes;
   std::vector<CPUMaterial> materials;
   std::vector<CPUImage> images;
