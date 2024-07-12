@@ -37,7 +37,8 @@ struct GPUCameraData {
   beyond::Vec3 position;
 };
 
-constexpr beyond::usize max_object_count = 10000;
+// TODO: find better way to allocate object buffer
+constexpr beyond::usize max_object_count = 10000000;
 
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
@@ -789,18 +790,19 @@ void Renderer::render(const charlie::Camera& camera)
   constexpr u64 one_second = 1'000'000'000;
 
   u32 swapchain_image_index = 0;
+
+  // wait until the GPU has finished rendering the last frame.
+  {
+    ZoneScopedN("wait for render fence");
+    VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, one_second));
+  }
+
   {
     ZoneScopedN("vkAcquireNextImageKHR");
     const VkResult result = vkAcquireNextImageKHR(
         context_, swapchain_, one_second, frame.present_semaphore, nullptr, &swapchain_image_index);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) { return; }
     VK_CHECK(result);
-  }
-
-  // wait until the GPU has finished rendering the last frame.
-  {
-    ZoneScopedN("wait for render fence");
-    VK_CHECK(vkWaitForFences(context_, 1, &frame.render_fence, true, one_second));
   }
 
   VK_CHECK(vkResetFences(context_, 1, &frame.render_fence));
@@ -1112,7 +1114,6 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
     const Mesh& mesh = meshes_.try_get(render_component.mesh).expect("Cannot find mesh by handle!");
 
     for (const auto& submesh : mesh.submeshes) {
-
       const AlphaMode alpha_mode = material_alpha_modes_.at(submesh.material_index);
 
       const RenderObject object{.mesh = &mesh,

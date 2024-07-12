@@ -41,9 +41,8 @@ namespace {
                                          .pSpecializationInfo = shader_info.p_specialization_info};
 }
 
-auto create_graphics_pipeline_impl(VkDevice device,
-                                   const charlie::GraphicsPipelineCreateInfo& create_info)
-    -> VkPipeline
+auto create_graphics_pipeline_impl(
+    VkDevice device, const charlie::GraphicsPipelineCreateInfo& create_info) -> VkPipeline
 {
   BEYOND_ENSURE(create_info.layout != VK_NULL_HANDLE);
 
@@ -282,8 +281,8 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
   }
 }
 
-[[nodiscard]] auto PipelineManager::add_shader(beyond::ZStringView filename, ShaderStage stage)
-    -> ShaderHandle
+[[nodiscard]] auto PipelineManager::add_shader(beyond::ZStringView filename,
+                                               ShaderStage stage) -> ShaderHandle
 {
   ZoneScoped;
   ZoneText(filename.c_str(), filename.size());
@@ -362,6 +361,8 @@ auto PipelineManager::create_graphics_pipeline(const GraphicsPipelineCreateInfo&
   for (const ShaderStageCreateInfo& shader_info : create_info.stages) {
     pipeline_dependency_map_.at(shader_info.handle).push_back(pipeline_handle);
   }
+
+  SPDLOG_INFO("{} created", create_info.debug_name);
 
   return pipeline_handle;
 }
