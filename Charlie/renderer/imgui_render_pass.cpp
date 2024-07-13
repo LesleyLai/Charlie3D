@@ -105,6 +105,7 @@ void ImguiRenderPass::pre_render()
 
 void ImguiRenderPass::render(VkCommandBuffer cmd, VkImageView image_view)
 {
+
   const VkRenderingAttachmentInfo gui_color_attachments_info{
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = image_view,

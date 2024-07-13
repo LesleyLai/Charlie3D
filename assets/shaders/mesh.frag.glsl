@@ -63,8 +63,22 @@ vec3 calculate_pixel_normal() {
     return pixel_normal;
 }
 
+vec3 aces_tone_mapping(vec3 x) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
 vec3 reinhard_tone_mapping(vec3 radiance) {
     return radiance / (radiance + vec3(1.0));
+}
+
+vec3 tone_mapping(vec3 x) {
+    // return reinhard_tone_mapping(x);
+    return aces_tone_mapping(x);
 }
 
 vec3 calculate_emission(in Material material) {
@@ -135,7 +149,7 @@ void main()
 
     vec3 Lo = ambient + emission + luminance * visibility;
 
-    vec3 color = reinhard_tone_mapping(Lo);
+    vec3 color = tone_mapping(Lo);
     out_frag_color = vec4(color, 1.0f);
 
     #endif
