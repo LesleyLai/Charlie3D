@@ -4,6 +4,7 @@
 #define CHARLIE3D_PRELUDE_HPP
 
 #include <beyond/math/math_fwd.hpp>
+#include <beyond/utils/assert.hpp>
 #include <beyond/utils/narrowing.hpp>
 #include <beyond/utils/ref.hpp>
 #include <beyond/utils/utils.hpp>

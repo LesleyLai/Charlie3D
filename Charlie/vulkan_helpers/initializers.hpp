@@ -70,8 +70,8 @@ struct ImageViewCreateInfo {
   beyond::ZStringView debug_name;
 };
 
-auto create_image_view(VkDevice device, const ImageViewCreateInfo& image_view_create_info)
-    -> Expected<VkImageView>;
+auto create_image_view(VkDevice device,
+                       const ImageViewCreateInfo& image_view_create_info) -> Expected<VkImageView>;
 
 struct ShaderModuleCreateInfo {
   beyond::ZStringView debug_name;
@@ -90,11 +90,11 @@ struct SemaphoreCreateInfo {
   beyond::ZStringView debug_name;
 };
 
-[[nodiscard]] auto create_fence(VkDevice device, const FenceCreateInfo& create_info)
-    -> Expected<VkFence>;
+[[nodiscard]] auto create_fence(VkDevice device,
+                                const FenceCreateInfo& create_info) -> Expected<VkFence>;
 
-[[nodiscard]] auto create_semaphore(VkDevice device, const SemaphoreCreateInfo& create_info)
-    -> Expected<VkSemaphore>;
+[[nodiscard]] auto
+create_semaphore(VkDevice device, const SemaphoreCreateInfo& create_info) -> Expected<VkSemaphore>;
 
 template <typename T> struct Transition {
   T src = {};

@@ -38,10 +38,6 @@ namespace {
 
   spdlog::log(log_level, "{}", p_callback_data->pMessage);
 
-  //  if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-  //    beyond::panic("Vulkan Validation error!");
-  //  }
-
   return 0;
 }
 
@@ -88,6 +84,7 @@ Context::Context(charlie::Window& window)
         .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
         .add_required_extensions(beyond::size(required_extensions), required_extensions)
         .set_required_features({
+            .multiDrawIndirect = true,
             .fillModeNonSolid = true,
         })
         .set_required_features_11({.shaderDrawParameters = true})

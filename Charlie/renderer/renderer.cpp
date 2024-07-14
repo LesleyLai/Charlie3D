@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
 #include "../vulkan_helpers/bda.hpp"
+#include "../vulkan_helpers/debug_utils.hpp"
 #include "../vulkan_helpers/error_handling.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
 #include "../vulkan_helpers/initializers.hpp"
@@ -85,6 +86,8 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
       graphics_queue_{context_.graphics_queue()},
       swapchain_{context_, {.extent = to_extent2d(resolution_)}}
 {
+  sampler_cache_ = std::make_unique<SamplerCache>(context_.device());
+
   init_depth_image();
   init_shadow_map();
   init_frame_data();
@@ -100,7 +103,7 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
   imgui_render_pass_ =
       std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
 
-  init_sampler();
+  init_default_sampler();
   init_default_texture();
 
   input_handler.add_listener(std::bind_front(&Renderer::on_input_event, std::ref(*this)));
@@ -328,7 +331,8 @@ void Renderer::init_shadow_map()
                                             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                                             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                                             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE};
-  vkCreateSampler(context_, &sampler_info, nullptr, &shadow_map_sampler_);
+  shadow_map_sampler_ = sampler_cache_->create_sampler(sampler_info);
+  VK_CHECK(vkh::set_debug_name(context_.device(), shadow_map_sampler_, "Shadow Map Sampler"));
 }
 
 void Renderer::init_frame_data()
@@ -484,7 +488,7 @@ void Renderer::init_descriptors()
                                              })
                               .value();
 
-    frame.model_matrix_buffer =
+    frame.transform_buffer =
         vkh::create_buffer(context_,
                            vkh::BufferCreateInfo{
                                .size = sizeof(Mat4) * max_object_count,
@@ -507,7 +511,7 @@ void Renderer::init_descriptors()
     frame.indirect_buffer =
         vkh::create_buffer(context_,
                            vkh::BufferCreateInfo{
-                               .size = sizeof(VkDrawIndirectCommand) * max_object_count,
+                               .size = sizeof(VkDrawIndexedIndirectCommand) * max_object_count,
                                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
@@ -538,14 +542,17 @@ void Renderer::init_descriptors()
                         VK_SHADER_STAGE_FRAGMENT_BIT)
             .build()
             .value();
-    global_descriptor_set_layout_ = global_descriptor_build_result.layout;
+    if (global_descriptor_set_layout_ == VK_NULL_HANDLE) {
+      global_descriptor_set_layout_ = global_descriptor_build_result.layout;
+    } else {
+      BEYOND_ENSURE(global_descriptor_set_layout_ == global_descriptor_build_result.layout);
+    }
     frame.global_descriptor_set = global_descriptor_build_result.set;
 
     // Objects
-    const VkDescriptorBufferInfo model_matrix_buffer_info = {
-        .buffer = frame.model_matrix_buffer.buffer,
-        .offset = 0,
-        .range = sizeof(Mat4) * max_object_count};
+    const VkDescriptorBufferInfo transform_buffer_info = {.buffer = frame.transform_buffer.buffer,
+                                                          .offset = 0,
+                                                          .range = sizeof(Mat4) * max_object_count};
     const VkDescriptorBufferInfo material_index_buffer_info = {
         .buffer = frame.material_index_buffer.buffer,
         .offset = 0,
@@ -553,7 +560,7 @@ void Renderer::init_descriptors()
 
     auto objects_descriptor_build_result =
         DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
-            .bind_buffer(0, model_matrix_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .bind_buffer(0, transform_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                          VK_SHADER_STAGE_VERTEX_BIT)
             .bind_buffer(1, material_index_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                          VK_SHADER_STAGE_VERTEX_BIT)
@@ -664,17 +671,16 @@ void Renderer::init_shadow_pipeline()
            .depth_bias_info = DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}}});
 }
 
-void Renderer::init_sampler()
+void Renderer::init_default_sampler()
 {
-  const VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                                            .magFilter = VK_FILTER_LINEAR,
-                                            .minFilter = VK_FILTER_LINEAR,
-                                            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                                            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                                            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                                            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                                            .maxLod = VK_LOD_CLAMP_NONE};
-  vkCreateSampler(context_, &sampler_info, nullptr, &default_sampler_);
+  static constexpr VkSamplerCreateInfo default_sampler_info = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .maxLod = VK_LOD_CLAMP_NONE};
+  default_sampler_ = sampler_cache_->create_sampler(default_sampler_info);
+  VK_CHECK(vkh::set_debug_name(context_.device(), default_sampler_, "Default Sampler"));
 }
 
 void Renderer::init_default_texture()
@@ -817,6 +823,35 @@ void Renderer::render(const charlie::Camera& camera)
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
   };
+
+  // populate draws
+  {
+    ZoneScopedN("Populate Draws");
+
+    draws_solid_objects_.clear();
+    draws_transparent_objects_.clear();
+
+    for (const auto [node_index, render_component] : scene_->render_components) {
+      const Mesh& mesh =
+          meshes_.try_get(render_component.mesh).expect("Cannot find mesh by handle!");
+
+      for (const auto& submesh : mesh.submeshes) {
+        const AlphaMode alpha_mode = material_alpha_modes_.at(submesh.material_index);
+
+        const RenderObject object{
+            .submesh = &submesh,
+            .node_index = node_index,
+        };
+
+        if (alpha_mode == AlphaMode::blend) {
+          draws_transparent_objects_.push_back(object);
+        } else {
+          draws_solid_objects_.push_back(object);
+        }
+      }
+    }
+  }
+
   {
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
@@ -924,9 +959,7 @@ auto Renderer::add_mesh(const CPUMesh& cpu_mesh) -> MeshHandle
 {
   std::vector<SubMesh> submeshes;
   submeshes.reserve(cpu_mesh.submeshes.size());
-  for (usize i = 0; i < cpu_mesh.submeshes.size(); ++i) {
-    const auto& submesh = cpu_mesh.submeshes[i];
-
+  for (const auto& submesh : cpu_mesh.submeshes) {
     submeshes.push_back(SubMesh{.vertex_offset = submesh.vertex_offset,
                                 .index_offset = submesh.index_offset,
                                 .index_count = submesh.index_count,
@@ -946,7 +979,7 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   vkh::cmd_pipeline_barrier2(
       cmd, {.image_barriers = std::array{
                 vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT},
+                                                   VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
                                    .access_masks = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                                                     VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
                                    .layouts = {VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1008,28 +1041,36 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
 
-  auto* object_model_matrix_data =
-      beyond::narrow<Mat4*>(context_.map(current_frame().model_matrix_buffer).value());
-  const usize object_count = scene_->global_transforms.size();
-  BEYOND_ENSURE(object_count <= max_object_count);
-  for (usize i = 0; i < object_count; ++i) {
-    object_model_matrix_data[i] = scene_->global_transforms[i];
+  auto* object_transform_data =
+      static_cast<Mat4*>(context_.map(current_frame().transform_buffer).value());
+  auto* indirect_buffer_data = static_cast<VkDrawIndexedIndirectCommand*>(
+      context_.map(current_frame().indirect_buffer).value());
+
+  const usize draw_count = draws_solid_objects_.size();
+  BEYOND_ENSURE(draw_count <= max_object_count);
+  for (usize i = 0; i < draw_count; ++i) {
+    const RenderObject& render_object = draws_solid_objects_[i];
+    object_transform_data[i] = scene_->global_transforms.at(render_object.node_index);
+    indirect_buffer_data[i] = VkDrawIndexedIndirectCommand{
+        .indexCount = render_object.submesh->index_count,
+        .instanceCount = 1,
+        .firstIndex = render_object.submesh->index_offset,
+        .vertexOffset = narrow<i32>(render_object.submesh->vertex_offset),
+        .firstInstance = narrow<u32>(i),
+    };
   }
-  context_.unmap(current_frame().model_matrix_buffer);
+  // TODO: how to handle shadows for transparent objects?
+  context_.unmap(current_frame().transform_buffer);
+  context_.unmap(current_frame().indirect_buffer);
 
   static constexpr VkDeviceSize vertex_offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &scene_->position_buffer.buffer, &vertex_offset);
   vkCmdBindIndexBuffer(cmd, scene_->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-  for (const auto [node_index, render_component] : scene_->render_components) {
-    const MeshHandle mesh_handle = render_component.mesh;
-    const auto& mesh = meshes_.try_get(mesh_handle).expect("Cannot find mesh by handle");
-
-    for (const auto& submesh : mesh.submeshes) {
-      vkCmdDrawIndexed(cmd, submesh.index_count, 1, submesh.index_offset,
-                       narrow<i32>(submesh.vertex_offset), node_index);
-    }
-  }
+  vkh::cmd_begin_debug_utils_label(cmd, "shadow mapping pass", {0.5, 0.5, 0.5, 1.0});
+  vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, 0, narrow<u32>(draw_count),
+                           sizeof(VkDrawIndexedIndirectCommand));
+  vkh::cmd_end_debug_utils_label(cmd);
 
   vkCmdEndRendering(cmd);
 
@@ -1102,28 +1143,6 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   const size_t frame_index = frame_number_ % frame_overlap;
 
-  draws_solid_objects_.clear();
-  draws_transparent_objects_.clear();
-
-  // populate draws
-  for (const auto [node_index, render_component] : scene_->render_components) {
-    const Mesh& mesh = meshes_.try_get(render_component.mesh).expect("Cannot find mesh by handle!");
-
-    for (const auto& submesh : mesh.submeshes) {
-      const AlphaMode alpha_mode = material_alpha_modes_.at(submesh.material_index);
-
-      const RenderObject object{.mesh = &mesh,
-                                .submesh = &submesh,
-                                .model_matrix = scene_->global_transforms.at(node_index)};
-
-      if (alpha_mode == AlphaMode::blend) {
-        draws_transparent_objects_.push_back(object);
-      } else {
-        draws_solid_objects_.push_back(object);
-      }
-    }
-  }
-
   // bind descriptor sets
   const u32 uniform_offset =
       beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
@@ -1138,15 +1157,29 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
                           &bindless_texture_descriptor_set_, 0, nullptr);
 
   // Copy to object buffer for solid objects
-  auto* object_model_matrix_data =
-      beyond::narrow<Mat4*>(context_.map(current_frame().model_matrix_buffer).value());
+  // Fill transform buffers
+  auto* object_transform_data =
+      static_cast<Mat4*>(context_.map(current_frame().transform_buffer).value());
+
   auto* object_material_index_data =
       beyond::narrow<i32*>(context_.map(current_frame().material_index_buffer).value());
-  BEYOND_ENSURE(draws_solid_objects_.size() <= max_object_count);
-  for (usize i = 0; i < draws_solid_objects_.size(); ++i) {
+
+  auto* indirect_buffer_data = static_cast<VkDrawIndexedIndirectCommand*>(
+      context_.map(current_frame().indirect_buffer).value());
+
+  const usize solid_draw_count = draws_solid_objects_.size();
+  BEYOND_ENSURE(solid_draw_count <= max_object_count);
+  for (usize i = 0; i < solid_draw_count; ++i) {
     const RenderObject& render_object = draws_solid_objects_[i];
-    object_model_matrix_data[i] = render_object.model_matrix;
     object_material_index_data[i] = narrow<i32>(render_object.submesh->material_index);
+    object_transform_data[i] = scene_->global_transforms.at(render_object.node_index);
+    indirect_buffer_data[i] = VkDrawIndexedIndirectCommand{
+        .indexCount = render_object.submesh->index_count,
+        .instanceCount = 1,
+        .firstIndex = render_object.submesh->index_offset,
+        .vertexOffset = narrow<i32>(render_object.submesh->vertex_offset),
+        .firstInstance = narrow<u32>(i),
+    };
   }
 
   // Vertex and index buffers
@@ -1162,36 +1195,40 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       pipeline_manager_->get_pipeline(pipeline_handle));
 
-    for (u32 i = 0; i < draws_solid_objects_.size(); ++i) {
-      const SubMesh& submesh = *draws_solid_objects_[i].submesh;
+    const MeshPushConstant push_constant{
+        .position_buffer_address = pos_buffer_address,
+        .vertex_buffer_address = vertex_buffer_address,
+    };
+    vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(MeshPushConstant), &push_constant);
 
-      const MeshPushConstant push_constant{
-          .position_buffer_address = pos_buffer_address,
-          .vertex_buffer_address = vertex_buffer_address,
-      };
-      vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                         sizeof(MeshPushConstant), &push_constant);
-      vkCmdDrawIndexed(cmd, submesh.index_count, 1, submesh.index_offset,
-                       narrow<i32>(submesh.vertex_offset), i);
-    }
+    vkh::cmd_begin_debug_utils_label(cmd, "solid objects pass", {0.084f, 0.135f, 0.394f, 1.0f});
+    vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, 0, narrow<u32>(solid_draw_count),
+                             sizeof(VkDrawIndexedIndirectCommand));
+    vkh::cmd_end_debug_utils_label(cmd);
   }
 
   // Copy to object buffer for transparent objects
-  BEYOND_ENSURE(draws_transparent_objects_.size() <= max_object_count);
-  for (usize i = 0; i < draws_transparent_objects_.size(); ++i) {
-    const RenderObject& render_object = draws_transparent_objects_[i];
-    object_model_matrix_data[i] = render_object.model_matrix;
-    object_material_index_data[i] = narrow<i32>(render_object.submesh->material_index);
-  }
+  const usize transparent_draw_count = draws_transparent_objects_.size();
+  if (transparent_draw_count > 0) {
+    BEYOND_ENSURE(transparent_draw_count <= max_object_count);
+    for (usize i = 0; i < transparent_draw_count; ++i) {
+      const RenderObject& render_object = draws_transparent_objects_[i];
+      object_material_index_data[i] = narrow<i32>(render_object.submesh->material_index);
+      object_transform_data[i] = scene_->global_transforms.at(render_object.node_index);
+      indirect_buffer_data[i] = VkDrawIndexedIndirectCommand{
+          .indexCount = render_object.submesh->index_count,
+          .instanceCount = 1,
+          .firstIndex = render_object.submesh->index_offset,
+          .vertexOffset = narrow<i32>(render_object.submesh->vertex_offset),
+          .firstInstance = narrow<u32>(i),
+      };
+    }
 
-  // draw transparent object
-  {
-    const auto pipeline_handle = mesh_pipeline_transparent_;
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline_manager_->get_pipeline(pipeline_handle));
-
-    for (u32 i = 0; i < draws_transparent_objects_.size(); ++i) {
-      const SubMesh& submesh = *draws_transparent_objects_[i].submesh;
+    {
+      const auto pipeline_handle = mesh_pipeline_transparent_;
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline_manager_->get_pipeline(pipeline_handle));
 
       const MeshPushConstant push_constant{
           .position_buffer_address = pos_buffer_address,
@@ -1200,12 +1237,19 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
                          sizeof(MeshPushConstant), &push_constant);
 
-      vkCmdDrawIndexed(cmd, submesh.index_count, 1, submesh.index_offset, submesh.vertex_offset, i);
+      vkh::cmd_begin_debug_utils_label(cmd, "transparent objects pass", {1.0f, 0.9f, 0.9f, 1.0f});
+
+      vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, 0,
+                               narrow<u32>(transparent_draw_count),
+                               sizeof(VkDrawIndexedIndirectCommand));
+
+      vkh::cmd_end_debug_utils_label(cmd);
     }
   }
 
-  context_.unmap(current_frame().model_matrix_buffer);
+  context_.unmap(current_frame().transform_buffer);
   context_.unmap(current_frame().material_index_buffer);
+  context_.unmap(current_frame().indirect_buffer);
 
   vkCmdEndRendering(cmd);
 }
@@ -1217,8 +1261,6 @@ Renderer::~Renderer()
   imgui_render_pass_ = nullptr;
 
   // TODO: destroy scene
-
-  vkDestroySampler(context_, default_sampler_, nullptr);
 
   for (auto texture : textures_) { vkDestroyImageView(context_, texture.image_view, nullptr); }
   for (auto image : images_) { vkh::destroy_image(context_, image); }
@@ -1234,8 +1276,6 @@ Renderer::~Renderer()
   vkDestroyImageView(context_, shadow_map_image_view_, nullptr);
   vkh::destroy_image(context_, shadow_map_image_);
 
-  vkDestroySampler(context_, shadow_map_sampler_, nullptr);
-
   descriptor_allocator_ = nullptr;
   descriptor_layout_cache_ = nullptr;
 
@@ -1244,7 +1284,6 @@ Renderer::~Renderer()
     TracyVkDestroy(frame.tracy_vk_ctx);
 
     vkh::destroy_buffer(context_, frame.indirect_buffer);
-    vkh::destroy_buffer(context_, frame.model_matrix_buffer);
     vkh::destroy_buffer(context_, frame.camera_buffer);
 
     vkDestroyFence(context_, frame.render_fence, nullptr);
@@ -1252,6 +1291,8 @@ Renderer::~Renderer()
     vkDestroySemaphore(context_, frame.present_semaphore, nullptr);
     vkDestroyCommandPool(context_, frame.command_pool, nullptr);
   }
+
+  sampler_cache_ = nullptr;
 }
 
 void Renderer::on_input_event(const Event& event, const InputStates& /*states*/)

@@ -25,4 +25,19 @@ void report_fail_to_set_debug_name(beyond::ZStringView name) noexcept
   fmt::print("Cannot create debug name for {}\n", name);
 }
 
+void cmd_begin_debug_utils_label(VkCommandBuffer cmd, beyond::ZStringView label_name,
+                                 std::array<float, 4> color)
+{
+  VkDebugUtilsLabelEXT label_info{.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+                                  .pNext = nullptr,
+                                  .pLabelName = label_name.c_str()};
+  std::ranges::copy(color, label_info.color);
+  vkCmdBeginDebugUtilsLabelEXT(cmd, &label_info);
+}
+
+void cmd_end_debug_utils_label(VkCommandBuffer cmd)
+{
+  vkCmdEndDebugUtilsLabelEXT(cmd);
+}
+
 } // namespace vkh

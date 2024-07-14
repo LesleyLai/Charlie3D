@@ -68,7 +68,7 @@ void main()
     vec2 in_tex_coord = in_vertex.tex_coord;
     vec4 in_tangent = in_vertex.tangent;
 
-    mat4 model = object_buffer.objects[gl_BaseInstance].model;
+    mat4 model = object_buffer.objects[gl_InstanceIndex].model;
     mat4 transform_matrix = camera.view_proj * model;
     vec4 world_pos = camera.view * model * vec4(in_position, 1.0f);
     out_world_pos = (world_pos / world_pos.w).xyz;
@@ -81,5 +81,5 @@ void main()
 
     out_shadow_coord = light_space_to_NDC * scene_data.sunlight_view_proj * model * vec4(in_position, 1.0);
 
-    out_material_index = material_index_buffer.material_ids[gl_BaseInstance];
+    out_material_index = material_index_buffer.material_ids[gl_InstanceIndex];
 }

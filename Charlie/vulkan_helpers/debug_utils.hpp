@@ -58,4 +58,9 @@ template <typename VkHandle>
 
 void report_fail_to_set_debug_name(beyond::ZStringView name) noexcept;
 
+void cmd_begin_debug_utils_label(VkCommandBuffer cmd, beyond::ZStringView label_name,
+                                 std::array<float, 4> color);
+
+void cmd_end_debug_utils_label(VkCommandBuffer cmd);
+
 } // namespace vkh

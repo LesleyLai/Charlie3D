@@ -19,6 +19,7 @@
 #include "mesh.hpp"
 #include "pipeline_manager.hpp"
 #include "render_pass.hpp"
+#include "sampler_cache.hpp"
 #include "scene.hpp"
 #include "uploader.hpp"
 
@@ -61,9 +62,9 @@ struct Material {
 };
 
 struct RenderObject {
-  const Mesh* mesh = nullptr;
   const SubMesh* submesh = nullptr;
-  Mat4 model_matrix;
+  u32 node_index = static_cast<u32>(~0); // Index of the node in scene graph. Used to look up
+                                         // informations such as the transformations
 };
 
 constexpr unsigned int frame_overlap = 2;
@@ -77,7 +78,7 @@ struct FrameData {
   vkh::AllocatedBuffer camera_buffer{};
   VkDescriptorSet global_descriptor_set{};
 
-  vkh::AllocatedBuffer model_matrix_buffer{};
+  vkh::AllocatedBuffer transform_buffer{}; // model matrix for each scene graph node
   vkh::AllocatedBuffer material_index_buffer{};
   VkDescriptorSet object_descriptor_set{};
 
@@ -199,8 +200,9 @@ private:
   vkh::Context context_;
   VkQueue graphics_queue_{};
 
-  vkh::Swapchain swapchain_;
+  std::unique_ptr<SamplerCache> sampler_cache_{};
 
+  vkh::Swapchain swapchain_;
   UploadContext upload_context_;
 
   static constexpr VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
@@ -270,7 +272,7 @@ private:
   void init_pipelines();
   void init_shadow_pipeline();
   void init_mesh_pipeline();
-  void init_sampler();
+  void init_default_sampler();
   void init_default_texture();
 
   void on_input_event(const Event& event, const InputStates& states);
