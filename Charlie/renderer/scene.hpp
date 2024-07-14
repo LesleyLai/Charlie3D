@@ -14,6 +14,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <beyond/container/slot_map.hpp>
+#include <beyond/types/expected.hpp>
 
 #include "../asset_handling/cpu_scene.hpp"
 
@@ -52,7 +53,12 @@ struct Scene {
   }
 };
 
-[[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene;
+/**
+ * Load a scene from disk and upload relavant data to the GPU
+ * @return Returns either a scene, or a string indicating an error message
+ */
+[[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer)
+    -> beyond::expected<std::unique_ptr<Scene>, std::string>;
 
 } // namespace charlie
 #endif // CHARLIE3D_SCENE_HPP

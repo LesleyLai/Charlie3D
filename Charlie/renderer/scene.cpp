@@ -130,12 +130,21 @@ namespace charlie {
   };
 }
 
-[[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer) -> Scene
+[[nodiscard]] auto load_scene(std::string_view filename, Renderer& renderer)
+    -> beyond::expected<std::unique_ptr<Scene>, std::string>
 {
   ZoneScoped;
 
   const auto start = std::chrono::steady_clock::now();
-  Scene scene = upload_scene(load_cpu_scene(filename), renderer);
+
+  CPUScene cpu_scene;
+  try {
+    cpu_scene = load_cpu_scene(filename);
+  } catch (const SceneLoadingError& error) {
+    return beyond::unexpected(std::string{error.what()});
+  }
+
+  auto scene = std::make_unique<Scene>(upload_scene(std::move(cpu_scene), renderer));
   const auto finish = std::chrono::steady_clock::now();
 
   SPDLOG_INFO("Load {} in {}", filename, std::chrono::duration<double, std::milli>{finish - start});

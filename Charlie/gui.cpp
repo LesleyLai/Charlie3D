@@ -25,12 +25,19 @@ void draw_gui_main_menu(charlie::Renderer& renderer)
     if (ImGui::BeginMenu("File")) {
       if (ImGui::MenuItem("Open Model", "Ctrl+O")) {
         const char* filter_patterns[] = {"*.gltf", "*.glb", "*.obj"};
-        const auto* result =
+        const auto* path =
             tinyfd_openFileDialog("title", nullptr, narrow<int>(std::size(filter_patterns)),
                                   filter_patterns, "model files", 0);
-        if (result != nullptr) {
-          renderer.set_scene(
-              std::make_unique<charlie::Scene>(charlie::load_scene(result, renderer)));
+        if (path != nullptr) {
+          charlie::load_scene(path, renderer)
+              .map_error([&](const std::string& msg) {
+                tinyfd_messageBox(
+                    "Error", fmt::format("Error while loading {}: {}", path, msg.c_str()).c_str(),
+                    "ok", "error", 0);
+              })
+              .map([&](std::unique_ptr<charlie::Scene>&& scene) {
+                renderer.set_scene(std::move(scene));
+              });
         }
       }
       ImGui::EndMenu();

@@ -183,7 +183,7 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
               buffer.data);
 
         } else {
-          beyond::panic("Unsupported image data format!");
+          throw charlie::SceneLoadingError("Unsupported image data format!");
         }
       },
       image.data);
@@ -327,6 +327,13 @@ template <typename T>
   return result;
 }
 
+template <typename T, typename Exception>
+auto or_throw(beyond::optional<T>&& opt, Exception&& msg) -> T
+{
+  if (not opt.has_value()) { throw std::forward<Exception>(msg); }
+  return *opt;
+}
+
 // Convert mesh from fastgltf format to charlie::CPUMesh
 auto convert_meshes(const fastgltf::Asset& asset,
                     beyond::Ref<charlie::CPUMeshBuffers> buffers) -> std::vector<charlie::CPUMesh>
@@ -369,15 +376,18 @@ auto convert_meshes(const fastgltf::Asset& asset,
       };
 
       const usize position_accessor_id =
-          find_attribute_id(primitive, "POSITION").expect("Mesh misses POSITION attribute!");
+          or_throw(find_attribute_id(primitive, "POSITION"),
+                   charlie::SceneLoadingError("Mesh misses POSITION attribute!"));
       const usize normal_accessor_id =
-          find_attribute_id(primitive, "NORMAL").expect("Mesh misses POSITION attribute!");
+          or_throw(find_attribute_id(primitive, "NORMAL"),
+                   charlie::SceneLoadingError("Mesh misses NORMAL attribute!"));
       const beyond::optional<usize> tangent_accessor_id = find_attribute_id(primitive, "TANGENT");
       const beyond::optional<usize> texture_coord_accessor_id =
           find_attribute_id(primitive, "TEXCOORD_0");
 
-      BEYOND_ENSURE_MSG(primitive.indicesAccessor.has_value(),
-                        "Meshes without index accessor is not supported");
+      if (not primitive.indicesAccessor.has_value()) {
+        throw charlie::SceneLoadingError("Meshes without index accessor is not supported");
+      }
       const usize index_accessor_id = primitive.indicesAccessor.value();
 
       const fastgltf::Accessor& position_accessor = asset.accessors.at(position_accessor_id);
@@ -385,8 +395,12 @@ auto convert_meshes(const fastgltf::Asset& asset,
       const fastgltf::Accessor& index_accessor = asset.accessors.at(index_accessor_id);
 
       using fastgltf::AccessorType;
-      BEYOND_ENSURE(position_accessor.type == AccessorType::Vec3);
-      BEYOND_ENSURE(index_accessor.type == AccessorType::Scalar);
+      if (position_accessor.type != AccessorType::Vec3) {
+        throw charlie::SceneLoadingError("Position Accessor should have Vec3 type");
+      }
+      if (index_accessor.type != AccessorType::Scalar) {
+        throw charlie::SceneLoadingError("Index Accessor should have Scalar type");
+      }
 
       const auto vertex_count = position_accessor.count;
 
@@ -455,6 +469,22 @@ auto convert_meshes(const fastgltf::Asset& asset,
   return meshes;
 }
 
+[[nodiscard]] auto convert_filter(fastgltf::Filter filter) -> charlie::SamplerFilter
+{
+  switch (filter) {
+  case fastgltf::Filter::Nearest:
+  case fastgltf::Filter::NearestMipMapNearest:
+  case fastgltf::Filter::NearestMipMapLinear:
+    return charlie::SamplerFilter::Nearest;
+
+  case fastgltf::Filter::Linear:
+  case fastgltf::Filter::LinearMipMapNearest:
+  case fastgltf::Filter::LinearMipMapLinear:
+  default:
+    return charlie::SamplerFilter::Linear;
+  }
+}
+
 } // anonymous namespace
 
 namespace charlie {
@@ -467,8 +497,7 @@ static beyond::ThreadPool bg_thread_pool;
 
   auto maybe_asset = parse_gltf_from_file(file_path);
   if (const auto error = maybe_asset.error(); error != fastgltf::Error::None) {
-    beyond::panic(fmt::format("Error while loading {}: {}", file_path.string(),
-                              fastgltf::getErrorMessage(error)));
+    throw SceneLoadingError(std::string{fastgltf::getErrorMessage(error)});
   }
   fastgltf::Asset& asset = maybe_asset.get();
 
@@ -500,9 +529,19 @@ static beyond::ThreadPool bg_thread_pool;
 
   result.meshes = convert_meshes(asset, beyond::ref(result.buffers));
 
+  {
+    result.samplers.reserve(asset.samplers.size());
+    for (const auto& sampler : asset.samplers) {
+      result.samplers.push_back(SamplerInfo{
+          .mag_filter = convert_filter(sampler.magFilter.value_or(fastgltf::Filter::Nearest)),
+          .min_filter = convert_filter(sampler.minFilter.value_or(fastgltf::Filter::Nearest)),
+          .name = std::string{sampler.name},
+      });
+    }
+  }
+
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {
-    SPDLOG_ERROR("GLTF validation error {} from {}", fastgltf::getErrorName(error),
-                 file_path.string());
+    throw SceneLoadingError(std::string{fastgltf::getErrorName(error)});
   }
 
   image_loading_latch.wait();

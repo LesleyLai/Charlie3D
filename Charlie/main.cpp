@@ -64,7 +64,7 @@ auto main(int argc, const char** argv) -> int
         }
       });
 
-  renderer.set_scene(std::make_unique<charlie::Scene>(charlie::load_scene(scene_file, renderer)));
+  renderer.set_scene(charlie::load_scene(scene_file, renderer).value());
 
   using Clock = std::chrono::steady_clock;
   using namespace std::literals::chrono_literals;

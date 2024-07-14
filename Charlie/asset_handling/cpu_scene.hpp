@@ -52,12 +52,16 @@ struct Nodes {
   std::vector<i32> mesh_indices; // -1 for no mesh
 };
 
-// Used to add new nodes to scene
-struct NodeInfo {
+enum class SamplerFilter : std::uint8_t {
+  Nearest,
+  Linear,
+};
+
+// Information of samplers used for textures in a scene
+struct SamplerInfo {
+  SamplerFilter mag_filter;
+  SamplerFilter min_filter;
   std::string name;
-  Mat4 local_transform;
-  i32 parent_index = -1; // -1 for no parent
-  i32 mesh_index = -1;   // -1 for no mesh
 };
 
 // Mirrors the scene-graph structure but all data here are on CPU
@@ -72,6 +76,7 @@ struct CPUScene {
   std::vector<CPUMaterial> materials;
   std::vector<CPUImage> images;
   std::vector<CPUTexture> textures;
+  std::vector<SamplerInfo> samplers;
 };
 
 template <typename Func> void offset_material_indices(Ref<CPUScene> scene, Func func)
@@ -83,6 +88,10 @@ template <typename Func> void offset_material_indices(Ref<CPUScene> scene, Func 
     }
   }
 }
+
+struct SceneLoadingError : std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
 
 } // namespace charlie
 
