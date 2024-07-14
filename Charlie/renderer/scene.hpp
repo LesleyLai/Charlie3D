@@ -15,7 +15,7 @@
 
 #include <beyond/container/slot_map.hpp>
 
-#include "../asset/cpu_scene.hpp"
+#include "../asset_handling/cpu_scene.hpp"
 
 namespace charlie {
 

@@ -773,14 +773,12 @@ void Renderer::update(const charlie::Camera& camera)
     scene_parameters_.sunlight_view_proj = beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *
                                            beyond::look_at(-dir, Vec3(0.0), up);
 
-    char* scene_data = nullptr;
-    vmaMapMemory(context_.allocator(), scene_parameter_buffer_.allocation, (void**)&scene_data);
-
+    char* scene_data = static_cast<char*>(context_.map(scene_parameter_buffer_).value());
     const size_t frame_index = frame_number_ % frame_overlap;
 
     scene_data += context_.align_uniform_buffer_size(sizeof(GPUSceneParameters)) * frame_index;
     memcpy(scene_data, &scene_parameters_, sizeof(GPUSceneParameters));
-    vmaUnmapMemory(context_.allocator(), scene_parameter_buffer_.allocation);
+    context_.unmap(scene_parameter_buffer_);
   }
 }
 

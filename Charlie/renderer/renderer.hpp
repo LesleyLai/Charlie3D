@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../asset/cpu_mesh.hpp"
+#include "../asset_handling/cpu_mesh.hpp"
 #include "../utils/prelude.hpp"
 #include "../vulkan_helpers/buffer.hpp"
 #include "../vulkan_helpers/context.hpp"
@@ -14,7 +14,7 @@
 #include <beyond/utils/function_ref.hpp>
 #include <beyond/utils/ref.hpp>
 
-#include "../asset/cpu_scene.hpp"
+#include "../asset_handling/cpu_scene.hpp"
 #include "deletion_queue.hpp"
 #include "mesh.hpp"
 #include "pipeline_manager.hpp"

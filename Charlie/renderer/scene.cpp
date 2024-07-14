@@ -1,7 +1,7 @@
 #include "scene.hpp"
 
-#include "../asset/gltf_loader.hpp"
-#include "../asset/obj_loader.hpp"
+#include "../asset_handling/gltf_loader.hpp"
+#include "../asset_handling/obj_loader.hpp"
 
 #include "../utils/asset_path.hpp"
 

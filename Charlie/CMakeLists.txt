@@ -1,6 +1,6 @@
 add_subdirectory(utils)
 add_subdirectory(window)
-add_subdirectory(asset)
+add_subdirectory(asset_handling)
 add_subdirectory(shader_compiler)
 add_subdirectory(vulkan_helpers)
 add_subdirectory(renderer)
