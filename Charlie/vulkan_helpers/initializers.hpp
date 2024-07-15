@@ -9,6 +9,15 @@
 
 namespace vkh {
 
+struct CommandPoolCreateInfo {
+  VkCommandPoolCreateFlags flags = 0;
+  std::uint32_t queue_family_index = 0;
+  beyond::ZStringView debug_name;
+};
+
+[[nodiscard]] auto
+create_command_pool(VkDevice device, CommandPoolCreateInfo create_info) -> Expected<VkCommandPool>;
+
 struct CommandBufferAllocInfo {
   VkCommandPool command_pool{};
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;

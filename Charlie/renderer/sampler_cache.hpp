@@ -4,9 +4,7 @@
 #include "../utils/prelude.hpp"
 #include "../vulkan_helpers/error_handling.hpp"
 
-// #include <vulkan/vulkan_core.h>
-
-#include <volk.h>
+#include <vulkan/vulkan_core.h>
 
 #include <beyond/utils/copy_move.hpp>
 #include <beyond/utils/hash.hpp>
@@ -71,28 +69,19 @@ class SamplerCache {
   VkDevice device_ = nullptr;
   std::unordered_map<VkSamplerCreateInfo, VkSampler, std::hash<VkSamplerCreateInfo>, SamplerEqualTo>
       map_;
+  VkSampler default_sampler_ = VK_NULL_HANDLE;
 
 public:
-  explicit SamplerCache(VkDevice device) : device_{device} {}
-  ~SamplerCache()
-  {
-    for (auto pair : map_) { vkDestroySampler(device_, pair.second, nullptr); }
-  }
+  explicit SamplerCache(VkDevice device);
+  ~SamplerCache();
 
   BEYOND_DELETE_COPY(SamplerCache);
   BEYOND_DELETE_MOVE(SamplerCache);
 
-  [[nodiscard]] auto create_sampler(const VkSamplerCreateInfo& create_info) -> VkSampler
-  {
-    if (const auto itr = map_.find(create_info); itr != map_.end()) {
-      return itr->second;
-    } else {
-      VkSampler sampler = VK_NULL_HANDLE;
-      VK_CHECK(vkCreateSampler(device_, &create_info, nullptr, &sampler));
-      map_.emplace(create_info, sampler);
-      return sampler;
-    }
-  }
+  [[nodiscard]] auto create_sampler(const VkSamplerCreateInfo& create_info) -> VkSampler;
+
+  // Gets the default sampler
+  [[nodiscard]] auto default_sampler() const -> VkSampler;
 };
 
 } // namespace charlie

@@ -351,6 +351,10 @@ void PipelineManager::update()
 auto PipelineManager::create_graphics_pipeline(const GraphicsPipelineCreateInfo& create_info)
     -> GraphicsPipelineHandle
 {
+  ZoneScoped;
+  if (not create_info.debug_name.empty()) {
+    ZoneText(create_info.debug_name.c_str(), create_info.debug_name.size());
+  }
 
   VkPipeline pipeline = create_graphics_pipeline_impl(device_, create_info);
 

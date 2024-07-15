@@ -10,6 +10,20 @@
 
 namespace vkh {
 
+[[nodiscard]] auto create_command_pool(VkDevice device,
+                                       CommandPoolCreateInfo create_info) -> Expected<VkCommandPool>
+{
+  const VkCommandPoolCreateInfo command_pool_create_info{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = create_info.flags,
+      .queueFamilyIndex = create_info.queue_family_index};
+
+  VkCommandPool command_pool{};
+  VKH_TRY(vkCreateCommandPool(device, &command_pool_create_info, nullptr, &command_pool));
+  VKH_TRY(vkh::set_debug_name(device, command_pool, create_info.debug_name));
+  return command_pool;
+}
+
 [[nodiscard]] auto allocate_command_buffer(VkDevice device, CommandBufferAllocInfo alloc_info)
     -> Expected<VkCommandBuffer>
 {
@@ -67,8 +81,8 @@ auto create_descriptor_set_layout(VkDevice device, const DescriptorSetLayoutCrea
   return layout;
 }
 
-auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)
-    -> Expected<AllocatedBuffer>
+auto create_buffer(vkh::Context& context,
+                   const BufferCreateInfo& buffer_create_info) -> Expected<AllocatedBuffer>
 {
   const VkBufferCreateInfo vk_buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -108,8 +122,8 @@ void destroy_buffer(vkh::Context& context, AllocatedBuffer buffer)
   vmaDestroyBuffer(context.allocator(), buffer.buffer, buffer.allocation);
 }
 
-auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_info)
-    -> Expected<AllocatedImage>
+auto create_image(vkh::Context& context,
+                  const ImageCreateInfo& image_create_info) -> Expected<AllocatedImage>
 {
   const VkImageCreateInfo vk_image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -151,8 +165,8 @@ void destroy_image(Context& context, AllocatedImage& image)
   vmaDestroyImage(context.allocator(), image.image, image.allocation);
 }
 
-auto create_image_view(VkDevice device, const ImageViewCreateInfo& image_view_create_info)
-    -> Expected<VkImageView>
+auto create_image_view(VkDevice device,
+                       const ImageViewCreateInfo& image_view_create_info) -> Expected<VkImageView>
 {
   const VkImageViewCreateInfo create_info{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                                           .pNext = nullptr,
@@ -193,8 +207,8 @@ auto create_image_view(VkDevice device, const ImageViewCreateInfo& image_view_cr
   return shader_module;
 }
 
-[[nodiscard]] auto create_fence(VkDevice device, const FenceCreateInfo& create_info)
-    -> Expected<VkFence>
+[[nodiscard]] auto create_fence(VkDevice device,
+                                const FenceCreateInfo& create_info) -> Expected<VkFence>
 {
   const VkFenceCreateInfo fence_create_info{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -212,8 +226,8 @@ auto create_image_view(VkDevice device, const ImageViewCreateInfo& image_view_cr
   return fence;
 }
 
-[[nodiscard]] auto create_semaphore(VkDevice device, const SemaphoreCreateInfo& create_info)
-    -> Expected<VkSemaphore>
+[[nodiscard]] auto create_semaphore(VkDevice device,
+                                    const SemaphoreCreateInfo& create_info) -> Expected<VkSemaphore>
 {
   const VkSemaphoreCreateInfo semaphore_create_info{
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,

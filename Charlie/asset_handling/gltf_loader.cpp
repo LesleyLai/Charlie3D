@@ -1,5 +1,6 @@
 #include "gltf_loader.hpp"
 
+#include "../utils/background_tasks.hpp"
 #include "../utils/prelude.hpp"
 
 #include <fastgltf/parser.hpp>
@@ -16,8 +17,6 @@
 #include <beyond/types/optional.hpp>
 #include <beyond/types/optional_conversion.hpp>
 #include <beyond/utils/narrowing.hpp>
-
-#include <beyond/concurrency/thread_pool.hpp>
 
 #include <latch>
 
@@ -266,6 +265,8 @@ auto populate_global_transforms(std::span<const i32> parent_indices,
 [[nodiscard]]
 auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nodes
 {
+  ZoneScoped;
+
   charlie::Nodes result;
 
   std::vector<i32> parent_indices;
@@ -334,6 +335,13 @@ auto or_throw(beyond::optional<T>&& opt, Exception&& msg) -> T
   return *opt;
 }
 
+struct SubmeshIntermediateData {
+  beyond::optional<u32> material_index;
+  std::vector<Point3> positions;
+  std::vector<charlie::Vertex> vertices;
+  std::vector<u32> indices;
+};
+
 // Convert mesh from fastgltf format to charlie::CPUMesh
 auto convert_meshes(const fastgltf::Asset& asset,
                     beyond::Ref<charlie::CPUMeshBuffers> buffers) -> std::vector<charlie::CPUMesh>
@@ -342,13 +350,6 @@ auto convert_meshes(const fastgltf::Asset& asset,
 
   std::vector<charlie::CPUMesh> meshes;
   meshes.reserve(asset.meshes.size());
-
-  struct SubmeshIntermediateData {
-    beyond::optional<u32> material_index;
-    std::vector<Point3> positions;
-    std::vector<charlie::Vertex> vertices;
-    std::vector<u32> indices;
-  };
 
   // TODO: mesh name
   std::vector<std::vector<SubmeshIntermediateData>> meshes_intermediate;
@@ -364,8 +365,9 @@ auto convert_meshes(const fastgltf::Asset& asset,
     submeshes_intermediate.reserve(mesh.primitives.size());
 
     for (const auto& primitive : mesh.primitives) {
-      BEYOND_ENSURE_MSG(primitive.type == fastgltf::PrimitiveType::Triangles,
-                        "Non triangle-list mesh is not supported");
+      if (primitive.type != fastgltf::PrimitiveType::Triangles) {
+        throw charlie::SceneLoadingError("Non triangle-list mesh is not supported");
+      }
       constexpr auto find_attribute_id = [](const fastgltf::Primitive& primitive,
                                             std::string_view name) -> beyond::optional<usize> {
         if (const auto itr = primitive.findAttribute(name); itr != primitive.attributes.end()) {
@@ -485,11 +487,18 @@ auto convert_meshes(const fastgltf::Asset& asset,
   }
 }
 
+[[nodiscard]] auto convert_sampler(fastgltf::Sampler sampler) -> charlie::SamplerInfo
+{
+  return {
+      .mag_filter = convert_filter(sampler.magFilter.value_or(fastgltf::Filter::Nearest)),
+      .min_filter = convert_filter(sampler.minFilter.value_or(fastgltf::Filter::Nearest)),
+      .name = std::string{sampler.name},
+  };
+}
+
 } // anonymous namespace
 
 namespace charlie {
-
-static beyond::ThreadPool bg_thread_pool;
 
 [[nodiscard]] auto load_gltf(const std::filesystem::path& file_path) -> CPUScene
 {
@@ -509,14 +518,14 @@ static beyond::ThreadPool bg_thread_pool;
 
   result.images.resize(asset.images.size());
   for (const auto& [i, image] : std::views::enumerate(asset.images)) {
-    bg_thread_pool.async([&, i]() {
+    background_thread_pool().async([&, i]() {
       result.images[i] = load_raw_image_data(gltf_directory, asset, image);
       image_loading_latch.count_down();
     });
   }
 
   {
-    ZoneScopedN("Convert Textures");
+    ZoneScopedN("Convert TextureManager");
     result.textures.reserve(asset.textures.size());
     std::ranges::transform(asset.textures, std::back_inserter(result.textures), to_cpu_texture);
   }
@@ -530,14 +539,9 @@ static beyond::ThreadPool bg_thread_pool;
   result.meshes = convert_meshes(asset, beyond::ref(result.buffers));
 
   {
+    ZoneScopedN("Convert Samplers");
     result.samplers.reserve(asset.samplers.size());
-    for (const auto& sampler : asset.samplers) {
-      result.samplers.push_back(SamplerInfo{
-          .mag_filter = convert_filter(sampler.magFilter.value_or(fastgltf::Filter::Nearest)),
-          .min_filter = convert_filter(sampler.minFilter.value_or(fastgltf::Filter::Nearest)),
-          .name = std::string{sampler.name},
-      });
-    }
+    std::ranges::transform(asset.samplers, std::back_inserter(result.samplers), convert_sampler);
   }
 
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {

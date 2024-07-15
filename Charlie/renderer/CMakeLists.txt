@@ -14,7 +14,11 @@ add_library(charlie3d_renderer
         scene.cpp scene.hpp
         pipeline_manager.cpp
         pipeline_manager.hpp
-        sampler_cache.hpp)
+        sampler_cache.hpp
+        textures.cpp
+        textures.hpp
+        sampler_cache.cpp
+        sampler_cache.cpp)
 
 # Disable warnings for imgui impl files
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

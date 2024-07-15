@@ -4,6 +4,7 @@
 #include "../asset_handling/obj_loader.hpp"
 
 #include "../utils/asset_path.hpp"
+#include "../utils/background_tasks.hpp"
 
 #include "../vulkan_helpers/initializers.hpp"
 
@@ -15,6 +16,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <fmt/chrono.h>
+#include <latch>
 
 namespace charlie {
 
@@ -45,6 +47,7 @@ namespace charlie {
   std::vector<VkImageView> image_views(cpu_scene.images.size(), VK_NULL_HANDLE);
   {
     ZoneScopedN("Upload images");
+
     for (usize i = 0; i < cpu_scene.images.size(); ++i) {
       const CPUImage& cpu_image = cpu_scene.images[i];
       const u32 mip_levels =

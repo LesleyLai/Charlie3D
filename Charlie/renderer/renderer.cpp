@@ -28,9 +28,6 @@
 
 namespace {
 
-static constexpr uint32_t max_bindless_texture_count = 1024;
-static constexpr uint32_t bindless_texture_binding = 10;
-
 struct GPUCameraData {
   beyond::Mat4 view;
   beyond::Mat4 proj;
@@ -84,218 +81,34 @@ namespace charlie {
 Renderer::Renderer(Window& window, InputHandler& input_handler)
     : window_{&window}, resolution_{window.resolution()}, context_{window},
       graphics_queue_{context_.graphics_queue()},
-      swapchain_{context_, {.extent = to_extent2d(resolution_)}}
+      swapchain_{context_, {.extent = to_extent2d(resolution_)}},
+      sampler_cache_{std::make_unique<SamplerCache>(context_.device())},
+      shader_compiler_{std::make_unique<ShaderCompiler>()},
+      pipeline_manager_{std::make_unique<PipelineManager>(context_)},
+      upload_context_{init_upload_context(context_).expect("Failed to create upload context")},
+      textures_{std::make_unique<TextureManager>(context_, upload_context_,
+                                                 sampler_cache_->default_sampler())}
 {
-  sampler_cache_ = std::make_unique<SamplerCache>(context_.device());
-
   init_depth_image();
   init_shadow_map();
   init_frame_data();
   init_descriptors();
-
-  shader_compiler_ = std::make_unique<ShaderCompiler>();
-  pipeline_manager_ = std::make_unique<PipelineManager>(context_);
-
   init_pipelines();
 
-  upload_context_ = init_upload_context(context_).expect("Failed to create upload context");
+  {
+    ZoneScopedN("Imgui Render Pass");
 
-  imgui_render_pass_ =
-      std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
-
-  init_default_sampler();
-  init_default_texture();
-
-  input_handler.add_listener(std::bind_front(&Renderer::on_input_event, std::ref(*this)));
-}
-
-static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution image_resolution,
-                                u32 mip_levels)
-{
-  vkh::ImageBarrier2 barrier{.image = image,
-                             .subresource_range = {
-                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1,
-                             }};
-
-  i32 mip_width = narrow<i32>(image_resolution.width);
-  i32 mip_height = narrow<i32>(image_resolution.height);
-
-  for (u32 i = 1; i < mip_levels; i++) {
-    barrier.subresource_range.baseMipLevel = i - 1;
-    barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
-    barrier.access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_TRANSFER_READ_BIT};
-    barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT};
-    vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
-
-    const i32 next_mip_width = std::max(mip_width / 2, 1);
-    const i32 next_mip_height = std::max(mip_height / 2, 1);
-
-    VkImageBlit blit{.srcSubresource =
-                         {
-                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                             .mipLevel = i - 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1,
-                         },
-                     .srcOffsets = {{0, 0, 0}, {mip_width, mip_height, 1}},
-                     .dstSubresource =
-                         {
-                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                             .mipLevel = i,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1,
-                         },
-                     .dstOffsets = {{0, 0, 0}, {next_mip_width, next_mip_height, 1}}};
-    vkCmdBlitImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-
-    barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    barrier.access_masks = {VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT};
-    barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                           VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT};
-    vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
-
-    mip_width = next_mip_width;
-    mip_height = next_mip_height;
+    imgui_render_pass_ =
+        std::make_unique<ImguiRenderPass>(*this, window.raw_window(), swapchain_.image_format());
   }
 
-  barrier.subresource_range.baseMipLevel = mip_levels - 1;
-  barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  barrier.access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT};
-  barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT};
-  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+  input_handler.add_listener(std::bind_front(&Renderer::on_input_event, std::ref(*this)));
 }
 
 auto Renderer::upload_image(const charlie::CPUImage& cpu_image,
                             const ImageUploadInfo& upload_info) -> VkImage
 {
-  ZoneScoped;
-
-  vkh::Context& context = context_;
-  charlie::UploadContext& upload_context = upload_context_;
-
-  BEYOND_ENSURE(cpu_image.width != 0 && cpu_image.height != 0);
-
-  const void* pixel_ptr = static_cast<const void*>(cpu_image.data.get());
-  const auto image_size = beyond::narrow<VkDeviceSize>(cpu_image.width) * cpu_image.height * 4;
-
-  const auto staging_buffer_debug_name = cpu_image.name.empty()
-                                             ? fmt::format("{} Staging Buffer", cpu_image.name)
-                                             : "Image Staging Buffer";
-
-  // allocate temporary buffer for holding texture data to upload
-  auto staging_buffer =
-      vkh::create_buffer(context, vkh::BufferCreateInfo{.size = image_size,
-                                                        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                                        .memory_usage = VMA_MEMORY_USAGE_CPU_ONLY,
-                                                        .debug_name = staging_buffer_debug_name})
-          .value();
-  BEYOND_DEFER(vkh::destroy_buffer(context, staging_buffer));
-
-  // copy data to buffer
-  void* data = context.map(staging_buffer).value();
-  memcpy(data, pixel_ptr, beyond::narrow<size_t>(image_size));
-  context.unmap(staging_buffer);
-
-  const VkExtent3D image_extent = {
-      .width = beyond::narrow<u32>(cpu_image.width),
-      .height = beyond::narrow<u32>(cpu_image.height),
-      .depth = 1,
-  };
-
-  const u32 mip_levels = upload_info.mip_levels;
-  const bool need_generate_mipmap = mip_levels > 1;
-
-  const auto image_debug_name =
-      cpu_image.name.empty() ? fmt::format("{} Image", cpu_image.name) : "Image";
-  vkh::AllocatedImage allocated_image = [&]() {
-    auto image = vkh::create_image(context, vkh::ImageCreateInfo{
-                                                .format = upload_info.format,
-                                                .extent = image_extent,
-                                                .usage = VK_IMAGE_USAGE_SAMPLED_BIT |
-                                                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                                                .mip_levels = mip_levels,
-                                                .debug_name = image_debug_name,
-                                            });
-
-    if (not image.has_value()) {
-      beyond::panic(fmt::format("Failed to create image: {}", vkh::to_string(image.error())));
-    }
-
-    return image.value();
-  }();
-
-  immediate_submit(context, upload_context, [&](VkCommandBuffer cmd) {
-    const VkImageSubresourceRange range = {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = mip_levels,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-    };
-
-    // barrier the image into the transfer-receive layout
-    vkh::cmd_pipeline_barrier2(
-        cmd, {.image_barriers = std::array{
-                  vkh::ImageBarrier2{
-                      .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                                      VK_PIPELINE_STAGE_2_TRANSFER_BIT},
-                      .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT},
-                      .layouts = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
-                      .image = allocated_image.image,
-                      .subresource_range = range}
-                      .to_vk_struct() //
-              }});
-
-    const VkBufferImageCopy copy_region = {.bufferOffset = 0,
-                                           .bufferRowLength = 0,
-                                           .bufferImageHeight = 0,
-                                           .imageSubresource =
-                                               {
-                                                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                   .mipLevel = 0,
-                                                   .baseArrayLayer = 0,
-                                                   .layerCount = 1,
-                                               },
-                                           .imageExtent = image_extent};
-
-    // copy the buffer into the image
-    vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, allocated_image.image,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
-
-    // barrier the image into the shader readable layout
-    if (not need_generate_mipmap) {
-      vkh::cmd_pipeline_barrier2(
-          cmd, {.image_barriers = std::array{
-                    vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                                                       VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
-                                       .access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                                        VK_ACCESS_2_SHADER_READ_BIT},
-                                       .layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                       .image = allocated_image.image,
-                                       .subresource_range = range}
-                        .to_vk_struct() //
-                }});
-    } else {
-      VkFormatProperties format_properties;
-      vkGetPhysicalDeviceFormatProperties(context_.physical_device(), upload_info.format,
-                                          &format_properties);
-      BEYOND_ENSURE(format_properties.optimalTilingFeatures &
-                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
-
-      cmd_generate_mipmap(cmd, allocated_image.image, Resolution{cpu_image.width, cpu_image.height},
-                          mip_levels);
-    }
-  });
-
-  return images_.emplace_back(allocated_image).image;
+  return textures_->upload_image(cpu_image, upload_info);
 }
 
 void Renderer::init_shadow_map()
@@ -402,24 +215,6 @@ void Renderer::init_descriptors()
   descriptor_allocator_ = std::make_unique<DescriptorAllocator>(context_);
   descriptor_layout_cache_ = std::make_unique<DescriptorLayoutCache>(context_.device());
 
-  static constexpr VkDescriptorSetLayoutBinding texture_bindings[] = {
-      // Image sampler binding
-      {.binding = bindless_texture_binding,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = max_bindless_texture_count,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
-
-  static constexpr VkDescriptorBindingFlags bindless_flags =
-      VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
-      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT; // VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
-  static constexpr VkDescriptorBindingFlags binding_flags[] = {bindless_flags};
-
-  VkDescriptorSetLayoutBindingFlagsCreateInfo layout_binding_flags_create_info{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-      .bindingCount = 1,
-      .pBindingFlags = binding_flags,
-  };
-
   static constexpr VkDescriptorSetLayoutBinding material_bindings[] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -432,39 +227,6 @@ void Renderer::init_descriptors()
                                  .bindings = material_bindings,
                              })
                              .value();
-
-  {
-    vkh::DescriptorSetLayoutCreateInfo bindless_texture_descriptor_set_layout_create_info{
-        .p_next = &layout_binding_flags_create_info,
-        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-        .bindings = texture_bindings,
-        .debug_name = "Material Descriptor Set Layout",
-    };
-
-    static constexpr VkDescriptorPoolSize pool_sizes_bindless[] = {
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, max_bindless_texture_count},
-    };
-    bindless_texture_set_layout_ = vkh::create_descriptor_set_layout(
-                                       context_, bindless_texture_descriptor_set_layout_create_info)
-                                       .value();
-    VkDescriptorPoolCreateInfo descriptor_pool_create_info{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-        .maxSets = max_bindless_texture_count * beyond::size(pool_sizes_bindless),
-        .poolSizeCount = beyond::size(pool_sizes_bindless),
-        .pPoolSizes = pool_sizes_bindless,
-    };
-    VK_CHECK(vkCreateDescriptorPool(context_, &descriptor_pool_create_info, nullptr,
-                                    &bindless_texture_descriptor_pool_));
-
-    const VkDescriptorSetAllocateInfo alloc_info = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = bindless_texture_descriptor_pool_,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &bindless_texture_set_layout_};
-
-    VK_CHECK(vkAllocateDescriptorSets(context_, &alloc_info, &bindless_texture_descriptor_set_));
-  }
 
   const size_t scene_param_buffer_size =
       frame_overlap * context_.align_uniform_buffer_size(sizeof(GPUSceneParameters));
@@ -591,25 +353,28 @@ void Renderer::init_mesh_pipeline()
   const ShaderHandle fragment_shader =
       pipeline_manager_->add_shader("mesh.frag.glsl", ShaderStage::fragment);
 
-  const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
-                                               object_descriptor_set_layout_, material_set_layout_,
-                                               bindless_texture_set_layout_};
+  {
+    ZoneScopedN("Create Pipeline Layout");
+    const VkDescriptorSetLayout set_layouts[] = {
+        global_descriptor_set_layout_, object_descriptor_set_layout_, material_set_layout_,
+        textures_->descriptor_set_layout()};
 
-  const VkPushConstantRange push_constant = {
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      .offset = 0,
-      .size = sizeof(MeshPushConstant),
-  };
+    const VkPushConstantRange push_constant = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = sizeof(MeshPushConstant),
+    };
 
-  const VkPipelineLayoutCreateInfo pipeline_layout_info{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = beyond::size(set_layouts),
-      .pSetLayouts = set_layouts,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &push_constant,
-  };
-  VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
-                                  &mesh_pipeline_layout_));
+    const VkPipelineLayoutCreateInfo pipeline_layout_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = beyond::size(set_layouts),
+        .pSetLayouts = set_layouts,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_constant,
+    };
+    VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
+                                    &mesh_pipeline_layout_));
+  }
 
   auto create_info = charlie::GraphicsPipelineCreateInfo{
       .layout = mesh_pipeline_layout_,
@@ -671,78 +436,13 @@ void Renderer::init_shadow_pipeline()
            .depth_bias_info = DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}}});
 }
 
-void Renderer::init_default_sampler()
-{
-  static constexpr VkSamplerCreateInfo default_sampler_info = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_LINEAR,
-      .minFilter = VK_FILTER_LINEAR,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-      .maxLod = VK_LOD_CLAMP_NONE};
-  default_sampler_ = sampler_cache_->create_sampler(default_sampler_info);
-  VK_CHECK(vkh::set_debug_name(context_.device(), default_sampler_, "Default Sampler"));
-}
-
-void Renderer::init_default_texture()
-{
-  CPUImage cpu_image{
-      .name = "Default Albedo Texture Image",
-      .width = 1,
-      .height = 1,
-      .components = 4,
-      .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
-  };
-  std::fill(cpu_image.data.get(), cpu_image.data.get() + 4, 255);
-
-  const auto default_albedo_image = upload_image(cpu_image);
-
-  VkImageView default_albedo_image_view =
-      vkh::create_image_view(
-          context(),
-          {.image = default_albedo_image,
-           .format = VK_FORMAT_R8G8B8A8_SRGB,
-           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
-           .debug_name = "Default Albedo Texture Image View"})
-          .value();
-
-  default_white_texture_index =
-      add_texture(Texture{.image = default_albedo_image, .image_view = default_albedo_image_view});
-
-  CPUImage cpu_image2{
-      .name = "Default Normal Texture Image",
-      .width = 1,
-      .height = 1,
-      .components = 4,
-      .data = std::make_unique_for_overwrite<uint8_t[]>(sizeof(uint8_t) * 4),
-  };
-  cpu_image2.data[0] = 127;
-  cpu_image2.data[1] = 127;
-  cpu_image2.data[2] = 255;
-  cpu_image2.data[3] = 255;
-
-  const auto default_normal_image = upload_image(cpu_image2, {
-                                                                 .format = VK_FORMAT_R8G8B8A8_UNORM,
-                                                             });
-  VkImageView default_normal_image_view =
-      vkh::create_image_view(
-          context(),
-          {.image = default_normal_image,
-           .format = VK_FORMAT_R8G8B8A8_UNORM,
-           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
-           .debug_name = "Default Normal Texture Image View"})
-          .value();
-
-  default_normal_texture_index =
-      add_texture(Texture{.image = default_normal_image, .image_view = default_normal_image_view});
-}
-
 void Renderer::update(const charlie::Camera& camera)
 {
   ZoneScopedN("Update");
 
   pipeline_manager_->update();
 
-  update_textures();
+  textures_->update();
 
   imgui_render_pass_->pre_render();
 
@@ -1145,6 +845,8 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   const u32 uniform_offset =
       beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
       beyond::narrow<u32>(frame_index);
+
+  const VkDescriptorSet texture_descriptor_set = textures_->descriptor_set();
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
@@ -1152,7 +854,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 2, 1,
                           &material_descriptor_set_, 0, nullptr);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
-                          &bindless_texture_descriptor_set_, 0, nullptr);
+                          &texture_descriptor_set, 0, nullptr);
 
   // Copy to object buffer for solid objects
   // Fill transform buffers
@@ -1260,8 +962,7 @@ Renderer::~Renderer()
 
   // TODO: destroy scene
 
-  for (auto texture : textures_) { vkDestroyImageView(context_, texture.image_view, nullptr); }
-  for (auto image : images_) { vkh::destroy_image(context_, image); }
+  textures_ = nullptr;
 
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);
@@ -1323,30 +1024,20 @@ void Renderer::resize()
   init_depth_image();
 }
 
-auto Renderer::add_texture(Texture texture) -> u32
-{
-  textures_.push_back(texture);
-  const u32 texture_index = narrow<u32>(textures_.size() - 1);
-
-  textures_to_update_.push_back(TextureUpdate{
-      .index = texture_index,
-  });
-
-  return texture_index;
-}
-
 auto Renderer::add_material(const CPUMaterial& material_info) -> u32
 {
-  const u32 albedo_texture_index =
-      material_info.albedo_texture_index.value_or(default_white_texture_index);
+  const u32 default_white_index = textures_->default_white_texture_index();
+  const u32 default_normal_index = textures_->default_normal_texture_index();
+
+  const u32 albedo_texture_index = material_info.albedo_texture_index.value_or(default_white_index);
   const u32 normal_texture_index =
-      material_info.normal_texture_index.value_or(default_normal_texture_index);
+      material_info.normal_texture_index.value_or(default_normal_index);
   const u32 metallic_roughness_texture_index =
-      material_info.metallic_roughness_texture_index.value_or(default_white_texture_index);
+      material_info.metallic_roughness_texture_index.value_or(default_white_index);
   const u32 occlusion_texture_index =
-      material_info.occlusion_texture_index.value_or(default_white_texture_index);
+      material_info.occlusion_texture_index.value_or(default_white_index);
   const u32 emissive_texture_index =
-      material_info.emissive_texture_index.value_or(default_white_texture_index);
+      material_info.emissive_texture_index.value_or(default_white_index);
 
   materials_.push_back(Material{
       .base_color_factor = material_info.base_color_factor,
@@ -1395,32 +1086,9 @@ void Renderer::upload_materials()
   material_descriptor_set_ = result.set;
 }
 
-void Renderer::update_textures()
+auto Renderer::add_texture(Texture texture) -> u32
 {
-  beyond::StaticVector<VkDescriptorImageInfo, max_bindless_texture_count> image_infos;
-  beyond::StaticVector<VkWriteDescriptorSet, max_bindless_texture_count> descriptor_writes;
-
-  for (const TextureUpdate& texture_to_update : textures_to_update_) {
-    const Texture& texture = textures_.at(texture_to_update.index);
-
-    VkDescriptorImageInfo& image_info = image_infos.emplace_back(VkDescriptorImageInfo{
-        .sampler = texture.sampler == VK_NULL_HANDLE ? default_sampler_ : texture.sampler,
-        .imageView = texture.image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-
-    descriptor_writes.push_back(VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = bindless_texture_descriptor_set_,
-        .dstBinding = bindless_texture_binding,
-        .dstArrayElement = texture_to_update.index,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &image_info,
-    });
-  }
-  textures_to_update_.clear();
-
-  vkUpdateDescriptorSets(context_, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
+  return textures_->add_texture(texture);
 }
 
 } // namespace charlie

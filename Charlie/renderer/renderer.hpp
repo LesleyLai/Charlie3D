@@ -21,6 +21,7 @@
 #include "render_pass.hpp"
 #include "sampler_cache.hpp"
 #include "scene.hpp"
+#include "textures.hpp"
 #include "uploader.hpp"
 
 #include <memory>
@@ -38,12 +39,6 @@ namespace charlie {
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
-
-struct Texture {
-  VkImage image = VK_NULL_HANDLE;
-  VkImageView image_view = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
-};
 
 struct Material {
   Vec4 base_color_factor = Vec4(1, 1, 1, 1);
@@ -112,11 +107,6 @@ struct MeshPushConstant {
   VkDeviceAddress vertex_buffer_address = 0;
 };
 
-struct ImageUploadInfo {
-  VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-  u32 mip_levels = 1; // Generate mipmaps if mip_level > 1
-};
-
 // Buffers for mesh data
 struct MeshBuffers {
   vkh::AllocatedBuffer position_buffer;
@@ -165,6 +155,9 @@ public:
 
   [[nodiscard]] auto context() noexcept -> vkh::Context& { return context_; }
 
+  /*
+   * Resource management functions
+   */
   /**
    * Upload the vertex/index buffers of a mesh to the GPU
    *
@@ -172,31 +165,20 @@ public:
    */
   [[nodiscard]] auto upload_mesh_buffer(const CPUMeshBuffers& buffers,
                                         std::string_view name) -> MeshBuffers;
-
   [[nodiscard]] auto add_mesh(const CPUMesh& mesh) -> MeshHandle;
 
+  // Uploads an image to GPU
   [[nodiscard]] auto upload_image(const charlie::CPUImage& cpu_image,
                                   const ImageUploadInfo& upload_info = {}) -> VkImage;
 
-  // Returns texture index
+  // Adds a texture and returns its index
   [[nodiscard]] auto add_texture(Texture texture) -> u32;
-
   [[nodiscard]] auto add_material(const CPUMaterial& material_info) -> u32;
   void upload_materials();
-
-  [[nodiscard]] auto scene_parameters() noexcept -> GPUSceneParameters&
-  {
-    return scene_parameters_;
-  }
 
   void resize();
 
   void draw_gui_lighting_window();
-
-  [[nodiscard]] auto image_count() const -> usize { return images_.size(); }
-
-  u32 default_white_texture_index = static_cast<u32>(~0);
-  u32 default_normal_texture_index = static_cast<u32>(~0);
 
 private:
   Window* window_ = nullptr;
@@ -204,7 +186,7 @@ private:
   vkh::Context context_;
   VkQueue graphics_queue_{};
 
-  std::unique_ptr<SamplerCache> sampler_cache_{};
+  std::unique_ptr<SamplerCache> sampler_cache_;
 
   vkh::Swapchain swapchain_;
   UploadContext upload_context_;
@@ -228,9 +210,6 @@ private:
   VkDescriptorSetLayout global_descriptor_set_layout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout object_descriptor_set_layout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout material_set_layout_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout bindless_texture_set_layout_ = VK_NULL_HANDLE;
-  VkDescriptorPool bindless_texture_descriptor_pool_ = VK_NULL_HANDLE;
-  VkDescriptorSet bindless_texture_descriptor_set_ = VK_NULL_HANDLE;
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
 
@@ -250,13 +229,7 @@ private:
   vkh::AllocatedBuffer material_buffer_;
   VkDescriptorSet material_descriptor_set_ = VK_NULL_HANDLE;
 
-  std::vector<vkh::AllocatedImage> images_;
-  VkSampler default_sampler_ = VK_NULL_HANDLE;
-  std::vector<Texture> textures_;
-  struct TextureUpdate {
-    uint32_t index = 0xdeadbeef; // Index
-  };
-  std::vector<TextureUpdate> textures_to_update_;
+  std::unique_ptr<TextureManager> textures_;
 
   std::vector<RenderObject> draws_solid_objects_;
   std::vector<RenderObject> draws_transparent_objects_;
@@ -276,12 +249,9 @@ private:
   void init_pipelines();
   void init_shadow_pipeline();
   void init_mesh_pipeline();
-  void init_default_sampler();
-  void init_default_texture();
 
   void on_input_event(const Event& event, const InputStates& states);
 
-  void update_textures();
   void present(beyond::Ref<u32> swapchain_image_index);
 };
 
