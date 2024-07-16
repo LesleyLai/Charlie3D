@@ -120,6 +120,7 @@ namespace charlie {
   auto buffers = renderer.upload_mesh_buffer(cpu_scene.buffers, "Scene");
 
   return Scene{
+      .metadata = std::move(cpu_scene.metadata),
       .local_transforms = std::move(cpu_scene.nodes.local_transforms),
       .global_transforms = std::move(cpu_scene.nodes.global_transforms),
       .names = std::move(cpu_scene.nodes.names),

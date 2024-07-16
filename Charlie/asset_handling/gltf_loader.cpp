@@ -558,6 +558,21 @@ namespace charlie {
     std::ranges::transform(asset.samplers, std::back_inserter(result.samplers), convert_sampler);
   }
 
+  // Metadata
+  {
+    ZoneScopedN("Compute Scene Metadata");
+
+    u32 submesh_count = 0;
+    for (const auto& mesh : result.meshes) { submesh_count += narrow<u32>(mesh.submeshes.size()); }
+
+    result.metadata = {.vertex_count = narrow<u32>(result.buffers.vertices.size()),
+                       .index_count = narrow<u32>(result.buffers.indices.size()),
+                       .mesh_count = narrow<u32>(result.meshes.size()),
+                       .submesh_count = submesh_count,
+                       .material_count = narrow<u32>(result.materials.size()),
+                       .texture_count = narrow<u32>(result.textures.size())};
+  }
+
   if (const auto error = fastgltf::validate(asset); error != fastgltf::Error::None) {
     throw SceneLoadingError(std::string{fastgltf::getErrorName(error)});
   }

@@ -12,6 +12,7 @@ namespace charlie {
 static constexpr uint32_t max_bindless_texture_count = 1024;
 static constexpr uint32_t bindless_texture_binding = 10;
 
+// A texture is a combination of image and sampler
 struct Texture {
   VkImage image = VK_NULL_HANDLE;
   VkImageView image_view = VK_NULL_HANDLE;

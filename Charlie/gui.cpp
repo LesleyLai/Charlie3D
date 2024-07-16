@@ -84,6 +84,12 @@ void draw_gui_stats_window(charlie::Renderer& renderer,
 
   ImGui::SeparatorText("Scene Data");
   ImGui::LabelText("Nodes", "%u", scene.node_count());
+  ImGui::LabelText("Vertices", "%u", scene.metadata.vertex_count);
+  ImGui::LabelText("Indices", "%u", scene.metadata.index_count);
+  ImGui::LabelText("Meshes", "%u", scene.metadata.mesh_count);
+  ImGui::LabelText("SubMeshes", "%u", scene.metadata.submesh_count);
+  ImGui::LabelText("Textures", "%u", scene.metadata.texture_count);
+  ImGui::LabelText("Materials", "%u", scene.metadata.material_count);
 
   ImGui::SeparatorText("Performance Data");
   ImGui::LabelText("FPS", "%.0f", 1e3f / framerate_counter.average_ms_per_frame);

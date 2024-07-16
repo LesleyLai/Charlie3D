@@ -64,8 +64,18 @@ struct SamplerInfo {
   std::string name;
 };
 
+struct SceneMetadata {
+  uint32_t vertex_count = 0;
+  uint32_t index_count = 0;
+  uint32_t mesh_count = 0;
+  uint32_t submesh_count = 0;
+  uint32_t material_count = 0;
+  uint32_t texture_count = 0;
+};
+
 // Mirrors the scene-graph structure but all data here are on CPU
 struct CPUScene {
+  SceneMetadata metadata;
   Nodes nodes;
   std::vector<u32> root_node_indices; // index of root nodes
 
