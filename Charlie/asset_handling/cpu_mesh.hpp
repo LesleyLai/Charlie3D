@@ -54,6 +54,8 @@ struct CPUSubmesh {
   u32 vertex_offset = 0;
   u32 index_offset = 0;
   u32 index_count = 0;
+
+  beyond::AABB3 aabb;
 };
 
 struct CPUMesh {

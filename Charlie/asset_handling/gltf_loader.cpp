@@ -342,6 +342,19 @@ struct SubmeshIntermediateData {
   std::vector<u32> indices;
 };
 
+[[nodiscard]]
+auto construct_aabb(std::span<const Point3> positions) -> beyond::AABB3
+{
+  static constexpr auto infinity = std::numeric_limits<float>::infinity();
+  Point3 min = Point3{infinity, infinity, infinity};
+  Point3 max = Point3{-infinity, -infinity, -infinity};
+  for (Point3 p : positions) {
+    min = beyond::min(p, min);
+    max = beyond::max(p, max);
+  }
+  return beyond::AABB3(min, max, beyond::AABB3::unchecked_tag);
+}
+
 // Convert mesh from fastgltf format to charlie::CPUMesh
 auto convert_meshes(const fastgltf::Asset& asset,
                     beyond::Ref<charlie::CPUMeshBuffers> buffers) -> std::vector<charlie::CPUMesh>
@@ -455,6 +468,7 @@ auto convert_meshes(const fastgltf::Asset& asset,
           .vertex_offset = beyond::narrow<u32>(vertex_offset),
           .index_offset = beyond::narrow<u32>(index_offset),
           .index_count = beyond::narrow<u32>(submesh_intermediate.indices.size()),
+          .aabb = construct_aabb(submesh_intermediate.positions),
       });
 
       std::ranges::copy(submesh_intermediate.positions, buffers->positions.data() + vertex_offset);
