@@ -9,6 +9,8 @@
 #include "../window/input_handler.hpp"
 #include "../window/window.hpp"
 
+#include "shadow_map_renderer.hpp"
+
 #include <beyond/container/slot_map.hpp>
 #include <beyond/math/matrix.hpp>
 #include <beyond/utils/function_ref.hpp>
@@ -36,6 +38,9 @@ class VkCtx;
 }
 
 namespace charlie {
+
+// TODO: find better way to allocate object buffer
+constexpr beyond::usize max_object_count = 10000000;
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
@@ -129,7 +134,6 @@ public:
 
   void set_scene(std::unique_ptr<Scene> scene);
 
-  void draw_shadow(VkCommandBuffer cmd);
   void draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view);
 
   [[nodiscard]] auto resolution() const noexcept -> Resolution { return resolution_; }
@@ -176,6 +180,17 @@ public:
 
   void draw_gui_lighting_window();
 
+  VkDescriptorSetLayout global_descriptor_set_layout = VK_NULL_HANDLE;
+  VkDescriptorSetLayout object_descriptor_set_layout = VK_NULL_HANDLE;
+  VkDescriptorSetLayout material_descriptor_set_layout = VK_NULL_HANDLE;
+
+  [[nodiscard]] auto pipeline_manager() -> PipelineManager& { return *pipeline_manager_; }
+
+  [[nodiscard]] auto draw_solid_objects() const -> std::span<const RenderObject>
+  {
+    return draws_solid_objects_;
+  }
+
 private:
   Window* window_ = nullptr;
   Resolution resolution_;
@@ -187,15 +202,9 @@ private:
   vkh::Swapchain swapchain_;
   UploadContext upload_context_;
 
-  static constexpr VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT;
+  static constexpr VkFormat depth_format = VK_FORMAT_D32_SFLOAT;
   vkh::AllocatedImage depth_image_;
   VkImageView depth_image_view_ = {};
-
-  static constexpr uint32_t shadow_map_width_ = 4096;
-  static constexpr uint32_t shadow_map_height_ = 4096;
-  vkh::AllocatedImage shadow_map_image_;
-  VkImageView shadow_map_image_view_;
-  VkSampler shadow_map_sampler_ = VK_NULL_HANDLE;
 
   usize frame_number_ = 0;
   FrameData frames_[frame_overlap];
@@ -203,15 +212,11 @@ private:
 
   std::unique_ptr<charlie::DescriptorAllocator> descriptor_allocator_;
   std::unique_ptr<charlie::DescriptorLayoutCache> descriptor_layout_cache_;
-  VkDescriptorSetLayout global_descriptor_set_layout_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout object_descriptor_set_layout_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout material_set_layout_ = VK_NULL_HANDLE;
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
   std::unique_ptr<PipelineManager> pipeline_manager_;
 
-  VkPipelineLayout shadow_map_pipeline_layout_ = VK_NULL_HANDLE;
-  GraphicsPipelineHandle shadow_map_pipeline_;
+  std::unique_ptr<ShadowMapRenderer> shadow_map_renderer_;
 
   VkPipelineLayout mesh_pipeline_layout_ = VK_NULL_HANDLE;
   GraphicsPipelineHandle mesh_pipeline_;
@@ -239,10 +244,8 @@ private:
 
   void init_frame_data();
   void init_depth_image();
-  void init_shadow_map();
   void init_descriptors();
   void init_pipelines();
-  void init_shadow_pipeline();
   void init_mesh_pipeline();
 
   void on_input_event(const Event& event, const InputStates& states);

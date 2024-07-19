@@ -18,7 +18,9 @@ add_library(charlie3d_renderer
         textures.cpp
         textures.hpp
         sampler_cache.cpp
-        sampler_cache.cpp)
+        sampler_cache.cpp
+        shadow_map_renderer.hpp
+        shadow_map_renderer.cpp)
 
 # Disable warnings for imgui impl files
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

@@ -23,11 +23,14 @@ struct [[nodiscard]] AllocatedBuffer {
   VmaAllocation allocation = VK_NULL_HANDLE;
   VmaAllocationInfo allocation_info = {};
 
-  explicit(false) operator VkBuffer() { return buffer; } // NOLINT(google-explicit-constructor)
+  explicit(false) operator VkBuffer() const
+  {
+    return buffer;
+  } // NOLINT(google-explicit-constructor)
 };
 
-auto create_buffer(vkh::Context& context, const BufferCreateInfo& buffer_create_info)
-    -> Expected<AllocatedBuffer>;
+auto create_buffer(vkh::Context& context,
+                   const BufferCreateInfo& buffer_create_info) -> Expected<AllocatedBuffer>;
 
 auto create_buffer_from_data(vkh::Context& context, const BufferCreateInfo& buffer_create_info,
                              const void* data) -> Expected<AllocatedBuffer>;

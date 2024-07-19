@@ -1,6 +1,8 @@
 #ifndef CHARLIE3D_RENDER_PASS_HPP
 #define CHARLIE3D_RENDER_PASS_HPP
 
+#include <vulkan/vulkan_core.h>
+
 namespace charlie {
 
 struct FrameGraphRenderPass {

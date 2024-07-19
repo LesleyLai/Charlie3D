@@ -1,6 +1,9 @@
 #ifndef CHARLIE3D_PIPELINE_MANAGER_HPP
 #define CHARLIE3D_PIPELINE_MANAGER_HPP
 
+// The Pipeline manager implements shader hot-reloading. It monitors shader change and recreate
+// pipelines when necessary.
+
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

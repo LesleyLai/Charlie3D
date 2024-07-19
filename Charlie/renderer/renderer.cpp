@@ -8,7 +8,6 @@
 
 #include "descriptor_allocator.hpp"
 
-#include "../shader_compiler/shader_compiler.hpp"
 #include "pipeline_manager.hpp"
 
 #include <beyond/math/transform.hpp>
@@ -18,7 +17,6 @@
 #include "camera.hpp"
 #include "mesh.hpp"
 
-#include "../utils/asset_path.hpp"
 #include "imgui_render_pass.hpp"
 
 #include <spdlog/spdlog.h>
@@ -34,9 +32,6 @@ struct GPUCameraData {
   beyond::Mat4 view_proj;
   beyond::Vec3 position;
 };
-
-// TODO: find better way to allocate object buffer
-constexpr beyond::usize max_object_count = 10000000;
 
 void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
                                                    VkImage current_swapchain_image)
@@ -91,10 +86,14 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
       frame_deletion_queue_{DeletionQueue{context_}, DeletionQueue{context_}}
 {
   init_depth_image();
-  init_shadow_map();
+
+  shadow_map_renderer_ = std::make_unique<ShadowMapRenderer>(*this, ref(*sampler_cache_));
+
   init_frame_data();
   init_descriptors();
   init_pipelines();
+
+  shadow_map_renderer_->init_pipeline();
 
   {
     ZoneScopedN("Imgui Render Pass");
@@ -110,43 +109,6 @@ auto Renderer::upload_image(const charlie::CPUImage& cpu_image,
                             const ImageUploadInfo& upload_info) -> VkImage
 {
   return textures_->upload_image(cpu_image, upload_info);
-}
-
-void Renderer::init_shadow_map()
-{
-  ZoneScoped;
-
-  shadow_map_image_ =
-      vkh::create_image(
-          context_,
-          vkh::ImageCreateInfo{
-              .format = depth_format_,
-              .extent = VkExtent3D{shadow_map_width_, shadow_map_height_, 1},
-              .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-              .debug_name = "Shadow Map Image",
-          })
-          .expect("Fail to create shadow map image");
-  shadow_map_image_view_ =
-      vkh::create_image_view(
-          context_, vkh::ImageViewCreateInfo{.image = shadow_map_image_.image,
-                                             .format = depth_format_,
-                                             .subresource_range =
-                                                 vkh::SubresourceRange{
-                                                     .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                                 },
-                                             .debug_name = "Shadow Map Image View"})
-          .expect("Fail to create shadow map image view");
-
-  const VkSamplerCreateInfo sampler_info = {.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                                            .magFilter = VK_FILTER_LINEAR,
-                                            .minFilter = VK_FILTER_LINEAR,
-                                            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                                            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                                            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                                            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                                            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE};
-  shadow_map_sampler_ = sampler_cache_->create_sampler(sampler_info);
-  VK_CHECK(vkh::set_debug_name(context_.device(), shadow_map_sampler_, "Shadow Map Sampler"));
 }
 
 void Renderer::init_frame_data()
@@ -191,7 +153,7 @@ void Renderer::init_depth_image()
   depth_image_ =
       vkh::create_image(context_,
                         vkh::ImageCreateInfo{
-                            .format = depth_format_,
+                            .format = depth_format,
                             .extent = VkExtent3D{resolution_.width, resolution_.height, 1},
                             .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                             .debug_name = "Depth Image",
@@ -200,7 +162,7 @@ void Renderer::init_depth_image()
   depth_image_view_ =
       vkh::create_image_view(
           context_, vkh::ImageViewCreateInfo{.image = depth_image_.image,
-                                             .format = depth_format_,
+                                             .format = depth_format,
                                              .subresource_range =
                                                  vkh::SubresourceRange{
                                                      .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -222,12 +184,12 @@ void Renderer::init_descriptors()
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
   };
-  material_set_layout_ = descriptor_layout_cache_
-                             ->create_descriptor_set_layout({
-                                 .p_next = nullptr,
-                                 .bindings = material_bindings,
-                             })
-                             .value();
+  material_descriptor_set_layout = descriptor_layout_cache_
+                                       ->create_descriptor_set_layout({
+                                           .p_next = nullptr,
+                                           .bindings = material_bindings,
+                                       })
+                                       .value();
 
   const size_t scene_param_buffer_size =
       frame_overlap * context_.align_uniform_buffer_size(sizeof(GPUSceneParameters));
@@ -289,26 +251,20 @@ void Renderer::init_descriptors()
     const VkDescriptorBufferInfo scene_buffer_info = {
         .buffer = scene_parameter_buffer_, .offset = 0, .range = sizeof(GPUSceneParameters)};
 
-    const VkDescriptorImageInfo shadow_map_image_info = {
-        .sampler = shadow_map_sampler_,
-        .imageView = shadow_map_image_view_,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-
     auto global_descriptor_build_result =
         DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
             .bind_buffer(0, camera_buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
             .bind_buffer(1, scene_buffer_info, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-            .bind_image(2, shadow_map_image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                        VK_SHADER_STAGE_FRAGMENT_BIT)
+            .bind_image(2, shadow_map_renderer_->shadow_map_image_info(),
+                        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .build()
             .value();
-    if (global_descriptor_set_layout_ == VK_NULL_HANDLE) {
-      global_descriptor_set_layout_ = global_descriptor_build_result.layout;
+    if (global_descriptor_set_layout == VK_NULL_HANDLE) {
+      global_descriptor_set_layout = global_descriptor_build_result.layout;
     } else {
-      BEYOND_ENSURE(global_descriptor_set_layout_ == global_descriptor_build_result.layout);
+      BEYOND_ENSURE(global_descriptor_set_layout == global_descriptor_build_result.layout);
     }
     frame.global_descriptor_set = global_descriptor_build_result.set;
 
@@ -329,7 +285,7 @@ void Renderer::init_descriptors()
                          VK_SHADER_STAGE_VERTEX_BIT)
             .build()
             .value();
-    object_descriptor_set_layout_ = objects_descriptor_build_result.layout;
+    object_descriptor_set_layout = objects_descriptor_build_result.layout;
     frame.object_descriptor_set = objects_descriptor_build_result.set;
   }
 }
@@ -339,15 +295,11 @@ void Renderer::init_pipelines()
   ZoneScoped;
 
   init_mesh_pipeline();
-  init_shadow_pipeline();
 }
 
 void Renderer::init_mesh_pipeline()
 {
   ZoneScoped;
-
-  const auto asset_path = get_asset_path();
-  const std::filesystem::path shader_directory = asset_path / "shaders";
 
   const ShaderHandle vertex_shader =
       pipeline_manager_->add_shader("mesh.vert.glsl", ShaderStage::vertex);
@@ -357,7 +309,7 @@ void Renderer::init_mesh_pipeline()
   {
     ZoneScopedN("Create Pipeline Layout");
     const VkDescriptorSetLayout set_layouts[] = {
-        global_descriptor_set_layout_, object_descriptor_set_layout_, material_set_layout_,
+        global_descriptor_set_layout, object_descriptor_set_layout, material_descriptor_set_layout,
         textures_->descriptor_set_layout()};
 
     const VkPushConstantRange push_constant[] = {{
@@ -379,7 +331,7 @@ void Renderer::init_mesh_pipeline()
       .pipeline_rendering_create_info =
           vkh::PipelineRenderingCreateInfo{
               .color_attachment_formats = {swapchain_.image_format()},
-              .depth_attachment_format = depth_format_,
+              .depth_attachment_format = depth_format,
           },
       .stages = {{vertex_shader}, {fragment_shader}},
       .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT},
@@ -391,47 +343,6 @@ void Renderer::init_mesh_pipeline()
   create_info.color_blending = vkh::color_blend_attachment_additive();
   create_info.debug_name = "Mesh Graphics Pipeline (Transparent)";
   mesh_pipeline_transparent_ = pipeline_manager_->create_graphics_pipeline(create_info);
-}
-
-void Renderer::init_shadow_pipeline()
-{
-  ZoneScoped;
-
-  const ShaderHandle vertex_shader =
-      pipeline_manager_->add_shader("shadow.vert.glsl", ShaderStage::vertex);
-
-  const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
-                                               object_descriptor_set_layout_};
-
-  shadow_map_pipeline_layout_ = vkh::create_pipeline_layout(context_,
-                                                            {
-                                                                .set_layouts = set_layouts,
-                                                            })
-                                    .value();
-
-  std::vector<VkVertexInputBindingDescription> binding_descriptions = {{
-      .binding = 0,
-      .stride = sizeof(Vec3),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-  }}; // Vertex input
-
-  std::vector<VkVertexInputAttributeDescription> attribute_descriptions = {
-      {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0}};
-
-  shadow_map_pipeline_ = pipeline_manager_->create_graphics_pipeline({
-      .layout = shadow_map_pipeline_layout_,
-      .pipeline_rendering_create_info =
-          vkh::PipelineRenderingCreateInfo{
-              .color_attachment_formats = {},
-              .depth_attachment_format = depth_format_,
-          },
-      .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
-                                         .attribute_descriptions = attribute_descriptions},
-      .stages = {{vertex_shader}},
-      .rasterization_state = {.depth_bias_info =
-                                  DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}},
-      .debug_name = "Shadow Mapping Graphics Pipeline",
-  });
 }
 
 void Renderer::update(const charlie::Camera& camera)
@@ -468,6 +379,7 @@ void Renderer::update(const charlie::Camera& camera)
     const Vec3 up =
         abs(dot(dir, Vec3(0.0, 1.0, 0.0))) > 0.9 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
 
+    // TODO: move this to ShadowMapRenderer
     scene_parameters_.sunlight_view_proj = beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *
                                            beyond::look_at(-dir, Vec3(0.0), up);
 
@@ -557,7 +469,9 @@ void Renderer::render(const charlie::Camera& camera)
 
       transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
 
-      if (scene_parameters_.sunlight_shadow_mode != 0) { draw_shadow(cmd); }
+      if (scene_parameters_.sunlight_shadow_mode != 0) {
+        shadow_map_renderer_->record_commands(cmd);
+      }
 
       draw_scene(cmd, current_swapchain_image_view);
 
@@ -667,125 +581,6 @@ auto Renderer::add_mesh(const CPUMesh& cpu_mesh) -> MeshHandle
   });
 }
 
-void Renderer::draw_shadow(VkCommandBuffer cmd)
-{
-  ZoneScopedN("Shadow Render Pass");
-  TracyVkZone(current_frame().tracy_vk_ctx, cmd, "Shadow Render Pass");
-
-  vkh::cmd_pipeline_barrier2(
-      cmd, {.image_barriers = std::array{
-                vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                                                   VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
-                                   .access_masks = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                                                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-                                   .layouts = {VK_IMAGE_LAYOUT_UNDEFINED,
-                                               VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
-                                   .image = shadow_map_image_.image,
-                                   .subresource_range =
-                                       vkh::SubresourceRange{
-                                           .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                       }}
-                    .to_vk_struct() //
-            }});
-
-  const VkRenderingAttachmentInfo depth_attachments_info{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = shadow_map_image_view_,
-      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = VkClearValue{.depthStencil = {.depth = 1.f}},
-  };
-
-  const VkOffset2D offset = {0, 0};
-  const VkExtent2D extent{.width = shadow_map_width_, .height = shadow_map_height_};
-  const VkRenderingInfo render_info = {
-      .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-      .renderArea =
-          {
-              .offset = offset,
-              .extent = extent,
-          },
-      .layerCount = 1,
-      .pDepthAttachment = &depth_attachments_info,
-  };
-
-  vkCmdBeginRendering(cmd, &render_info);
-
-  const VkViewport viewport{
-      .x = 0.0f,
-      .y = 0.0f,
-      .width = narrow<f32>(shadow_map_width_),
-      .height = narrow<f32>(shadow_map_height_),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  };
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
-  const VkRect2D scissor{.offset = offset, .extent = extent};
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-  // Bind scene data
-  const size_t frame_index = frame_number_ % frame_overlap;
-  const u32 uniform_offset =
-      narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
-      narrow<u32>(frame_index);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 0, 1,
-                          &current_frame().global_descriptor_set, 1, &uniform_offset);
-
-  pipeline_manager_->cmd_bind_pipeline(cmd, shadow_map_pipeline_);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 1, 1,
-                          &current_frame().object_descriptor_set, 0, nullptr);
-
-  auto* object_transform_data =
-      static_cast<Mat4*>(context_.map(current_frame().transform_buffer).value());
-  auto* indirect_buffer_data = static_cast<VkDrawIndexedIndirectCommand*>(
-      context_.map(current_frame().indirect_buffer).value());
-
-  const usize draw_count = draws_solid_objects_.size();
-  BEYOND_ENSURE(draw_count <= max_object_count);
-  for (usize i = 0; i < draw_count; ++i) {
-    const RenderObject& render_object = draws_solid_objects_[i];
-    object_transform_data[i] = scene_->global_transforms.at(render_object.node_index);
-    indirect_buffer_data[i] = VkDrawIndexedIndirectCommand{
-        .indexCount = render_object.submesh->index_count,
-        .instanceCount = 1,
-        .firstIndex = render_object.submesh->index_offset,
-        .vertexOffset = narrow<i32>(render_object.submesh->vertex_offset),
-        .firstInstance = narrow<u32>(i),
-    };
-  }
-  // TODO: how to handle shadows for transparent objects?
-  context_.unmap(current_frame().transform_buffer);
-  context_.unmap(current_frame().indirect_buffer);
-
-  static constexpr VkDeviceSize vertex_offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &scene_->position_buffer.buffer, &vertex_offset);
-  vkCmdBindIndexBuffer(cmd, scene_->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-  vkh::cmd_begin_debug_utils_label(cmd, "shadow mapping pass", {0.5, 0.5, 0.5, 1.0});
-  vkCmdDrawIndexedIndirect(cmd, current_frame().indirect_buffer, 0, narrow<u32>(draw_count),
-                           sizeof(VkDrawIndexedIndirectCommand));
-  vkh::cmd_end_debug_utils_label(cmd);
-
-  vkCmdEndRendering(cmd);
-
-  vkh::cmd_pipeline_barrier2(
-      cmd, {.image_barriers = std::array{
-                vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                                                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
-                                   .access_masks = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                                                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT},
-                                   .layouts = {VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                   .image = shadow_map_image_.image,
-                                   .subresource_range =
-                                       vkh::SubresourceRange{
-                                           .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                       }}
-                    .to_vk_struct() //
-            }});
-}
-
 void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view)
 {
   ZoneScopedN("Mesh Render Pass");
@@ -843,7 +638,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       beyond::narrow<u32>(context_.align_uniform_buffer_size(sizeof(GPUSceneParameters))) *
       beyond::narrow<u32>(frame_index);
 
-  const VkDescriptorSet texture_descriptor_set = textures_->descriptor_set();
+  VkDescriptorSet texture_descriptor_set = textures_->descriptor_set();
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 0, 1,
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 1, 1,
@@ -968,9 +763,7 @@ Renderer::~Renderer()
   vkDestroyImageView(context_, depth_image_view_, nullptr);
   vkh::destroy_image(context_, depth_image_);
 
-  vkDestroyImageView(context_, shadow_map_image_view_, nullptr);
-  vkh::destroy_image(context_, shadow_map_image_);
-  vkDestroyPipelineLayout(context_, shadow_map_pipeline_layout_, nullptr);
+  shadow_map_renderer_ = nullptr;
 
   descriptor_allocator_ = nullptr;
   descriptor_layout_cache_ = nullptr;
@@ -1079,7 +872,7 @@ void Renderer::upload_materials()
                                  VK_SHADER_STAGE_FRAGMENT_BIT)
                     .build()
                     .value();
-  BEYOND_ENSURE(material_set_layout_ == result.layout);
+  BEYOND_ENSURE(material_descriptor_set_layout == result.layout);
   material_descriptor_set_ = result.set;
 }
 
