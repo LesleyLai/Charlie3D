@@ -264,7 +264,7 @@ void Renderer::init_descriptors()
     frame.material_index_buffer =
         vkh::create_buffer(context_,
                            vkh::BufferCreateInfo{
-                               .size = sizeof(int) * max_object_count,
+                               .size = sizeof(i32) * max_object_count,
                                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                .memory_usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
                                .debug_name = fmt::format("Material Index Buffer {}", i),
@@ -360,21 +360,18 @@ void Renderer::init_mesh_pipeline()
         global_descriptor_set_layout_, object_descriptor_set_layout_, material_set_layout_,
         textures_->descriptor_set_layout()};
 
-    const VkPushConstantRange push_constant = {
+    const VkPushConstantRange push_constant[] = {{
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .offset = 0,
         .size = sizeof(MeshPushConstant),
-    };
+    }};
 
-    const VkPipelineLayoutCreateInfo pipeline_layout_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = beyond::size(set_layouts),
-        .pSetLayouts = set_layouts,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &push_constant,
-    };
-    VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
-                                    &mesh_pipeline_layout_));
+    mesh_pipeline_layout_ = vkh::create_pipeline_layout(context_,
+                                                        {
+                                                            .set_layouts = set_layouts,
+                                                            .push_constant_ranges = push_constant,
+                                                        })
+                                .value();
   }
 
   auto create_info = charlie::GraphicsPipelineCreateInfo{
@@ -405,13 +402,11 @@ void Renderer::init_shadow_pipeline()
   const VkDescriptorSetLayout set_layouts[] = {global_descriptor_set_layout_,
                                                object_descriptor_set_layout_};
 
-  const VkPipelineLayoutCreateInfo pipeline_layout_info{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = beyond::size(set_layouts),
-      .pSetLayouts = set_layouts,
-  };
-  VK_CHECK(vkCreatePipelineLayout(context_.device(), &pipeline_layout_info, nullptr,
-                                  &shadow_map_pipeline_layout_));
+  shadow_map_pipeline_layout_ = vkh::create_pipeline_layout(context_,
+                                                            {
+                                                                .set_layouts = set_layouts,
+                                                            })
+                                    .value();
 
   std::vector<VkVertexInputBindingDescription> binding_descriptions = {{
       .binding = 0,
@@ -978,6 +973,7 @@ Renderer::~Renderer()
 
   vkDestroyImageView(context_, shadow_map_image_view_, nullptr);
   vkh::destroy_image(context_, shadow_map_image_);
+  vkDestroyPipelineLayout(context_, shadow_map_pipeline_layout_, nullptr);
 
   descriptor_allocator_ = nullptr;
   descriptor_layout_cache_ = nullptr;

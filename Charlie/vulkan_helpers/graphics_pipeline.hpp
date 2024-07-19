@@ -6,9 +6,6 @@
 #include <string>
 #include <vector>
 
-#include "error_handling.hpp"
-#include "required_field.hpp"
-
 namespace vkh {
 
 struct PipelineVertexInputStateCreateInfo {

@@ -6,9 +6,31 @@
 #include "image.hpp"
 
 #include "../utils/prelude.hpp"
+#include "beyond/utils/utils.hpp"
 #include <volk.h>
 
 namespace vkh {
+
+[[nodiscard]] auto
+create_pipeline_layout(VkDevice device,
+                       const PipelineLayoutCreateInfo& create_info) -> Expected<VkPipelineLayout>
+{
+  const VkPipelineLayoutCreateInfo pipeline_layout_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pNext = create_info.p_next,
+      .flags = create_info.flags,
+      .setLayoutCount = beyond::narrow<beyond::u32>(create_info.set_layouts.size()),
+      .pSetLayouts = create_info.set_layouts.data(),
+      .pushConstantRangeCount =
+          beyond::narrow<beyond::u32>(create_info.push_constant_ranges.size()),
+      .pPushConstantRanges = create_info.push_constant_ranges.data(),
+  };
+
+  VkPipelineLayout layout = {};
+  VKH_TRY(vkCreatePipelineLayout(device, &pipeline_layout_info, nullptr, &layout));
+  VKH_TRY(vkh::set_debug_name(device, layout, create_info.debug_name));
+  return layout;
+}
 
 [[nodiscard]] auto create_command_pool(VkDevice device,
                                        CommandPoolCreateInfo create_info) -> Expected<VkCommandPool>

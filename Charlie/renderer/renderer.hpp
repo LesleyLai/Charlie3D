@@ -208,7 +208,6 @@ private:
   VkDescriptorSetLayout material_set_layout_ = VK_NULL_HANDLE;
 
   std::unique_ptr<class ShaderCompiler> shader_compiler_;
-
   std::unique_ptr<PipelineManager> pipeline_manager_;
 
   VkPipelineLayout shadow_map_pipeline_layout_ = VK_NULL_HANDLE;

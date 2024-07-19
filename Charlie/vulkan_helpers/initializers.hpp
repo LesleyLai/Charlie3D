@@ -9,6 +9,18 @@
 
 namespace vkh {
 
+struct PipelineLayoutCreateInfo {
+  const void* p_next = nullptr;
+  VkPipelineLayoutCreateFlags flags = 0;
+  std::span<const VkDescriptorSetLayout> set_layouts;
+  std::span<const VkPushConstantRange> push_constant_ranges;
+  beyond::ZStringView debug_name;
+};
+
+[[nodiscard]] auto
+create_pipeline_layout(VkDevice device,
+                       const PipelineLayoutCreateInfo& create_info) -> Expected<VkPipelineLayout>;
+
 struct CommandPoolCreateInfo {
   VkCommandPoolCreateFlags flags = 0;
   std::uint32_t queue_family_index = 0;
