@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 
 #include "../utils/file_watcher.hpp"
 #include "../utils/prelude.hpp"
@@ -29,21 +30,24 @@ struct ShaderHandle : beyond::Handle<ShaderHandle, uintptr_t> {
   friend class PipelineManager;
 };
 
-} // namespace charlie
-
-namespace charlie {
-
 struct ShaderEntry {
   ShaderStage stage = {};
   VkShaderModule shader_module = VK_NULL_HANDLE;
   std::string file_path;
 };
 
-// A "virtual" graphics pipeline handle is useful to deal with hot reloading
+struct ComputePipelineHandle : beyond::Handle<ComputePipelineHandle> {
+  using Handle::Handle;
+  friend class PipelineManager;
+};
+
 struct GraphicsPipelineHandle : beyond::Handle<GraphicsPipelineHandle> {
   using Handle::Handle;
   friend class PipelineManager;
 };
+
+// Used internally to differentiate between diffrent types of pipelines
+using PipelineHandle = std::variant<GraphicsPipelineHandle, ComputePipelineHandle>;
 
 struct DepthBiasInfo {
   float constant_factor = 1.00f; // a scalar factor controlling the constant depth value added to
@@ -65,15 +69,22 @@ struct RasterizationStateCreateInfo {
   beyond::optional<DepthBiasInfo> depth_bias_info = beyond::nullopt;
 };
 
+struct ComputePipelineCreateInfo {
+  VkPipelineLayout layout = VK_NULL_HANDLE;
+  ShaderStageCreateInfo stage;
+
+  std::string debug_name;
+};
+
 struct GraphicsPipelineCreateInfo {
   VkPipelineLayout layout = VK_NULL_HANDLE;
   vkh::PipelineRenderingCreateInfo pipeline_rendering_create_info;
-  std::string debug_name;
   vkh::PipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
   beyond::StaticVector<ShaderStageCreateInfo, 6> stages;
   RasterizationStateCreateInfo rasterization_state;
-
   VkPipelineColorBlendAttachmentState color_blending = vkh::color_blend_attachment_disable();
+
+  std::string debug_name;
 };
 
 class PipelineManager {
@@ -82,12 +93,13 @@ class PipelineManager {
   std::unique_ptr<struct Shaders> shaders_;
   FileWatcher shader_file_watcher_;
 
-  std::vector<VkPipeline> pipelines_;
+  std::vector<VkPipeline> graphics_pipelines_;
+  std::vector<VkPipeline> compute_pipelines_;
   std::unique_ptr<struct PipelineCreateInfoCache>
       pipeline_create_info_cache_; // Cached for pipeline recreation
 
   // An adjacency list from shader entry to pipelines that depends on those shader entries
-  std::unordered_map<ShaderHandle, std::vector<GraphicsPipelineHandle>> pipeline_dependency_map_;
+  std::unordered_map<ShaderHandle, std::vector<PipelineHandle>> pipeline_dependency_map_;
 
   // An adjacency list from include files to shader entries that depends on those files
   StringHashMap<std::unordered_set<ShaderHandle>> header_dependency_map_;
@@ -105,13 +117,15 @@ public:
   [[nodiscard]] auto add_shader(beyond::ZStringView filename, ShaderStage stage) -> ShaderHandle;
 
   // Create a graphics pipeline
-  [[nodiscard]] auto create_graphics_pipeline(const GraphicsPipelineCreateInfo& create_info)
-      -> GraphicsPipelineHandle;
+  [[nodiscard]] auto
+  create_graphics_pipeline(const GraphicsPipelineCreateInfo& create_info) -> GraphicsPipelineHandle;
 
-  [[nodiscard]] auto get_pipeline(GraphicsPipelineHandle handle) const -> VkPipeline
-  {
-    return pipelines_.at(handle.value());
-  }
+  [[nodiscard]] auto
+  create_compute_pipeline(const ComputePipelineCreateInfo& create_info) -> ComputePipelineHandle;
+
+  // Call vkCmdBindPipeline on a graphics or compute pipeline handle
+  void cmd_bind_pipeline(VkCommandBuffer cmd, GraphicsPipelineHandle handle) const;
+  void cmd_bind_pipeline(VkCommandBuffer cmd, ComputePipelineHandle handle) const;
 
 private:
   void reload_shader(Ref<ShaderEntry> entry);

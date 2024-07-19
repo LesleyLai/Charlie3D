@@ -16,7 +16,9 @@ add_library(vulkan_helper
         header_only_impl.cpp
         image.hpp
         required_field.hpp
-        error_handling.cpp initializers.cpp initializers.hpp blending.hpp bda.hpp bda.cpp)
+        error_handling.cpp initializers.cpp initializers.hpp blending.hpp bda.hpp bda.cpp
+        compute_pipeline.hpp
+        compute_pipeline.cpp)
 target_link_libraries(vulkan_helper
         PUBLIC
         charlie3d::compiler_options
@@ -29,7 +31,7 @@ target_link_libraries(vulkan_helper
         PRIVATE
         charlie3d::window
         spdlog::spdlog
-        )
+)
 target_compile_definitions(vulkan_helper
         PUBLIC
         VK_NO_PROTOTYPES

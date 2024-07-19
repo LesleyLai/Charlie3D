@@ -57,6 +57,30 @@ namespace {
     return shaderc_vertex_shader;
   case fragment:
     return shaderc_fragment_shader;
+  case compute:
+    return shaderc_compute_shader;
+  case geometry:
+    return shaderc_geometry_shader;
+  case tess_control:
+    return shaderc_tess_control_shader;
+  case tess_evaluation:
+    return shaderc_tess_evaluation_shader;
+  case task:
+    return shaderc_task_shader;
+  case mesh:
+    return shaderc_mesh_shader;
+  case raygen:
+    return shaderc_raygen_shader;
+  case any_hit:
+    return shaderc_anyhit_shader;
+  case closest_hit:
+    return shaderc_closesthit_shader;
+  case miss:
+    return shaderc_miss_shader;
+  case intersection:
+    return shaderc_intersection_shader;
+  case callable:
+    return shaderc_callable_shader;
   }
   BEYOND_UNREACHABLE();
 }
@@ -75,8 +99,8 @@ public:
 
 private:
   auto GetInclude(const char* requested_source, shaderc_include_type /*type*/,
-                  const char* requesting_source, size_t /*include_depth*/)
-      -> shaderc_include_result* override
+                  const char* requesting_source,
+                  size_t /*include_depth*/) -> shaderc_include_result* override
   {
 
     std::filesystem::path requesting_directory = requesting_source;
@@ -154,8 +178,7 @@ auto ShaderCompiler::compile_shader_from_file(beyond::ZStringView shader_path,
   std::vector<IncludeData> includes;
 
   compile_options.SetIncluder(std::make_unique<ShaderIncluder>(beyond::ref(includes)));
-
-  // compile_options.SetOptimizationLevel(shaderc_optimization_level_performance);
+  compile_options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
   const auto shader_kind = to_shaderc_shader_kind(options.stage);
 

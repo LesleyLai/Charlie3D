@@ -1,5 +1,6 @@
 #include "pipeline_manager.hpp"
 
+#include "../vulkan_helpers/compute_pipeline.hpp"
 #include "../vulkan_helpers/context.hpp"
 #include "../vulkan_helpers/debug_utils.hpp"
 
@@ -24,14 +25,44 @@ namespace {
     return VK_SHADER_STAGE_VERTEX_BIT;
   case fragment:
     return VK_SHADER_STAGE_FRAGMENT_BIT;
+  case compute:
+    return VK_SHADER_STAGE_COMPUTE_BIT;
+  case geometry:
+    return VK_SHADER_STAGE_GEOMETRY_BIT;
+  case tess_control:
+    return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+  case tess_evaluation:
+    return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+  case task:
+    return VK_SHADER_STAGE_TASK_BIT_EXT;
+  case mesh:
+    return VK_SHADER_STAGE_MESH_BIT_EXT;
+  case raygen:
+    return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+  case any_hit:
+    return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+  case closest_hit:
+    return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+  case miss:
+    return VK_SHADER_STAGE_MISS_BIT_KHR;
+  case intersection:
+    return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+  case callable:
+    return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
   }
   BEYOND_UNREACHABLE();
+}
+
+// Gets a shader entry from shader handle
+[[nodiscard]] auto get_shader_entry(charlie::ShaderHandle handle) -> charlie::ShaderEntry&
+{
+  return *std::bit_cast<charlie::ShaderEntry*>(handle);
 }
 
 [[nodiscard]] auto to_VkPipelineShaderStageCreateInfo(charlie::ShaderStageCreateInfo shader_info)
     -> VkPipelineShaderStageCreateInfo
 {
-  const auto entry = *std::bit_cast<charlie::ShaderEntry*>(shader_info.handle);
+  const auto entry = get_shader_entry(shader_info.handle);
 
   return VkPipelineShaderStageCreateInfo{.sType =
                                              VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -167,6 +198,17 @@ auto create_graphics_pipeline_impl(
   return pipeline;
 }
 
+auto create_compute_pipeline_impl(
+    VkDevice device, const charlie::ComputePipelineCreateInfo& create_info) -> VkPipeline
+{
+  auto stage_info = to_VkPipelineShaderStageCreateInfo(create_info.stage);
+
+  return vkh::create_compute_pipeline(
+             device, nullptr,
+             vkh::ComputePipelineCreateInfo{.stage = stage_info, .layout = create_info.layout})
+      .value();
+}
+
 } // anonymous namespace
 
 namespace charlie {
@@ -195,6 +237,7 @@ struct Shaders {
 
 struct PipelineCreateInfoCache {
   std::vector<GraphicsPipelineCreateInfo> graphics_pipeline_create_infos;
+  std::vector<ComputePipelineCreateInfo> compute_pipeline_create_infos;
 
   [[nodiscard]] auto add(GraphicsPipelineCreateInfo create_info) -> GraphicsPipelineHandle
   {
@@ -226,9 +269,22 @@ struct PipelineCreateInfoCache {
     return GraphicsPipelineHandle{narrow<u32>(graphics_pipeline_create_infos.size() - 1)};
   }
 
+  [[nodiscard]] auto add(ComputePipelineCreateInfo create_info) -> ComputePipelineHandle
+  {
+    // TODO: specialization info
+
+    compute_pipeline_create_infos.push_back(create_info);
+    return ComputePipelineHandle{narrow<u32>(compute_pipeline_create_infos.size() - 1)};
+  }
+
   [[nodiscard]] auto get(GraphicsPipelineHandle handle) const -> const GraphicsPipelineCreateInfo&
   {
     return graphics_pipeline_create_infos.at(handle.value());
+  }
+
+  [[nodiscard]] auto get(ComputePipelineHandle handle) const -> const ComputePipelineCreateInfo&
+  {
+    return compute_pipeline_create_infos.at(handle.value());
   }
 };
 
@@ -240,7 +296,8 @@ PipelineManager::PipelineManager(VkDevice device)
 
 PipelineManager::~PipelineManager()
 {
-  for (auto pipeline : pipelines_) { vkDestroyPipeline(device_, pipeline, nullptr); }
+  for (auto pipeline : graphics_pipelines_) { vkDestroyPipeline(device_, pipeline, nullptr); }
+  for (auto pipeline : compute_pipelines_) { vkDestroyPipeline(device_, pipeline, nullptr); }
 }
 
 void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
@@ -263,20 +320,35 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
   // Update related pipelines!
   const auto shader_handle = std::bit_cast<ShaderHandle>(&shader_entry);
   {
-    beyond::optional<std::vector<GraphicsPipelineHandle>&> pipelines_opt =
-        this->pipeline_dependency_map_.at(shader_handle);
-    BEYOND_ENSURE(pipelines_opt.has_value());
 
-    std::vector<GraphicsPipelineHandle>& pipelines = pipelines_opt.value();
+    auto& pipelines = this->pipeline_dependency_map_.at(shader_handle);
     for (const auto pipeline_handle : pipelines) {
       // TODO: recreate pipeline asynchronously
-      const auto& create_info = this->pipeline_create_info_cache_->get(pipeline_handle);
+      std::visit(
+          [this](auto handle) {
+            if constexpr (std::is_same_v<GraphicsPipelineHandle,
+                                         std::remove_cv_t<decltype(handle)>>) {
+              const GraphicsPipelineCreateInfo& create_info =
+                  this->pipeline_create_info_cache_->get(handle);
+              VkPipeline& pipeline = graphics_pipelines_.at(handle.value());
+              vkDestroyPipeline(device_, pipeline, nullptr);
+              pipeline = create_graphics_pipeline_impl(device_, create_info);
 
-      VkPipeline& pipeline = pipelines_.at(pipeline_handle.value());
-      vkDestroyPipeline(device_, pipeline, nullptr);
-      pipeline = create_graphics_pipeline_impl(device_, create_info);
+              SPDLOG_INFO("Recreate {}!", create_info.debug_name);
+            } else if constexpr (std::is_same_v<ComputePipelineHandle,
+                                                std::remove_cv_t<decltype(handle)>>) {
+              const ComputePipelineCreateInfo& create_info =
+                  this->pipeline_create_info_cache_->get(handle);
+              VkPipeline& pipeline = compute_pipelines_.at(handle.value());
+              vkDestroyPipeline(device_, pipeline, nullptr);
+              pipeline = create_compute_pipeline_impl(device_, create_info);
 
-      SPDLOG_INFO("Recreate {}!", create_info.debug_name);
+              SPDLOG_INFO("Recreate {}!", create_info.debug_name);
+            } else {
+              static_assert([]() { return false; }());
+            }
+          },
+          pipeline_handle);
     }
   }
 }
@@ -329,7 +401,7 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
          .callback = [this](const std::filesystem::path& path, const FileAction action) {
            if (action == FileAction::modified) {
              for (const ShaderHandle& shader_handle : header_dependency_map_.at(path.string())) {
-               auto& entry = *std::bit_cast<charlie::ShaderEntry*>(shader_handle);
+               auto& entry = get_shader_entry(shader_handle);
                // TODO: need to find correct path
                reload_shader(ref(entry));
              }
@@ -338,7 +410,7 @@ void PipelineManager::reload_shader(Ref<ShaderEntry> entry)
   }
 
   // Create entry for the shader in the pipeline handle
-  pipeline_dependency_map_.try_emplace(shader_handle, std::vector<GraphicsPipelineHandle>{});
+  pipeline_dependency_map_.try_emplace(shader_handle, std::vector<PipelineHandle>{});
 
   return shader_handle;
 }
@@ -357,10 +429,9 @@ auto PipelineManager::create_graphics_pipeline(const GraphicsPipelineCreateInfo&
   }
 
   VkPipeline pipeline = create_graphics_pipeline_impl(device_, create_info);
-
-  pipelines_.push_back(pipeline);
+  graphics_pipelines_.push_back(pipeline);
   const auto pipeline_handle = pipeline_create_info_cache_->add(create_info);
-  BEYOND_ENSURE(narrow<u32>(pipelines_.size() - 1) == pipeline_handle.value());
+  BEYOND_ENSURE(narrow<u32>(graphics_pipelines_.size() - 1) == pipeline_handle.value());
 
   for (const ShaderStageCreateInfo& shader_info : create_info.stages) {
     pipeline_dependency_map_.at(shader_info.handle).push_back(pipeline_handle);
@@ -369,6 +440,38 @@ auto PipelineManager::create_graphics_pipeline(const GraphicsPipelineCreateInfo&
   SPDLOG_INFO("{} created", create_info.debug_name);
 
   return pipeline_handle;
+}
+
+auto PipelineManager::create_compute_pipeline(const charlie::ComputePipelineCreateInfo& create_info)
+    -> ComputePipelineHandle
+{
+  ZoneScoped;
+  if (not create_info.debug_name.empty()) {
+    ZoneText(create_info.debug_name.c_str(), create_info.debug_name.size());
+  }
+
+  VkPipeline pipeline = create_compute_pipeline_impl(device_, create_info);
+  compute_pipelines_.push_back(pipeline);
+  const auto pipeline_handle = pipeline_create_info_cache_->add(create_info);
+  BEYOND_ENSURE(narrow<u32>(compute_pipelines_.size() - 1) == pipeline_handle.value());
+
+  pipeline_dependency_map_.at(create_info.stage.handle).push_back(pipeline_handle);
+
+  SPDLOG_INFO("{} created", create_info.debug_name);
+
+  return pipeline_handle;
+}
+
+void PipelineManager::cmd_bind_pipeline(VkCommandBuffer cmd, GraphicsPipelineHandle handle) const
+{
+  VkPipeline pipeline = graphics_pipelines_.at(handle.value());
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+}
+
+void PipelineManager::cmd_bind_pipeline(VkCommandBuffer cmd, ComputePipelineHandle handle) const
+{
+  VkPipeline pipeline = compute_pipelines_.at(handle.value());
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 }
 
 } // namespace charlie

@@ -8,9 +8,25 @@
 
 namespace charlie {
 
-enum class ShaderStage {
+enum class ShaderStage : std::uint8_t {
   vertex,
   fragment,
+  compute,
+  geometry,
+  tess_control,
+  tess_evaluation,
+
+  // mesh shader
+  task,
+  mesh,
+
+  // ray tracing
+  raygen,
+  any_hit,
+  closest_hit,
+  miss,
+  intersection,
+  callable,
 };
 
 struct ShaderCompilationOptions {

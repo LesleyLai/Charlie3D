@@ -381,9 +381,10 @@ void Renderer::init_mesh_pipeline()
               .color_attachment_formats = {swapchain_.image_format()},
               .depth_attachment_format = depth_format_,
           },
-      .debug_name = "Mesh Graphics Pipeline",
       .stages = {{vertex_shader}, {fragment_shader}},
-      .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT}};
+      .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT},
+      .debug_name = "Mesh Graphics Pipeline",
+  };
 
   mesh_pipeline_ = pipeline_manager_->create_graphics_pipeline(create_info);
 
@@ -417,19 +418,20 @@ void Renderer::init_shadow_pipeline()
   std::vector<VkVertexInputAttributeDescription> attribute_descriptions = {
       {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0}};
 
-  shadow_map_pipeline_ = pipeline_manager_->create_graphics_pipeline(
-      {.layout = shadow_map_pipeline_layout_,
-       .pipeline_rendering_create_info =
-           vkh::PipelineRenderingCreateInfo{
-               .color_attachment_formats = {},
-               .depth_attachment_format = depth_format_,
-           },
-       .debug_name = "Shadow Mapping Graphics Pipeline",
-       .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
-                                          .attribute_descriptions = attribute_descriptions},
-       .stages = {{vertex_shader}},
-       .rasterization_state = {
-           .depth_bias_info = DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}}});
+  shadow_map_pipeline_ = pipeline_manager_->create_graphics_pipeline({
+      .layout = shadow_map_pipeline_layout_,
+      .pipeline_rendering_create_info =
+          vkh::PipelineRenderingCreateInfo{
+              .color_attachment_formats = {},
+              .depth_attachment_format = depth_format_,
+          },
+      .vertex_input_state_create_info = {.binding_descriptions = binding_descriptions,
+                                         .attribute_descriptions = attribute_descriptions},
+      .stages = {{vertex_shader}},
+      .rasterization_state = {.depth_bias_info =
+                                  DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}},
+      .debug_name = "Shadow Mapping Graphics Pipeline",
+  });
 }
 
 void Renderer::update(const charlie::Camera& camera)
@@ -730,8 +732,7 @@ void Renderer::draw_shadow(VkCommandBuffer cmd)
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 0, 1,
                           &current_frame().global_descriptor_set, 1, &uniform_offset);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipeline_manager_->get_pipeline(shadow_map_pipeline_));
+  pipeline_manager_->cmd_bind_pipeline(cmd, shadow_map_pipeline_);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 1, 1,
                           &current_frame().object_descriptor_set, 0, nullptr);
 
@@ -887,9 +888,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   // draw solid objects
   {
-    const auto pipeline_handle = mesh_pipeline_;
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline_manager_->get_pipeline(pipeline_handle));
+    pipeline_manager_->cmd_bind_pipeline(cmd, mesh_pipeline_);
 
     const MeshPushConstant push_constant{
         .position_buffer_address = pos_buffer_address,
@@ -922,9 +921,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
     }
 
     {
-      const auto pipeline_handle = mesh_pipeline_transparent_;
-      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        pipeline_manager_->get_pipeline(pipeline_handle));
+      pipeline_manager_->cmd_bind_pipeline(cmd, mesh_pipeline_transparent_);
 
       const MeshPushConstant push_constant{
           .position_buffer_address = pos_buffer_address,
