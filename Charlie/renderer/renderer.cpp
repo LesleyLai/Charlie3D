@@ -87,7 +87,8 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
       pipeline_manager_{std::make_unique<PipelineManager>(context_)},
       upload_context_{init_upload_context(context_).expect("Failed to create upload context")},
       textures_{std::make_unique<TextureManager>(context_, upload_context_,
-                                                 sampler_cache_->default_sampler())}
+                                                 sampler_cache_->default_sampler())},
+      frame_deletion_queue_{DeletionQueue{context_}, DeletionQueue{context_}}
 {
   init_depth_image();
   init_shadow_map();
@@ -960,7 +961,10 @@ Renderer::~Renderer()
 
   imgui_render_pass_ = nullptr;
 
-  // TODO: destroy scene
+  vkh::destroy_buffer(context_, scene_->vertex_buffer);
+  vkh::destroy_buffer(context_, scene_->position_buffer);
+  vkh::destroy_buffer(context_, scene_->index_buffer);
+  scene_ = nullptr;
 
   textures_ = nullptr;
 
@@ -1089,6 +1093,22 @@ void Renderer::upload_materials()
 auto Renderer::add_texture(Texture texture) -> u32
 {
   return textures_->add_texture(texture);
+}
+
+void Renderer::set_scene(std::unique_ptr<Scene> scene)
+{
+  BEYOND_ENSURE(scene != nullptr);
+  // Delete GPU resources for the scene
+  if (scene_ != nullptr) {
+    current_frame_deletion_queue().push(
+        [vertex_buffer = scene_->vertex_buffer, position_buffer = scene_->position_buffer,
+         index_buffer = scene_->index_buffer](Ref<vkh::Context> context) {
+          vkh::destroy_buffer(context, vertex_buffer);
+          vkh::destroy_buffer(context, position_buffer);
+          vkh::destroy_buffer(context, index_buffer);
+        });
+  }
+  scene_ = std::move(scene);
 }
 
 } // namespace charlie

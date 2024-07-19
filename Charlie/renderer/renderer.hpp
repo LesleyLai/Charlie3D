@@ -127,11 +127,7 @@ public:
 
   [[nodiscard]] auto scene() const -> const Scene& { return *scene_; }
 
-  void set_scene(std::unique_ptr<Scene> scene)
-  {
-    BEYOND_ENSURE(scene != nullptr);
-    scene_ = std::move(scene);
-  }
+  void set_scene(std::unique_ptr<Scene> scene);
 
   void draw_shadow(VkCommandBuffer cmd);
   void draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view);

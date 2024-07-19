@@ -15,7 +15,7 @@ class DeletionQueue {
   vkh::Context* context_ = nullptr;
 
 public:
-  DeletionQueue() = default;
+  DeletionQueue() = delete;
   explicit DeletionQueue(vkh::Context& context) : context_{&context} {}
 
   ~DeletionQueue() { flush(); }
