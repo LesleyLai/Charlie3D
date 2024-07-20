@@ -39,11 +39,6 @@ struct Scene {
   // std::vector<NodeCoordinate> hierarchy;
   std::vector<std::string> names;
 
-  // Combined vertex/index buffers
-  vkh::AllocatedBuffer position_buffer{};
-  vkh::AllocatedBuffer vertex_buffer{};
-  vkh::AllocatedBuffer index_buffer{};
-
   std::unordered_map<u32, RenderComponent> render_components;
 
   [[nodiscard]] auto node_count() const -> u32

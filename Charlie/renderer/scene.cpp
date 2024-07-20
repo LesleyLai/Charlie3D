@@ -116,21 +116,21 @@ namespace charlie {
     }
   }
 
-  // TODO: better name
-  auto buffers = renderer.upload_mesh_buffer(cpu_scene.buffers, "Scene");
+  auto mesh_buffers = renderer.upload_mesh_buffer(cpu_scene.buffers, "Scene");
+  renderer.current_frame_deletion_queue().push(
+      [buffers = renderer.scene_mesh_buffers](vkh::Context& context) {
+        vkDestroyBuffer(context, buffers.position_buffer, nullptr);
+        vkDestroyBuffer(context, buffers.vertex_buffer, nullptr);
+        vkDestroyBuffer(context, buffers.index_buffer, nullptr);
+      });
+  renderer.scene_mesh_buffers = mesh_buffers;
 
   return Scene{
-      .metadata = std::move(cpu_scene.metadata),
+      .metadata = cpu_scene.metadata,
       .local_transforms = std::move(cpu_scene.nodes.local_transforms),
       .global_transforms = std::move(cpu_scene.nodes.global_transforms),
       .names = std::move(cpu_scene.nodes.names),
-
-      .position_buffer = buffers.position_buffer,
-      .vertex_buffer = buffers.vertex_buffer,
-      .index_buffer = buffers.index_buffer,
-
       .render_components = std::move(render_components),
-
   };
 }
 

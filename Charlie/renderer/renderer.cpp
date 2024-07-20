@@ -676,10 +676,10 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
 
   // Vertex and index buffers
   const VkDeviceAddress pos_buffer_address =
-      vkh::get_buffer_device_address(context_, scene_->position_buffer.buffer);
+      vkh::get_buffer_device_address(context_, scene_mesh_buffers.position_buffer.buffer);
   const VkDeviceAddress vertex_buffer_address =
-      vkh::get_buffer_device_address(context_, scene_->vertex_buffer.buffer);
-  vkCmdBindIndexBuffer(cmd, scene_->index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+      vkh::get_buffer_device_address(context_, scene_mesh_buffers.vertex_buffer.buffer);
+  vkCmdBindIndexBuffer(cmd, scene_mesh_buffers.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
   // draw solid objects
   {
@@ -748,9 +748,9 @@ Renderer::~Renderer()
 
   imgui_render_pass_ = nullptr;
 
-  vkh::destroy_buffer(context_, scene_->vertex_buffer);
-  vkh::destroy_buffer(context_, scene_->position_buffer);
-  vkh::destroy_buffer(context_, scene_->index_buffer);
+  vkh::destroy_buffer(context_, scene_mesh_buffers.vertex_buffer);
+  vkh::destroy_buffer(context_, scene_mesh_buffers.position_buffer);
+  vkh::destroy_buffer(context_, scene_mesh_buffers.index_buffer);
   scene_ = nullptr;
 
   textures_ = nullptr;
@@ -884,16 +884,6 @@ auto Renderer::add_texture(Texture texture) -> u32
 void Renderer::set_scene(std::unique_ptr<Scene> scene)
 {
   BEYOND_ENSURE(scene != nullptr);
-  // Delete GPU resources for the scene
-  if (scene_ != nullptr) {
-    current_frame_deletion_queue().push(
-        [vertex_buffer = scene_->vertex_buffer, position_buffer = scene_->position_buffer,
-         index_buffer = scene_->index_buffer](Ref<vkh::Context> context) {
-          vkh::destroy_buffer(context, vertex_buffer);
-          vkh::destroy_buffer(context, position_buffer);
-          vkh::destroy_buffer(context, index_buffer);
-        });
-  }
   scene_ = std::move(scene);
 }
 

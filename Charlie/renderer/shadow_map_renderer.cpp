@@ -195,7 +195,7 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
       narrow<u32>(frame_index);
 
   renderer_.pipeline_manager().cmd_bind_pipeline(cmd, shadow_map_pipeline_);
-  
+
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_map_pipeline_layout_, 0, 1,
                           &renderer_.current_frame().global_descriptor_set, 1, &uniform_offset);
 
@@ -203,8 +203,10 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
                           &renderer_.current_frame().object_descriptor_set, 0, nullptr);
 
   static constexpr VkDeviceSize vertex_offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &renderer_.scene().position_buffer.buffer, &vertex_offset);
-  vkCmdBindIndexBuffer(cmd, renderer_.scene().index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+  vkCmdBindVertexBuffers(cmd, 0, 1, &renderer_.scene_mesh_buffers.position_buffer.buffer,
+                         &vertex_offset);
+  vkCmdBindIndexBuffer(cmd, renderer_.scene_mesh_buffers.index_buffer.buffer, 0,
+                       VK_INDEX_TYPE_UINT32);
 
   vkh::cmd_begin_debug_utils_label(cmd, "shadow mapping pass", {0.5, 0.5, 0.5, 1.0});
   vkCmdDrawIndexedIndirect(cmd, renderer_.current_frame().indirect_buffer, 0,

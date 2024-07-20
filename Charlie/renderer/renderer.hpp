@@ -191,6 +191,8 @@ public:
     return draws_solid_objects_;
   }
 
+  MeshBuffers scene_mesh_buffers;
+
 private:
   Window* window_ = nullptr;
   Resolution resolution_;
@@ -235,6 +237,7 @@ private:
   std::vector<RenderObject> draws_transparent_objects_;
 
   std::unique_ptr<Scene> scene_;
+
   GPUSceneParameters scene_parameters_;
   vkh::AllocatedBuffer scene_parameter_buffer_;
 
