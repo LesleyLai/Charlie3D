@@ -84,7 +84,7 @@ TextureManager::TextureManager(vkh::Context& context, UploadContext& upload_cont
         vkh::create_image_view(
             context_,
             {.image = default_albedo_image,
-             .format = VK_FORMAT_R8G8B8A8_SRGB,
+             .format = VK_FORMAT_R8G8B8A8_UNORM,
              .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
              .debug_name = "Default Albedo Texture Image View"})
             .value();
