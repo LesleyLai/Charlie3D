@@ -17,7 +17,16 @@ namespace charlie {
 
 [[nodiscard]] auto Camera::proj_matrix() const -> Mat4
 {
-  return beyond::perspective(fovy, aspect_ratio, z_near, z_far);
+  // Reverse z
+  const float g = 1.f / tan(fovy * 0.5f);
+  // clang-format off
+  return Mat4 {
+      g / aspect_ratio, 0, 0, 0,
+      0, g, 0, 0,
+      0, 0, z_near / (z_far - z_near), -(z_near * z_far) / (z_near - z_far),
+      0, 0, -1, 0
+  };
+  // clang-format on
 }
 
 static void imgui_slider_degree(const char* label, beyond::Radian* v, beyond::Degree v_min,

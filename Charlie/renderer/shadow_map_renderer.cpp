@@ -99,6 +99,12 @@ void ShadowMapRenderer::init_pipeline()
       .stages = {{vertex_shader}},
       .rasterization_state = {.depth_bias_info =
                                   DepthBiasInfo{.constant_factor = 1.25f, .slope_factor = 1.75f}},
+      .depth_stencil_state =
+          {
+              .depth_test_enable = VK_TRUE,
+              .depth_write_enable = VK_TRUE,
+              .depth_compare_op = VK_COMPARE_OP_LESS_OR_EQUAL,
+          },
       .debug_name = "Shadow Mapping Graphics Pipeline",
   });
 }

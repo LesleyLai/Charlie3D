@@ -335,6 +335,12 @@ void Renderer::init_mesh_pipeline()
           },
       .stages = {{vertex_shader}, {fragment_shader}},
       .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT},
+      .depth_stencil_state =
+          {
+              .depth_test_enable = VK_TRUE,
+              .depth_write_enable = VK_TRUE,
+              .depth_compare_op = VK_COMPARE_OP_GREATER_OR_EQUAL,
+          },
       .debug_name = "Mesh Graphics Pipeline",
   };
 
@@ -380,7 +386,7 @@ void Renderer::update(const charlie::Camera& camera)
         abs(dot(dir, Vec3(0.0, 1.0, 0.0))) > 0.9 ? Vec3(0.0, 0.0, 1.0) : Vec3(0.0, 1.0, 0.0);
 
     // TODO: move this to ShadowMapRenderer
-    scene_parameters_.sunlight_view_proj = beyond::ortho(-10.f, 10.f, 10.f, -10.f, -100.f, 100.f) *
+    scene_parameters_.sunlight_view_proj = beyond::ortho(-20.f, 20.f, 20.f, -20.f, -100.f, 100.f) *
                                            beyond::look_at(-dir, Vec3(0.0), up);
 
     char* scene_data = static_cast<char*>(context_.map(scene_parameter_buffer_).value());
@@ -601,7 +607,7 @@ void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_ima
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = VkClearValue{.depthStencil = {.depth = 1.f}},
+      .clearValue = VkClearValue{.depthStencil = {.depth = 0.f}},
   };
 
   const VkRenderingInfo render_info{

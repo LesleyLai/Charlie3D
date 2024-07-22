@@ -34,6 +34,7 @@ No goals
   and [Percentage-Closer Soft Shadows (PCSS)](https://developer.download.nvidia.cn/shaderlibrary/docs/shadow_PCSS.pdf)
 - Normal map support
 - Occlusion map support
+- [Reverse-Z](https://developer.nvidia.com/blog/visualizing-depth-precision/) for better precision
 
 ### Asset
 

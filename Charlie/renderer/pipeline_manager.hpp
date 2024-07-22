@@ -85,6 +85,7 @@ struct GraphicsPipelineCreateInfo {
   vkh::PipelineVertexInputStateCreateInfo vertex_input_state_create_info = {};
   beyond::StaticVector<ShaderStageCreateInfo, 6> stages;
   RasterizationStateCreateInfo rasterization_state;
+  vkh::PipelineDepthStencilStateCreateInfo depth_stencil_state;
   VkPipelineColorBlendAttachmentState color_blending = vkh::color_blend_attachment_disable();
 
   std::string debug_name;

@@ -137,16 +137,8 @@ auto create_graphics_pipeline_impl(
       .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
   };
 
-  static constexpr VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-      .depthBoundsTestEnable = VK_FALSE,
-      .stencilTestEnable = VK_FALSE,
-      .minDepthBounds = 0.0f,
-      .maxDepthBounds = 1.0f,
-  };
+  const VkPipelineDepthStencilStateCreateInfo depth_stencil_state =
+      create_info.depth_stencil_state.to_vk_struct();
 
   const auto pipeline_rendering_create_info = create_info.pipeline_rendering_create_info;
   const VkPipelineRenderingCreateInfo vk_pipeline_rendering_create_info{

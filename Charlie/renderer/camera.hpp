@@ -18,7 +18,7 @@ public:
   beyond::Radian fovy = beyond::Degree{70};
   f32 aspect_ratio = 1.0f;
   f32 z_near = 0.1f;
-  f32 z_far = 200.f;
+  f32 z_far = 20000.f;
 
 private:
   CameraController* controller_ = nullptr;

@@ -15,6 +15,7 @@ layout (location = 6) in flat int in_material_index;
 
 layout (location = 0) out vec4 out_frag_color;
 
+
 layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 view;
     mat4 proj;
