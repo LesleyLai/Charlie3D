@@ -40,7 +40,7 @@ class VkCtx;
 namespace charlie {
 
 // TODO: find better way to allocate object buffer
-constexpr beyond::usize max_object_count = 10000000;
+constexpr beyond::usize max_object_count = 100000;
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
@@ -134,7 +134,7 @@ public:
 
   void set_scene(std::unique_ptr<Scene> scene);
 
-  void draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view);
+  void draw_scene(VkCommandBuffer cmd);
 
   [[nodiscard]] auto resolution() const noexcept -> Resolution { return resolution_; }
 
@@ -224,6 +224,14 @@ private:
   GraphicsPipelineHandle mesh_pipeline_;
   GraphicsPipelineHandle mesh_pipeline_transparent_;
 
+  VkPipelineLayout tonemapping_pipeline_layout_ = VK_NULL_HANDLE;
+  GraphicsPipelineHandle tonemapping_pipeline_;
+
+  static constexpr VkFormat final_hdr_image_format = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vkh::AllocatedImage final_hdr_image_;
+  VkImageView final_hdr_image_view_ = VK_NULL_HANDLE;
+  VkDescriptorSet final_hdr_image_descriptor_set_ = VK_NULL_HANDLE;
+
   beyond::SlotMap<MeshHandle, Mesh> meshes_;
   std::vector<Material> materials_;
   std::vector<AlphaMode> material_alpha_modes_;
@@ -246,10 +254,12 @@ private:
   void update(const charlie::Camera& camera);
 
   void init_frame_data();
+  void init_final_hdr_image();
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
   void init_mesh_pipeline();
+  void init_tonemapping_pipeline();
 
   void on_input_event(const Event& event, const InputStates& states);
 

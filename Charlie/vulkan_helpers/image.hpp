@@ -36,13 +36,13 @@ struct ImageCreateInfo {
   VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
   VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
   VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-  std::span<uint32_t> queue_fimily_indices = {};
+  std::span<uint32_t> queue_fimily_indices;
   VkImageLayout initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   beyond::ZStringView debug_name;
 };
 
-auto create_image(vkh::Context& context, const ImageCreateInfo& image_create_info)
-    -> Expected<AllocatedImage>;
+auto create_image(vkh::Context& context,
+                  const ImageCreateInfo& image_create_info) -> Expected<AllocatedImage>;
 
 void destroy_image(vkh::Context& context, AllocatedImage& image);
 

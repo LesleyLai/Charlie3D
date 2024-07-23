@@ -86,6 +86,7 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
       frame_deletion_queue_{DeletionQueue{context_}, DeletionQueue{context_}}
 {
   init_depth_image();
+  init_final_hdr_image();
 
   shadow_map_renderer_ = std::make_unique<ShadowMapRenderer>(*this, ref(*sampler_cache_));
 
@@ -169,6 +170,32 @@ void Renderer::init_depth_image()
                                                  },
                                              .debug_name = "Depth Image View"})
           .expect("Fail to create depth image view");
+}
+
+void Renderer::init_final_hdr_image()
+{
+  ZoneScoped;
+
+  final_hdr_image_ =
+      vkh::create_image(
+          context_,
+          vkh::ImageCreateInfo{
+              .format = final_hdr_image_format,
+              .extent = VkExtent3D{resolution_.width, resolution_.height, 1},
+              .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+              .debug_name = "Final HDR Image",
+          })
+          .expect("Fail to create final hdr image");
+  final_hdr_image_view_ =
+      vkh::create_image_view(
+          context_, vkh::ImageViewCreateInfo{.image = final_hdr_image_.image,
+                                             .format = final_hdr_image_format,
+                                             .subresource_range =
+                                                 vkh::SubresourceRange{
+                                                     .aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                 },
+                                             .debug_name = "Final HDR Image View"})
+          .expect("Fail to create final hdr image view");
 }
 
 void Renderer::init_descriptors()
@@ -295,6 +322,8 @@ void Renderer::init_pipelines()
   ZoneScoped;
 
   init_mesh_pipeline();
+
+  init_tonemapping_pipeline();
 }
 
 void Renderer::init_mesh_pipeline()
@@ -330,7 +359,7 @@ void Renderer::init_mesh_pipeline()
       .layout = mesh_pipeline_layout_,
       .pipeline_rendering_create_info =
           vkh::PipelineRenderingCreateInfo{
-              .color_attachment_formats = {swapchain_.image_format()},
+              .color_attachment_formats = {final_hdr_image_format},
               .depth_attachment_format = depth_format,
           },
       .stages = {{vertex_shader}, {fragment_shader}},
@@ -349,6 +378,50 @@ void Renderer::init_mesh_pipeline()
   create_info.color_blending = vkh::color_blend_attachment_additive();
   create_info.debug_name = "Mesh Graphics Pipeline (Transparent)";
   mesh_pipeline_transparent_ = pipeline_manager_->create_graphics_pipeline(create_info);
+}
+
+void Renderer::init_tonemapping_pipeline()
+{
+  ZoneScoped;
+
+  const ShaderHandle vertex_shader =
+      pipeline_manager_->add_shader("fullscreen_tri.vert.glsl", ShaderStage::vertex);
+  const ShaderHandle fragment_shader =
+      pipeline_manager_->add_shader("tonemapping.frag.glsl", ShaderStage::fragment);
+
+  const VkDescriptorImageInfo image_info{
+      .sampler = sampler_cache_->default_blocky_sampler(),
+      .imageView = final_hdr_image_view_,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
+  const auto result = DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
+                          .bind_image(0, image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                      VK_SHADER_STAGE_FRAGMENT_BIT)
+                          .build()
+                          .value();
+
+  final_hdr_image_descriptor_set_ = result.set;
+
+  const VkDescriptorSetLayout set_layouts[] = {result.layout};
+
+  tonemapping_pipeline_layout_ = vkh::create_pipeline_layout(context_,
+                                                             {
+                                                                 .set_layouts = set_layouts,
+                                                             })
+                                     .value();
+
+  auto create_info = charlie::GraphicsPipelineCreateInfo{
+      .layout = tonemapping_pipeline_layout_,
+      .pipeline_rendering_create_info =
+          vkh::PipelineRenderingCreateInfo{
+              .color_attachment_formats = {swapchain_.image_format()},
+          },
+      .stages = {{vertex_shader}, {fragment_shader}},
+      .rasterization_state = {.cull_mode = VK_CULL_MODE_BACK_BIT},
+      .debug_name = "Tone Mapping Pipeline",
+  };
+  tonemapping_pipeline_ = pipeline_manager_->create_graphics_pipeline(create_info);
 }
 
 void Renderer::update(const charlie::Camera& camera)
@@ -479,7 +552,89 @@ void Renderer::render(const charlie::Camera& camera)
         shadow_map_renderer_->record_commands(cmd);
       }
 
-      draw_scene(cmd, current_swapchain_image_view);
+      {
+        // Prepare final HDR image
+        const auto image_memory_barrier_to_render =
+            vkh::ImageBarrier2{
+                .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
+                .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT},
+                .layouts = {VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                .image = final_hdr_image_.image,
+                .subresource_range =
+                    vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
+            }
+                .to_vk_struct();
+        vkh::cmd_pipeline_barrier2(cmd,
+                                   {.image_barriers = std::array{image_memory_barrier_to_render}});
+      }
+      draw_scene(cmd);
+      {
+        // Transit final hdr image to sample
+        const auto image_memory_barrier_to_sample =
+            vkh::ImageBarrier2{
+                .stage_masks = {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+                .access_masks = {VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                 VK_ACCESS_2_SHADER_SAMPLED_READ_BIT},
+                .layouts = {VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL},
+                .image = final_hdr_image_.image,
+                .subresource_range =
+                    vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
+            }
+                .to_vk_struct();
+        vkh::cmd_pipeline_barrier2(cmd,
+                                   {.image_barriers = std::array{image_memory_barrier_to_sample}});
+      }
+
+      {
+        // Tonemapping pipeline
+        const VkRenderingAttachmentInfo color_attachments_info{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = current_swapchain_image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        };
+
+        const VkRenderingInfo render_info{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea =
+                {
+                    .offset = {0, 0},
+                    .extent = to_extent2d(resolution()),
+                },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &color_attachments_info,
+        };
+
+        vkCmdBeginRendering(cmd, &render_info);
+
+        const VkViewport viewport{
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = beyond::narrow<float>(resolution().width),
+            .height = beyond::narrow<float>(resolution().height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        const VkRect2D scissor{.offset = {0, 0}, .extent = to_extent2d(resolution())};
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+      }
+
+      pipeline_manager_->cmd_bind_pipeline(cmd, tonemapping_pipeline_);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tonemapping_pipeline_layout_, 0,
+                              1, &final_hdr_image_descriptor_set_, 0, nullptr);
+      // Draw a fullscreen triangle
+
+      vkh::cmd_begin_debug_utils_label(cmd, "tonemapping pass", {0.1f, 0.1f, 0.1f, 1.0f});
+      vkCmdDraw(cmd, 3, 1, 0, 0);
+      vkh::cmd_end_debug_utils_label(cmd);
+
+      vkCmdEndRendering(cmd);
 
       {
         ZoneScopedN("ImGUI Render Pass");
@@ -587,18 +742,18 @@ auto Renderer::add_mesh(const CPUMesh& cpu_mesh) -> MeshHandle
   });
 }
 
-void Renderer::draw_scene(VkCommandBuffer cmd, VkImageView current_swapchain_image_view)
+void Renderer::draw_scene(VkCommandBuffer cmd)
 {
   ZoneScopedN("Mesh Render Pass");
   TracyVkZone(current_frame().tracy_vk_ctx, cmd, "Mesh Render Pass");
 
   const VkRenderingAttachmentInfo color_attachments_info{
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = current_swapchain_image_view,
+      .imageView = final_hdr_image_view_,
       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = VkClearValue{.color = {.float32 = {0.8f, 0.8f, 0.8f, 1.0f}}},
+      .clearValue = VkClearValue{.color = {.float32 = {1.0f, 1.0f, 1.0f, 1.0f}}},
   };
 
   const VkRenderingAttachmentInfo depth_attachments_info{
@@ -764,6 +919,7 @@ Renderer::~Renderer()
   vkDestroyCommandPool(context_, upload_context_.command_pool, nullptr);
   vkDestroyFence(context_, upload_context_.fence, nullptr);
 
+  vkDestroyPipelineLayout(context_, tonemapping_pipeline_layout_, nullptr);
   vkDestroyPipelineLayout(context_, mesh_pipeline_layout_, nullptr);
 
   vkDestroyImageView(context_, depth_image_view_, nullptr);
@@ -818,6 +974,24 @@ void Renderer::resize()
   vkDestroyImageView(context_, depth_image_view_, nullptr);
   vkh::destroy_image(context_, depth_image_);
   init_depth_image();
+
+  vkDestroyImageView(context_, final_hdr_image_view_, nullptr);
+  vkh::destroy_image(context_, final_hdr_image_);
+  init_final_hdr_image();
+
+  const VkDescriptorImageInfo image_info{
+      .sampler = sampler_cache_->default_blocky_sampler(),
+      .imageView = final_hdr_image_view_,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
+  const auto result = DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
+                          .bind_image(0, image_info, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                      VK_SHADER_STAGE_FRAGMENT_BIT)
+                          .build()
+                          .value();
+
+  final_hdr_image_descriptor_set_ = result.set;
 }
 
 auto Renderer::add_material(const CPUMaterial& material_info) -> u32

@@ -70,6 +70,7 @@ class SamplerCache {
   std::unordered_map<VkSamplerCreateInfo, VkSampler, std::hash<VkSamplerCreateInfo>, SamplerEqualTo>
       map_;
   VkSampler default_sampler_ = VK_NULL_HANDLE;
+  VkSampler default_blocky_sampler_ = VK_NULL_HANDLE;
 
 public:
   explicit SamplerCache(VkDevice device);
@@ -82,6 +83,9 @@ public:
 
   // Gets the default sampler
   [[nodiscard]] auto default_sampler() const -> VkSampler;
+
+  // Gets a "blocky" sampler which use nearest instead linear filters
+  [[nodiscard]] auto default_blocky_sampler() const -> VkSampler;
 };
 
 } // namespace charlie
