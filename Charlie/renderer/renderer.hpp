@@ -40,7 +40,7 @@ class VkCtx;
 namespace charlie {
 
 // TODO: find better way to allocate object buffer
-constexpr beyond::usize max_object_count = 100000;
+constexpr beyond::usize max_object_count = 10000000;
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
@@ -61,10 +61,19 @@ struct Material {
   f32 _padding = 0.0f;
 };
 
-struct RenderObject {
-  const SubMesh* submesh = nullptr;
+struct Draw {
+  u32 vertex_offset = 0;
+  u32 index_count = 0;
+  u32 index_offset = 0;
+  u32 material_index = 0;
   u32 node_index = static_cast<u32>(~0); // Index of the node in scene graph. Used to look up
                                          // informations such as the transformations
+};
+
+// GPU extra data for per draw
+struct GPUPerDraw {
+  u32 material_index = 0;
+  u32 node_index = 0;
 };
 
 constexpr unsigned int frame_overlap = 2;
@@ -79,10 +88,7 @@ struct FrameData {
   VkDescriptorSet global_descriptor_set{};
 
   vkh::AllocatedBuffer transform_buffer{}; // model matrix for each scene graph node
-  vkh::AllocatedBuffer material_index_buffer{};
   VkDescriptorSet object_descriptor_set{};
-
-  vkh::AllocatedBuffer indirect_buffer{};
 
   tracy::VkCtx* tracy_vk_ctx = nullptr;
 };
@@ -133,6 +139,8 @@ public:
   [[nodiscard]] auto scene() const -> const Scene& { return *scene_; }
 
   void set_scene(std::unique_ptr<Scene> scene);
+
+  void populate_scene_draw_buffers();
 
   void draw_scene(VkCommandBuffer cmd);
 
@@ -186,10 +194,8 @@ public:
 
   [[nodiscard]] auto pipeline_manager() -> PipelineManager& { return *pipeline_manager_; }
 
-  [[nodiscard]] auto draw_solid_objects() const -> std::span<const RenderObject>
-  {
-    return draws_solid_objects_;
-  }
+  [[nodiscard]] auto draws_buffer() const -> VkBuffer { return draws_indirect_buffer_.buffer; }
+  [[nodiscard]] auto solid_draw_count() const -> u32 { return solid_draw_count_; };
 
   MeshBuffers scene_mesh_buffers;
 
@@ -241,8 +247,13 @@ private:
 
   std::unique_ptr<TextureManager> textures_;
 
-  std::vector<RenderObject> draws_solid_objects_;
-  std::vector<RenderObject> draws_transparent_objects_;
+  VkDescriptorSetLayout draws_descriptor_set_layout_ = VK_NULL_HANDLE;
+  VkDescriptorSet draws_descriptor_set_ = VK_NULL_HANDLE;
+
+  std::uint32_t solid_draw_count_ = 0;
+  std::uint32_t transparent_draw_count_ = 0;
+  vkh::AllocatedBuffer draws_indirect_buffer_;
+  vkh::AllocatedBuffer per_draw_buffer_; // For information per draw
 
   std::unique_ptr<Scene> scene_;
 

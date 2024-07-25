@@ -18,7 +18,6 @@ struct SubMesh {
   u32 vertex_offset = 0;
   u32 index_offset = 0;
   u32 index_count = 0;
-
   u32 material_index = 0;
 };
 

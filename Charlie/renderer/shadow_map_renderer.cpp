@@ -115,32 +115,7 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
   TracyVkZone(renderer_.current_frame().tracy_vk_ctx, cmd, "Shadow Render Pass");
   vkh::Context& context = renderer_.context();
 
-  const usize draw_count = renderer_.draw_solid_objects().size();
-  BEYOND_ENSURE(draw_count <= max_object_count);
-  {
-    ZoneScopedN("Copy Buffers");
-
-    auto* object_transform_data =
-        static_cast<Mat4*>(context.map(renderer_.current_frame().transform_buffer).value());
-    auto* indirect_buffer_data = static_cast<VkDrawIndexedIndirectCommand*>(
-        context.map(renderer_.current_frame().indirect_buffer).value());
-
-    const auto draws = renderer_.draw_solid_objects();
-    for (usize i = 0; i < draw_count; ++i) {
-      const RenderObject& render_object = draws[i];
-      object_transform_data[i] = renderer_.scene().global_transforms.at(render_object.node_index);
-      indirect_buffer_data[i] = VkDrawIndexedIndirectCommand{
-          .indexCount = render_object.submesh->index_count,
-          .instanceCount = 1,
-          .firstIndex = render_object.submesh->index_offset,
-          .vertexOffset = narrow<i32>(render_object.submesh->vertex_offset),
-          .firstInstance = narrow<u32>(i),
-      };
-    }
-    // TODO: how to handle shadows for transparent objects?
-    context.unmap(renderer_.current_frame().transform_buffer);
-    context.unmap(renderer_.current_frame().indirect_buffer);
-  }
+  const u32 draw_count = renderer_.solid_draw_count();
 
   vkh::cmd_pipeline_barrier2(
       cmd, {.image_barriers = std::array{
@@ -169,13 +144,11 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
 
   const VkOffset2D offset = {0, 0};
   const VkExtent2D extent{.width = shadow_map_width_, .height = shadow_map_height_};
+  const VkRect2D render_area{.offset = offset, .extent = extent};
+
   const VkRenderingInfo render_info = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-      .renderArea =
-          {
-              .offset = offset,
-              .extent = extent,
-          },
+      .renderArea = render_area,
       .layerCount = 1,
       .pDepthAttachment = &depth_attachments_info,
   };
@@ -191,8 +164,7 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
       .maxDepth = 1.0f,
   };
   vkCmdSetViewport(cmd, 0, 1, &viewport);
-  const VkRect2D scissor{.offset = offset, .extent = extent};
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
+  vkCmdSetScissor(cmd, 0, 1, &render_area);
 
   // Bind scene data
   const size_t frame_index = renderer_.current_frame_index();
@@ -215,8 +187,8 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
                        VK_INDEX_TYPE_UINT32);
 
   vkh::cmd_begin_debug_utils_label(cmd, "shadow mapping pass", {0.5, 0.5, 0.5, 1.0});
-  vkCmdDrawIndexedIndirect(cmd, renderer_.current_frame().indirect_buffer, 0,
-                           narrow<u32>(draw_count), sizeof(VkDrawIndexedIndirectCommand));
+  vkCmdDrawIndexedIndirect(cmd, renderer_.draws_buffer(), 0, draw_count,
+                           sizeof(VkDrawIndexedIndirectCommand));
   vkh::cmd_end_debug_utils_label(cmd);
 
   vkCmdEndRendering(cmd);

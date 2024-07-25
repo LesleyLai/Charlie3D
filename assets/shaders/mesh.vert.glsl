@@ -10,6 +10,15 @@ layout (set = 0, binding = 0) uniform CameraBuffer {
     vec3 position;
 } camera;
 
+struct PerDraw {
+    int material_id;
+    int node_id;
+};
+
+layout (std430, set = 4, binding = 1) readonly restrict buffer PerDrawBuffer {
+    PerDraw per_draw_data[];
+};
+
 layout (buffer_reference, scalar) readonly restrict buffer PositionBuffer {
     vec3 position[];
 };
@@ -68,7 +77,9 @@ void main()
     vec2 in_tex_coord = in_vertex.tex_coord;
     vec4 in_tangent = in_vertex.tangent;
 
-    mat4 model = object_buffer.objects[gl_InstanceIndex].model;
+    PerDraw in_per_draw = per_draw_data[gl_InstanceIndex];
+
+    mat4 model = object_buffer.objects[in_per_draw.node_id].model;
     mat4 transform_matrix = camera.view_proj * model;
     vec4 world_pos = camera.view * model * vec4(in_position, 1.0f);
     out_world_pos = (world_pos / world_pos.w).xyz;
@@ -81,5 +92,5 @@ void main()
 
     out_shadow_coord = light_space_to_NDC * scene_data.sunlight_view_proj * model * vec4(in_position, 1.0);
 
-    out_material_index = material_index_buffer.material_ids[gl_InstanceIndex];
+    out_material_index = in_per_draw.material_id;
 }

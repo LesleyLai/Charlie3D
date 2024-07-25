@@ -18,7 +18,8 @@ add_library(vulkan_helper
         required_field.hpp
         error_handling.cpp initializers.cpp initializers.hpp blending.hpp bda.hpp bda.cpp
         compute_pipeline.hpp
-        compute_pipeline.cpp)
+        compute_pipeline.cpp
+        buffer.cpp)
 target_link_libraries(vulkan_helper
         PUBLIC
         charlie3d::compiler_options
