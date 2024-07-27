@@ -293,9 +293,45 @@ void Renderer::init_pipelines()
 {
   ZoneScoped;
 
+  init_generate_draws_pipeline();
+
   init_mesh_pipeline();
 
   init_tonemapping_pipeline();
+}
+
+struct GenerateDrawsPushConstant {
+  VkDeviceAddress initial_draws_buffer_address = 0;
+  VkDeviceAddress final_draws_buffer_address = 0;
+  u32 total_draws_count = 0;
+};
+
+void Renderer::init_generate_draws_pipeline()
+{
+  ZoneScoped;
+
+  const ShaderHandle shader =
+      pipeline_manager_->add_shader("generate_draws.comp.glsl", ShaderStage::compute);
+
+  const VkPushConstantRange push_constant[] = {{
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .offset = 0,
+      .size = sizeof(GenerateDrawsPushConstant),
+  }};
+
+  generate_draws_layout_ = vkh::create_pipeline_layout(context_,
+                                                       {
+                                                           .push_constant_ranges = push_constant,
+                                                       })
+                               .value();
+
+  const auto create_info = ComputePipelineCreateInfo{.layout = generate_draws_layout_,
+                                                     .stage =
+                                                         {
+                                                             .handle = shader,
+                                                         },
+                                                     .debug_name = "Generate Draws Pipeline"};
+  generate_draws_pipeline_ = pipeline_manager_->create_compute_pipeline(create_info);
 }
 
 void Renderer::init_mesh_pipeline()
@@ -507,6 +543,50 @@ void Renderer::render(const charlie::Camera& camera)
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
 
     {
+      ZoneScopedN("Generate Draws");
+      TracyVkZone(frame.tracy_vk_ctx, cmd, "Generate Draws");
+
+      vkh::cmd_begin_debug_utils_label(cmd, "Generate Draws Pass", {0.097f, 0.01f, 0.049f, 1.0f});
+
+      const GenerateDrawsPushConstant push_constant{
+          .initial_draws_buffer_address = vkh::get_buffer_device_address(context_, draws_buffer_),
+          .final_draws_buffer_address =
+              vkh::get_buffer_device_address(context_, draws_indirect_buffer_),
+          .total_draws_count = total_draw_count_,
+      };
+      vkCmdPushConstants(cmd, generate_draws_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                         sizeof(GenerateDrawsPushConstant), &push_constant);
+
+      pipeline_manager_->cmd_bind_pipeline(cmd, generate_draws_pipeline_);
+
+      static constexpr u32 local_group_size = 256;
+      vkCmdDispatch(cmd, total_draw_count_ / local_group_size + 1, 1, 1);
+
+      vkh::cmd_end_debug_utils_label(cmd);
+
+      {
+        VkBufferMemoryBarrier2 barrier{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+            .dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+            .buffer = draws_indirect_buffer_,
+            .offset = 0,
+            .size = total_draw_count_ * sizeof(VkDrawIndexedIndirectCommand),
+        };
+
+        VkDependencyInfo dependency_info{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers = &barrier,
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependency_info);
+      }
+    }
+
+    {
       TracyVkCollect(frame.tracy_vk_ctx, cmd);
       TracyVkZone(frame.tracy_vk_ctx, cmd, "Swapchain");
 
@@ -698,7 +778,8 @@ auto Renderer::add_mesh(const CPUMesh& cpu_mesh) -> MeshHandle
     submeshes.push_back(SubMesh{.vertex_offset = submesh.vertex_offset,
                                 .index_offset = submesh.index_offset,
                                 .index_count = submesh.index_count,
-                                .material_index = submesh.material_index.value()});
+                                .material_index = submesh.material_index.value(),
+                                .aabb = submesh.aabb});
   }
 
   return meshes_.insert(Mesh{
@@ -996,18 +1077,21 @@ void Renderer::populate_scene_draw_buffers()
     const AlphaMode alpha_mode = material_alpha_modes_.at(draw.material_index);
     return alpha_mode != AlphaMode::blend;
   });
+  total_draw_count_ = narrow<u32>(draws.size());
   solid_draw_count_ = narrow<u32>(pivot - draws.begin());
   transparent_draw_count_ = narrow<u32>(draws.end() - pivot);
 
   current_frame_deletion_queue().push(
-      [draws_buffer = draws_indirect_buffer_](vkh::Context& context) {
+      [draws_buffer = draws_buffer_,
+       draw_indirect_buffer = draws_indirect_buffer_](vkh::Context& context) {
         vkh::destroy_buffer(context, draws_buffer);
+        vkh::destroy_buffer(context, draw_indirect_buffer);
       });
 
-  std::vector<VkDrawIndexedIndirectCommand> draw_indirect_buffer_data(draws.size());
+  std::vector<VkDrawIndexedIndirectCommand> draws_buffer_data(draws.size());
   for (usize i = 0; i < draws.size(); ++i) {
     const Draw& draw = draws[i];
-    draw_indirect_buffer_data[i] = VkDrawIndexedIndirectCommand{
+    draws_buffer_data[i] = VkDrawIndexedIndirectCommand{
         .indexCount = draw.index_count,
         .instanceCount = 1,
         .firstIndex = draw.index_offset,
@@ -1016,9 +1100,22 @@ void Renderer::populate_scene_draw_buffers()
     };
   }
 
-  draws_indirect_buffer_ = upload_buffer(context_, upload_context_, draw_indirect_buffer_data,
-                                         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, "Draw Indirect")
-                               .value();
+  draws_buffer_ =
+      upload_buffer(context_, upload_context_, draws_buffer_data,
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                    "Draws")
+          .value();
+
+  draws_indirect_buffer_ =
+      vkh::create_buffer(
+          context_,
+          vkh::BufferCreateInfo{.size = draws.size() * sizeof(VkDrawIndexedIndirectCommand),
+                                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                                         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
+                                .debug_name = "Draw Indirect"})
+          .value();
 
   current_frame_deletion_queue().push([per_draw_buffer = per_draw_buffer_](vkh::Context& context) {
     vkh::destroy_buffer(context, per_draw_buffer);

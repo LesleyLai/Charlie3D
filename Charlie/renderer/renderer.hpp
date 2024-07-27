@@ -40,7 +40,7 @@ class VkCtx;
 namespace charlie {
 
 // TODO: find better way to allocate object buffer
-constexpr beyond::usize max_object_count = 10000000;
+constexpr beyond::usize max_object_count = 100000;
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
@@ -226,6 +226,9 @@ private:
 
   std::unique_ptr<ShadowMapRenderer> shadow_map_renderer_;
 
+  VkPipelineLayout generate_draws_layout_ = VK_NULL_HANDLE;
+  ComputePipelineHandle generate_draws_pipeline_;
+
   VkPipelineLayout mesh_pipeline_layout_ = VK_NULL_HANDLE;
   GraphicsPipelineHandle mesh_pipeline_;
   GraphicsPipelineHandle mesh_pipeline_transparent_;
@@ -250,8 +253,10 @@ private:
   VkDescriptorSetLayout draws_descriptor_set_layout_ = VK_NULL_HANDLE;
   VkDescriptorSet draws_descriptor_set_ = VK_NULL_HANDLE;
 
-  std::uint32_t solid_draw_count_ = 0;
-  std::uint32_t transparent_draw_count_ = 0;
+  u32 total_draw_count_ = 0;
+  u32 solid_draw_count_ = 0;
+  u32 transparent_draw_count_ = 0;
+  vkh::AllocatedBuffer draws_buffer_; // Initial scene draws
   vkh::AllocatedBuffer draws_indirect_buffer_;
   vkh::AllocatedBuffer per_draw_buffer_; // For information per draw
 
@@ -269,6 +274,8 @@ private:
   void init_depth_image();
   void init_descriptors();
   void init_pipelines();
+
+  void init_generate_draws_pipeline();
   void init_mesh_pipeline();
   void init_tonemapping_pipeline();
 

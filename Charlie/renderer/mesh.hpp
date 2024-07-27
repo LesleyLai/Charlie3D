@@ -4,6 +4,7 @@
 #include "../utils/prelude.hpp"
 #include "../vulkan_helpers/buffer.hpp"
 
+#include <beyond/geometry/aabb3.hpp>
 #include <beyond/math/vector.hpp>
 
 namespace vkh {
@@ -19,6 +20,7 @@ struct SubMesh {
   u32 index_offset = 0;
   u32 index_count = 0;
   u32 material_index = 0;
+  beyond::AABB3 aabb;
 };
 
 struct Mesh {
