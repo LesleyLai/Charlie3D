@@ -5,6 +5,7 @@
 #include "../vulkan_helpers/error_handling.hpp"
 #include "../vulkan_helpers/graphics_pipeline.hpp"
 #include "../vulkan_helpers/initializers.hpp"
+#include "../vulkan_helpers/pipeline_barrier.hpp"
 
 #include "descriptor_allocator.hpp"
 
@@ -39,7 +40,7 @@ void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
   ZoneScoped;
 
   const auto image_memory_barrier_to_render =
-      vkh::ImageBarrier2{
+      vkh::ImageBarrier{
           .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                           VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
           .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT},
@@ -48,7 +49,7 @@ void transit_current_swapchain_image_for_rendering(VkCommandBuffer cmd,
           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
       }
           .to_vk_struct();
-  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{image_memory_barrier_to_render}});
+  vkh::cmd_pipeline_barrier(cmd, {.image_barriers = std::array{image_memory_barrier_to_render}});
 }
 
 void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
@@ -57,7 +58,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
   ZoneScoped;
 
   const auto image_memory_barrier_to_present =
-      vkh::ImageBarrier2{
+      vkh::ImageBarrier{
           .stage_masks = {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                           VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT},
           .access_masks = {VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_2_NONE},
@@ -66,7 +67,7 @@ void transit_current_swapchain_image_to_present(VkCommandBuffer cmd,
           .subresource_range = vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
       }
           .to_vk_struct();
-  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{image_memory_barrier_to_present}});
+  vkh::cmd_pipeline_barrier(cmd, {.image_barriers = std::array{image_memory_barrier_to_present}});
 }
 
 } // anonymous namespace
@@ -301,8 +302,8 @@ void Renderer::init_pipelines()
 }
 
 struct GenerateDrawsPushConstant {
-  VkDeviceAddress initial_draws_buffer_address = 0;
-  VkDeviceAddress final_draws_buffer_address = 0;
+  VkDeviceAddress draws_buffer_address = 0;
+  VkDeviceAddress draws_indirect_buffer_address = 0;
   u32 total_draws_count = 0;
 };
 
@@ -344,20 +345,10 @@ void Renderer::init_mesh_pipeline()
       pipeline_manager_->add_shader("mesh.frag.glsl", ShaderStage::fragment);
 
   {
-    draws_descriptor_set_layout_ =
-        descriptor_layout_cache_
-            ->create_descriptor_set_layout({.bindings = std::array{VkDescriptorSetLayoutBinding{
-                                                .binding = 1,
-                                                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                                .descriptorCount = 1,
-                                                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-                                            }}})
-            .value();
-
     ZoneScopedN("Create Pipeline Layout");
     const VkDescriptorSetLayout set_layouts[] = {
         global_descriptor_set_layout, object_descriptor_set_layout, material_descriptor_set_layout,
-        textures_->descriptor_set_layout(), draws_descriptor_set_layout_};
+        textures_->descriptor_set_layout()};
 
     const VkPushConstantRange push_constant[] = {{
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -541,6 +532,7 @@ void Renderer::render(const charlie::Camera& camera)
 
   {
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmd_begin_info));
+    TracyVkCollect(frame.tracy_vk_ctx, cmd);
 
     {
       ZoneScopedN("Generate Draws");
@@ -549,8 +541,8 @@ void Renderer::render(const charlie::Camera& camera)
       vkh::cmd_begin_debug_utils_label(cmd, "Generate Draws Pass", {0.097f, 0.01f, 0.049f, 1.0f});
 
       const GenerateDrawsPushConstant push_constant{
-          .initial_draws_buffer_address = vkh::get_buffer_device_address(context_, draws_buffer_),
-          .final_draws_buffer_address =
+          .draws_buffer_address = vkh::get_buffer_device_address(context_, draws_buffer_),
+          .draws_indirect_buffer_address =
               vkh::get_buffer_device_address(context_, draws_indirect_buffer_),
           .total_draws_count = total_draw_count_,
       };
@@ -565,29 +557,22 @@ void Renderer::render(const charlie::Camera& camera)
       vkh::cmd_end_debug_utils_label(cmd);
 
       {
-        VkBufferMemoryBarrier2 barrier{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-            .dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-            .buffer = draws_indirect_buffer_,
-            .offset = 0,
-            .size = total_draw_count_ * sizeof(VkDrawIndexedIndirectCommand),
-        };
+        const auto barrier =
+            vkh::BufferMemoryBarrier{
+                .stage_masks = {VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT},
+                .access_masks = {VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT},
+                .buffer = draws_indirect_buffer_.buffer,
+                .offset = 0,
+                .size = total_draw_count_ * sizeof(VkDrawIndexedIndirectCommand),
+            }
+                .to_vk_struct();
 
-        VkDependencyInfo dependency_info{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .bufferMemoryBarrierCount = 1,
-            .pBufferMemoryBarriers = &barrier,
-        };
-
-        vkCmdPipelineBarrier2(cmd, &dependency_info);
+        vkh::cmd_pipeline_barrier(cmd, {.buffer_memory_barriers = std::array{barrier}});
       }
     }
 
     {
-      TracyVkCollect(frame.tracy_vk_ctx, cmd);
       TracyVkZone(frame.tracy_vk_ctx, cmd, "Swapchain");
 
       transit_current_swapchain_image_for_rendering(cmd, current_swapchain_image);
@@ -599,7 +584,7 @@ void Renderer::render(const charlie::Camera& camera)
       {
         // Prepare final HDR image
         const auto image_memory_barrier_to_render =
-            vkh::ImageBarrier2{
+            vkh::ImageBarrier{
                 .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT},
                 .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT},
@@ -609,14 +594,14 @@ void Renderer::render(const charlie::Camera& camera)
                     vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
             }
                 .to_vk_struct();
-        vkh::cmd_pipeline_barrier2(cmd,
-                                   {.image_barriers = std::array{image_memory_barrier_to_render}});
+        vkh::cmd_pipeline_barrier(cmd,
+                                  {.image_barriers = std::array{image_memory_barrier_to_render}});
       }
       draw_scene(cmd);
       {
         // Transit final hdr image to sample
         const auto image_memory_barrier_to_sample =
-            vkh::ImageBarrier2{
+            vkh::ImageBarrier{
                 .stage_masks = {VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                                 VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
                 .access_masks = {VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -628,8 +613,8 @@ void Renderer::render(const charlie::Camera& camera)
                     vkh::SubresourceRange{.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT},
             }
                 .to_vk_struct();
-        vkh::cmd_pipeline_barrier2(cmd,
-                                   {.image_barriers = std::array{image_memory_barrier_to_sample}});
+        vkh::cmd_pipeline_barrier(cmd,
+                                  {.image_barriers = std::array{image_memory_barrier_to_sample}});
       }
 
       {
@@ -778,12 +763,12 @@ auto Renderer::add_mesh(const CPUMesh& cpu_mesh) -> MeshHandle
     submeshes.push_back(SubMesh{.vertex_offset = submesh.vertex_offset,
                                 .index_offset = submesh.index_offset,
                                 .index_count = submesh.index_count,
-                                .material_index = submesh.material_index.value(),
-                                .aabb = submesh.aabb});
+                                .material_index = submesh.material_index.value()});
   }
 
   return meshes_.insert(Mesh{
       .submeshes = std::move(submeshes),
+      .aabb = cpu_mesh.aabb,
   });
 }
 
@@ -853,19 +838,16 @@ void Renderer::draw_scene(VkCommandBuffer cmd)
                           &material_descriptor_set_, 0, nullptr);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 3, 1,
                           &texture_descriptor_set, 0, nullptr);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline_layout_, 4, 1,
-                          &draws_descriptor_set_, 0, nullptr);
 
   // Vertex and index buffers
-  const VkDeviceAddress pos_buffer_address =
-      vkh::get_buffer_device_address(context_, scene_mesh_buffers.position_buffer.buffer);
-  const VkDeviceAddress vertex_buffer_address =
-      vkh::get_buffer_device_address(context_, scene_mesh_buffers.vertex_buffer.buffer);
   vkCmdBindIndexBuffer(cmd, scene_mesh_buffers.index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
   const MeshPushConstant push_constant{
-      .position_buffer_address = pos_buffer_address,
-      .vertex_buffer_address = vertex_buffer_address,
+      .position_buffer_address =
+          vkh::get_buffer_device_address(context_, scene_mesh_buffers.position_buffer),
+      .vertex_buffer_address =
+          vkh::get_buffer_device_address(context_, scene_mesh_buffers.vertex_buffer),
+      .draws_buffer_address = vkh::get_buffer_device_address(context_, draws_buffer_),
   };
   vkCmdPushConstants(cmd, mesh_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
                      sizeof(MeshPushConstant), &push_constant);
@@ -1088,20 +1070,8 @@ void Renderer::populate_scene_draw_buffers()
         vkh::destroy_buffer(context, draw_indirect_buffer);
       });
 
-  std::vector<VkDrawIndexedIndirectCommand> draws_buffer_data(draws.size());
-  for (usize i = 0; i < draws.size(); ++i) {
-    const Draw& draw = draws[i];
-    draws_buffer_data[i] = VkDrawIndexedIndirectCommand{
-        .indexCount = draw.index_count,
-        .instanceCount = 1,
-        .firstIndex = draw.index_offset,
-        .vertexOffset = narrow<i32>(draw.vertex_offset),
-        .firstInstance = narrow<u32>(i),
-    };
-  }
-
   draws_buffer_ =
-      upload_buffer(context_, upload_context_, draws_buffer_data,
+      upload_buffer(context_, upload_context_, draws,
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                     "Draws")
           .value();
@@ -1116,34 +1086,6 @@ void Renderer::populate_scene_draw_buffers()
                                 .memory_usage = VMA_MEMORY_USAGE_GPU_ONLY,
                                 .debug_name = "Draw Indirect"})
           .value();
-
-  current_frame_deletion_queue().push([per_draw_buffer = per_draw_buffer_](vkh::Context& context) {
-    vkh::destroy_buffer(context, per_draw_buffer);
-  });
-
-  std::vector<GPUPerDraw> per_draw_data(draws.size());
-  std::ranges::transform(draws, per_draw_data.begin(), [](Draw draw) {
-    return GPUPerDraw{
-        .material_index = draw.material_index,
-        .node_index = draw.node_index,
-    };
-  });
-
-  per_draw_buffer_ = upload_buffer(context_, upload_context_, per_draw_data,
-                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "Per Draw")
-                         .value();
-
-  // Per draw buffer descriptor
-  const VkDescriptorBufferInfo per_draw_buffer_info = {
-      .buffer = per_draw_buffer_.buffer, .offset = 0, .range = sizeof(GPUPerDraw) * draws.size()};
-  auto draws_descriptor_build_result =
-      DescriptorBuilder{*descriptor_layout_cache_, *descriptor_allocator_} //
-          .bind_buffer(1, per_draw_buffer_info, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                       VK_SHADER_STAGE_VERTEX_BIT)
-          .build()
-          .value();
-  BEYOND_ENSURE(draws_descriptor_set_layout_ == draws_descriptor_build_result.layout);
-  draws_descriptor_set_ = draws_descriptor_build_result.set;
 }
 
 } // namespace charlie

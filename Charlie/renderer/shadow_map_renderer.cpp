@@ -1,7 +1,8 @@
 #include "shadow_map_renderer.hpp"
 #include "../vulkan_helpers/context.hpp"
 #include "../vulkan_helpers/debug_utils.hpp"
-#include "../vulkan_helpers/initializers.hpp"
+#include "../vulkan_helpers/pipeline_barrier.hpp"
+
 #include "renderer.hpp"
 #include "sampler_cache.hpp"
 
@@ -117,19 +118,19 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
 
   const u32 draw_count = renderer_.solid_draw_count();
 
-  vkh::cmd_pipeline_barrier2(
+  vkh::cmd_pipeline_barrier(
       cmd, {.image_barriers = std::array{
-                vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                                                   VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
-                                   .access_masks = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                                                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-                                   .layouts = {VK_IMAGE_LAYOUT_UNDEFINED,
-                                               VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
-                                   .image = shadow_map_image_.image,
-                                   .subresource_range =
-                                       vkh::SubresourceRange{
-                                           .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                       }}
+                vkh::ImageBarrier{.stage_masks = {VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                                  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT},
+                                  .access_masks = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+                                  .layouts = {VK_IMAGE_LAYOUT_UNDEFINED,
+                                              VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL},
+                                  .image = shadow_map_image_.image,
+                                  .subresource_range =
+                                      vkh::SubresourceRange{
+                                          .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                      }}
                     .to_vk_struct() //
             }});
 
@@ -193,19 +194,19 @@ void ShadowMapRenderer::record_commands(VkCommandBuffer cmd)
 
   vkCmdEndRendering(cmd);
 
-  vkh::cmd_pipeline_barrier2(
+  vkh::cmd_pipeline_barrier(
       cmd, {.image_barriers = std::array{
-                vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                                                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
-                                   .access_masks = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                                                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT},
-                                   .layouts = {VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                   .image = shadow_map_image_.image,
-                                   .subresource_range =
-                                       vkh::SubresourceRange{
-                                           .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                       }}
+                vkh::ImageBarrier{.stage_masks = {VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                                                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+                                  .access_masks = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                                                   VK_ACCESS_2_SHADER_SAMPLED_READ_BIT},
+                                  .layouts = {VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                  .image = shadow_map_image_.image,
+                                  .subresource_range =
+                                      vkh::SubresourceRange{
+                                          .aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                      }}
                     .to_vk_struct() //
             }});
 }

@@ -25,7 +25,7 @@ namespace charlie {
 struct Vertex {
   Vec2 normal;
   Vec2 tex_coords;
-  alignas(Vec4) Vec4 tangents;
+  Vec4 tangents;
 };
 
 // TODO: test this
@@ -51,16 +51,15 @@ struct Vertex {
 struct CPUSubmesh {
   beyond::optional<u32> material_index;
 
-  u32 vertex_offset = 0;
+  i32 vertex_offset = 0;
   u32 index_offset = 0;
   u32 index_count = 0;
-
-  beyond::AABB3 aabb;
 };
 
 struct CPUMesh {
   std::string name;
   std::vector<CPUSubmesh> submeshes;
+  beyond::AABB3 aabb;
 };
 
 // Buffers for a single combined mesh

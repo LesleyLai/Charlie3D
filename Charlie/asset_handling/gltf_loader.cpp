@@ -343,7 +343,7 @@ struct SubmeshIntermediateData {
 };
 
 [[nodiscard]]
-auto construct_aabb(std::span<const Point3> positions) -> beyond::AABB3
+auto construct_submesh_aabb(std::span<const Point3> positions) -> beyond::AABB3
 {
   static constexpr auto infinity = std::numeric_limits<float>::infinity();
   Point3 min = Point3{infinity, infinity, infinity};
@@ -462,14 +462,21 @@ auto convert_meshes(const fastgltf::Asset& asset,
   std::size_t index_offset = 0;
   for (const auto& mesh_intermediate : meshes_intermediate) {
     std::vector<charlie::CPUSubmesh> submeshes;
+    static constexpr auto infinity = std::numeric_limits<float>::infinity();
+    Point3 min = Point3{infinity, infinity, infinity};
+    Point3 max = Point3{-infinity, -infinity, -infinity};
+    beyond::AABB3 mesh_aabb{min, max};
+
     for (const auto& submesh_intermediate : mesh_intermediate) {
       submeshes.push_back(charlie::CPUSubmesh{
           .material_index = submesh_intermediate.material_index,
-          .vertex_offset = beyond::narrow<u32>(vertex_offset),
+          .vertex_offset = beyond::narrow<i32>(vertex_offset),
           .index_offset = beyond::narrow<u32>(index_offset),
           .index_count = beyond::narrow<u32>(submesh_intermediate.indices.size()),
-          .aabb = construct_aabb(submesh_intermediate.positions),
       });
+
+      const auto submesh_aabb = construct_submesh_aabb(submesh_intermediate.positions);
+      mesh_aabb = merge(submesh_aabb, mesh_aabb);
 
       std::ranges::copy(submesh_intermediate.positions, buffers->positions.data() + vertex_offset);
       std::ranges::copy(submesh_intermediate.vertices, buffers->vertices.data() + vertex_offset);
@@ -480,6 +487,7 @@ auto convert_meshes(const fastgltf::Asset& asset,
     }
     meshes.push_back(charlie::CPUMesh{
         .submeshes = std::move(submeshes),
+        .aabb = mesh_aabb,
     });
   }
   return meshes;

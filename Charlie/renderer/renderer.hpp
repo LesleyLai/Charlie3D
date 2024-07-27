@@ -40,7 +40,7 @@ class VkCtx;
 namespace charlie {
 
 // TODO: find better way to allocate object buffer
-constexpr beyond::usize max_object_count = 100000;
+constexpr usize max_object_count = 10000000;
 
 class DescriptorAllocator;
 class DescriptorLayoutCache;
@@ -62,18 +62,12 @@ struct Material {
 };
 
 struct Draw {
-  u32 vertex_offset = 0;
+  i32 vertex_offset = 0;
   u32 index_count = 0;
   u32 index_offset = 0;
   u32 material_index = 0;
   u32 node_index = static_cast<u32>(~0); // Index of the node in scene graph. Used to look up
-                                         // informations such as the transformations
-};
-
-// GPU extra data for per draw
-struct GPUPerDraw {
-  u32 material_index = 0;
-  u32 node_index = 0;
+                                         // information such as the transformations and mesh AABB
 };
 
 constexpr unsigned int frame_overlap = 2;
@@ -116,6 +110,7 @@ struct GPUSceneParameters {
 struct MeshPushConstant {
   VkDeviceAddress position_buffer_address = 0;
   VkDeviceAddress vertex_buffer_address = 0;
+  VkDeviceAddress draws_buffer_address = 0;
 };
 
 // Buffers for mesh data
@@ -258,7 +253,6 @@ private:
   u32 transparent_draw_count_ = 0;
   vkh::AllocatedBuffer draws_buffer_; // Initial scene draws
   vkh::AllocatedBuffer draws_indirect_buffer_;
-  vkh::AllocatedBuffer per_draw_buffer_; // For information per draw
 
   std::unique_ptr<Scene> scene_;
 

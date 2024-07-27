@@ -4,6 +4,7 @@
 #include "../vulkan_helpers/buffer.hpp"
 #include "../vulkan_helpers/image.hpp"
 #include "../vulkan_helpers/initializers.hpp"
+#include "../vulkan_helpers/pipeline_barrier.hpp"
 
 #include <beyond/utils/defer.hpp>
 
@@ -14,13 +15,13 @@ namespace charlie {
 static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution image_resolution,
                                 u32 mip_levels)
 {
-  vkh::ImageBarrier2 barrier{.image = image,
-                             .subresource_range = {
-                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1,
-                             }};
+  vkh::ImageBarrier barrier{.image = image,
+                            .subresource_range = {
+                                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 1,
+                            }};
 
   i32 mip_width = narrow<i32>(image_resolution.width);
   i32 mip_height = narrow<i32>(image_resolution.height);
@@ -30,7 +31,7 @@ static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution i
     barrier.layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
     barrier.access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_TRANSFER_READ_BIT};
     barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT};
-    vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+    vkh::cmd_pipeline_barrier(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
 
     const i32 next_mip_width = std::max(mip_width / 2, 1);
     const i32 next_mip_height = std::max(mip_height / 2, 1);
@@ -59,7 +60,7 @@ static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution i
     barrier.access_masks = {VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT};
     barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT};
-    vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+    vkh::cmd_pipeline_barrier(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
 
     mip_width = next_mip_width;
     mip_height = next_mip_height;
@@ -70,7 +71,7 @@ static void cmd_generate_mipmap(VkCommandBuffer cmd, VkImage image, Resolution i
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   barrier.access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_READ_BIT};
   barrier.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT};
-  vkh::cmd_pipeline_barrier2(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
+  vkh::cmd_pipeline_barrier(cmd, {.image_barriers = std::array{barrier.to_vk_struct()}});
 }
 
 auto init_upload_context(vkh::Context& context) -> vkh::Expected<UploadContext>
@@ -226,9 +227,9 @@ auto upload_image(vkh::Context& context, const UploadContext& upload_context,
     };
 
     // barrier the image into the transfer-receive layout
-    vkh::cmd_pipeline_barrier2(
+    vkh::cmd_pipeline_barrier(
         cmd, {.image_barriers = std::array{
-                  vkh::ImageBarrier2{
+                  vkh::ImageBarrier{
                       .stage_masks = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                       VK_PIPELINE_STAGE_2_TRANSFER_BIT},
                       .access_masks = {VK_ACCESS_2_NONE, VK_ACCESS_2_TRANSFER_WRITE_BIT},
@@ -256,16 +257,16 @@ auto upload_image(vkh::Context& context, const UploadContext& upload_context,
 
     // barrier the image into the shader readable layout
     if (not need_generate_mipmap) {
-      vkh::cmd_pipeline_barrier2(
+      vkh::cmd_pipeline_barrier(
           cmd, {.image_barriers = std::array{
-                    vkh::ImageBarrier2{.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                                                       VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
-                                       .access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                                        VK_ACCESS_2_SHADER_READ_BIT},
-                                       .layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-                                       .image = allocated_image.image,
-                                       .subresource_range = range}
+                    vkh::ImageBarrier{.stage_masks = {VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                                      VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT},
+                                      .access_masks = {VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                       VK_ACCESS_2_SHADER_READ_BIT},
+                                      .layouts = {VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+                                      .image = allocated_image.image,
+                                      .subresource_range = range}
                         .to_vk_struct() //
                 }});
     } else {

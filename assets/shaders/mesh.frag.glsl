@@ -1,6 +1,6 @@
 #version 460
-#extension GL_EXT_nonuniform_qualifier: require
 
+#include "prelude.h.glsl"
 #include "scene_data.h.glsl"
 #include "pbr.h.glsl"
 #include "shadow.h.glsl"
@@ -11,7 +11,7 @@ layout (location = 2) in vec3 in_normal;
 layout (location = 3) in vec3 in_tangent;
 layout (location = 4) in vec3 in_bi_tangent;
 layout (location = 5) in vec4 in_shadow_coord;
-layout (location = 6) in flat int in_material_index;
+layout (location = 6) in flat uint in_material_index;
 
 layout (location = 0) out vec4 out_frag_color;
 

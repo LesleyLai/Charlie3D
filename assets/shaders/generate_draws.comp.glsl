@@ -1,30 +1,31 @@
 #version 460
 
+#include "draw_data.h.glsl"
+
 #extension GL_EXT_buffer_reference: require
 #extension GL_EXT_scalar_block_layout: require
 
+
+// Output: a draw indirect buffer that can directly feed into the GPU
 struct IndirectCommand {
-    int index_count;
-    int instance_count;
-    int first_index;
+    uint index_count;
+    uint instance_count;
+    uint first_index;
     int vertex_offset;
-    int first_instance;
+    uint first_instance;
 };
 
-layout (buffer_reference, scalar) readonly restrict buffer InIndirectBuffer {
-    IndirectCommand draws[];
-};
-
-layout (buffer_reference, scalar) writeonly restrict buffer OutIndirectBuffer {
+layout (buffer_reference, scalar) writeonly restrict buffer DrawIndirectBuffer {
     IndirectCommand draws[];
 };
 
 layout (push_constant) uniform constants
 {
-    InIndirectBuffer initial_draws_buffer;
-    OutIndirectBuffer final_draws_buffer;
+    DrawsBuffer in_draws_buffer;
+    DrawIndirectBuffer draw_indirect_buffer;
     uint total_draw_count;
 };
+
 
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
@@ -33,8 +34,15 @@ void main() {
         return;
     }
 
-    IndirectCommand draw = initial_draws_buffer.draws[index];
+    Draw draw = in_draws_buffer.draws[index];
 
-    final_draws_buffer.draws[index] = draw;
+    IndirectCommand indirect_command;
+    indirect_command.index_count = draw.index_count;
+    indirect_command.instance_count = 1;
+    indirect_command.first_index = draw.index_offset;
+    indirect_command.vertex_offset = draw.vertex_offset;
+    indirect_command.first_instance = index; // Used to get the original draw index
+
+    draw_indirect_buffer.draws[index] = indirect_command;
 
 }
