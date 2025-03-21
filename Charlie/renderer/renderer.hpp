@@ -275,7 +275,7 @@ private:
 
   void on_input_event(const Event& event, const InputStates& states);
 
-  void present(beyond::Ref<u32> swapchain_image_index);
+  void present();
 };
 
 } // namespace charlie

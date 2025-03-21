@@ -489,8 +489,6 @@ void Renderer::render(const charlie::Camera& camera)
   const auto& frame = current_frame();
   constexpr u64 one_second = 1'000'000'000;
 
-  u32 swapchain_image_index = 0;
-
   // wait until the GPU has finished rendering the last frame.
   {
     ZoneScopedN("wait for render fence");
@@ -498,9 +496,7 @@ void Renderer::render(const charlie::Camera& camera)
   }
 
   {
-    ZoneScopedN("vkAcquireNextImageKHR");
-    const VkResult result = vkAcquireNextImageKHR(
-        context_, swapchain_, one_second, frame.present_semaphore, nullptr, &swapchain_image_index);
+    const VkResult result = swapchain_.acquire_next_image(frame.present_semaphore);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) { return; }
     VK_CHECK(result);
   }
@@ -522,8 +518,8 @@ void Renderer::render(const charlie::Camera& camera)
 
   VkCommandBuffer cmd = frame.main_command_buffer;
 
-  const auto current_swapchain_image = swapchain_.images()[swapchain_image_index];
-  const auto current_swapchain_image_view = swapchain_.image_views()[swapchain_image_index];
+  const auto current_swapchain_image = swapchain_.current_image();
+  const auto current_swapchain_image_view = swapchain_.current_image_view();
 
   static constexpr VkCommandBufferBeginInfo cmd_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -696,18 +692,20 @@ void Renderer::render(const charlie::Camera& camera)
     VK_CHECK(vkQueueSubmit(graphics_queue_, 1, &submit, frame.render_fence));
   }
 
-  present(beyond::ref(swapchain_image_index));
+  present();
 
   ++frame_number_;
 }
 
-void Renderer::present(beyond::Ref<u32> swapchain_image_index)
+void Renderer::present()
 {
   ZoneScopedN("vkQueuePresentKHR");
 
   const auto& frame = current_frame();
 
   VkSwapchainKHR swapchain = swapchain_.get();
+  const std::uint32_t image_index = swapchain_.current_image_index();
+
   const VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = nullptr,
@@ -715,7 +713,7 @@ void Renderer::present(beyond::Ref<u32> swapchain_image_index)
       .pWaitSemaphores = &frame.render_semaphore,
       .swapchainCount = 1,
       .pSwapchains = &swapchain,
-      .pImageIndices = &swapchain_image_index.get(),
+      .pImageIndices = &image_index,
   };
 
   const VkResult result = vkQueuePresentKHR(graphics_queue_, &present_info);

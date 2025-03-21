@@ -1,9 +1,7 @@
 #ifndef CHARLIE3D_DRAW_DATA_GLSL
 #define CHARLIE3D_DRAW_DATA_GLSL
 
-#extension GL_EXT_buffer_reference: require
-#extension GL_EXT_scalar_block_layout: require
-#extension GL_EXT_nonuniform_qualifier: require
+#include "prelude.h.glsl"
 
 // All draws in the scene before culling
 struct Draw {

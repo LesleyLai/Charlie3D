@@ -5,11 +5,15 @@
 
 #include "VkBootstrap.h"
 
+#include <tracy/Tracy.hpp>
+
 namespace vkh {
 
 Swapchain::Swapchain(Context& context, const SwapchainCreateInfo& create_info)
     : device_{context.device()}
 {
+  ZoneScoped;
+
   vkb::SwapchainBuilder swapchain_builder{context.physical_device(), context.device(),
                                           context.surface()};
 
@@ -30,6 +34,13 @@ Swapchain::Swapchain(Context& context, const SwapchainCreateInfo& create_info)
     VK_CHECK(set_debug_name(context, images_[i], fmt::format("Swapchain Image {}", i)));
     VK_CHECK(set_debug_name(context, image_views_[i], fmt::format("Swapchain Image View {}", i)));
   }
+}
+auto Swapchain::acquire_next_image(VkSemaphore present_semaphore) -> VkResult
+{
+  ZoneScoped;
+
+  return vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, present_semaphore, nullptr,
+                               &current_image_index_);
 }
 
 Swapchain::~Swapchain()

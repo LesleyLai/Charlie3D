@@ -1,10 +1,7 @@
 #version 460
 
+#include "prelude.h.glsl"
 #include "draw_data.h.glsl"
-
-#extension GL_EXT_buffer_reference: require
-#extension GL_EXT_scalar_block_layout: require
-
 
 // Output: a draw indirect buffer that can directly feed into the GPU
 struct IndirectCommand {
