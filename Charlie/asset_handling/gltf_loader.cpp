@@ -141,8 +141,8 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
 };
 
 [[nodiscard]] auto load_raw_image_data(const std::filesystem::path& gltf_directory,
-                                       const fastgltf::Asset& asset,
-                                       const fastgltf::Image& image) -> charlie::CPUImage
+                                       const fastgltf::Asset& asset, const fastgltf::Image& image)
+    -> charlie::CPUImage
 {
   return std::visit(
       [&](const auto& data) -> charlie::CPUImage {
@@ -192,7 +192,7 @@ auto to_cpu_material(const fastgltf::Material& material) -> charlie::CPUMaterial
 [[nodiscard]] auto calculate_is_root(std::span<const fastgltf::Node> nodes) -> std::vector<bool>
 {
   std::vector<bool> is_root(nodes.size(), true);
-  for (const auto& [i, node] : std::views::enumerate(nodes)) {
+  for (const auto& node : nodes) {
     for (charlie::usize child_index : node.children) { is_root.at(child_index) = false; }
   }
   return is_root;
@@ -279,8 +279,8 @@ auto populate_nodes(std::span<const fastgltf::Node> asset_nodes) -> charlie::Nod
 
   const std::vector<bool> node_is_root = calculate_is_root(asset_nodes);
   BEYOND_ENSURE(node_is_root.size() == node_count);
-  for (const auto [i, node] : std::views::enumerate(asset_nodes)) {
-    if (node_is_root[i]) { add_node(node, asset_nodes, result, parent_indices); }
+  for (usize i = 0; i < node_count; ++i) {
+    if (node_is_root[i]) { add_node(asset_nodes[i], asset_nodes, result, parent_indices); }
   }
 
   // generate global transforms
@@ -303,8 +303,8 @@ auto append_from_accessor(const fastgltf::Asset& asset, const fastgltf::Accessor
 
 template <typename T>
 [[nodiscard]]
-auto from_accessor(const fastgltf::Asset& asset,
-                   const fastgltf::Accessor& accessor) -> std::vector<T>
+auto from_accessor(const fastgltf::Asset& asset, const fastgltf::Accessor& accessor)
+    -> std::vector<T>
 {
   std::vector<T> result;
   append_from_accessor(asset, accessor, beyond::ref(result));
@@ -356,8 +356,8 @@ auto construct_submesh_aabb(std::span<const Point3> positions) -> beyond::AABB3
 }
 
 // Convert mesh from fastgltf format to charlie::CPUMesh
-auto convert_meshes(const fastgltf::Asset& asset,
-                    beyond::Ref<charlie::CPUMeshBuffers> buffers) -> std::vector<charlie::CPUMesh>
+auto convert_meshes(const fastgltf::Asset& asset, beyond::Ref<charlie::CPUMeshBuffers> buffers)
+    -> std::vector<charlie::CPUMesh>
 {
   ZoneScopedN("Convert Meshes");
 
@@ -539,9 +539,9 @@ namespace charlie {
   std::latch image_loading_latch{narrow<ptrdiff_t>(asset.images.size())};
 
   result.images.resize(asset.images.size());
-  for (const auto& [i, image] : std::views::enumerate(asset.images)) {
+  for (usize i = 0; i < asset.images.size(); ++i) {
     background_thread_pool().async([&, i]() {
-      result.images[i] = load_raw_image_data(gltf_directory, asset, image);
+      result.images[i] = load_raw_image_data(gltf_directory, asset, asset.images[i]);
       image_loading_latch.count_down();
     });
   }

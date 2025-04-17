@@ -16,6 +16,7 @@
 
 #include <array>
 #include <string>
+#include <algorithm>
 
 #include "../utils/asset_path.hpp"
 

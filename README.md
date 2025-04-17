@@ -51,3 +51,59 @@ No goals
 ### Utilities
 
 - [Tracy](https://github.com/wolfpld/tracy) Profiler integration
+
+## Build Instruction
+
+> [!IMPORTANT]
+> This project uses [git-submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules). And it also
+> uses [git-lfs](https://git-lfs.com/) for asset management. Please follow the setup instructions carefully to ensure
+> everything is initialized correctly.
+
+### Install git-lfs if you haven't
+
+If you haven't done this before, make sure to [install git-lfs](https://git-lfs.com/) and run `git lfs install` before
+cloning the repository to ensure all large assets are correctly downloaded.
+
+If you've already cloned the repository without git-lfs, then install it and run:
+
+```sh
+git lfs fetch --all
+git lfs pull
+```
+
+to download the missing assets.
+
+### Install vcpkg
+
+If you haven’t already installed vcpkg. Goto a new directory where you want to install `vcpkg`, and do:
+
+```sh
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh  # or bootstrap-vcpkg.bat on Windows
+```
+
+### Clone the repository
+
+```sh
+git clone https://github.com/LesleyLai/Charlie3D.git --recurse-submodules
+cd Charlie3D
+```
+
+If you forget the `--recurse-submodules` argument, do
+
+```sh
+git submodule update --init --recursive
+```
+
+### Configure CMake and Build
+
+At this point, you can either use your IDE’s CMake integration or run the following commands from the terminal. The key
+is to provide the vcpkg toolchain file to CMake:
+
+```sh
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+```
+
+> [!TIP]
+> Replace `/path/to/vcpkg` with the actual path to the local vcpkg installation.

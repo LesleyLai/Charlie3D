@@ -88,7 +88,8 @@ namespace charlie {
   {
     ZoneScopedN("Upload materials");
 
-    for (const auto& [i, material] : std::views::enumerate(cpu_scene.materials)) {
+    for (u32 i = 0; i < cpu_scene.materials.size(); ++i) {
+       auto& material = cpu_scene.materials[i];
       charlie::offset_material_texture_index(ref(material), lookup_texture_index);
       material_index_map[narrow<usize>(i)] = renderer.add_material(material);
     }

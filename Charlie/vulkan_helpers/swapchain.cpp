@@ -7,6 +7,23 @@
 
 #include <tracy/Tracy.hpp>
 
+#include <span>
+
+namespace {
+
+void destroy(VkDevice device, VkSwapchainKHR swapchain,
+             std::span<VkImageView> swapchain_image_views)
+{
+  if (device) {
+    for (VkImageView image_view : swapchain_image_views) {
+      vkDestroyImageView(device, image_view, nullptr);
+    }
+    vkDestroySwapchainKHR(device, swapchain, nullptr);
+  }
+}
+
+} // namespace
+
 namespace vkh {
 
 Swapchain::Swapchain(Context& context, const SwapchainCreateInfo& create_info)
@@ -45,12 +62,7 @@ auto Swapchain::acquire_next_image(VkSemaphore present_semaphore) -> VkResult
 
 Swapchain::~Swapchain()
 {
-  if (device_) {
-    for (VkImageView image_view : image_views_) {
-      vkDestroyImageView(device_, image_view, nullptr);
-    }
-    vkDestroySwapchainKHR(device_, swapchain_, nullptr);
-  }
+  destroy(device_, swapchain_, image_views_);
 }
 
 Swapchain::Swapchain(Swapchain&& other) noexcept
@@ -64,7 +76,8 @@ Swapchain::Swapchain(Swapchain&& other) noexcept
 auto Swapchain::operator=(Swapchain&& other) & noexcept -> Swapchain&
 {
   if (this != &other) {
-    this->~Swapchain();
+    destroy(device_, swapchain_, image_views_);
+
     device_ = std::exchange(other.device_, {});
     swapchain_ = std::exchange(other.swapchain_, {});
     images_ = std::exchange(other.images_, {});

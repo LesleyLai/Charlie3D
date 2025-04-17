@@ -77,14 +77,14 @@ namespace charlie {
 Renderer::Renderer(Window& window, InputHandler& input_handler)
     : window_{&window}, resolution_{window.resolution()}, context_{window},
       graphics_queue_{context_.graphics_queue()},
-      swapchain_{context_, {.extent = to_extent2d(resolution_)}},
       sampler_cache_{std::make_unique<SamplerCache>(context_.device())},
+      swapchain_{context_, {.extent = to_extent2d(resolution_)}},
+      upload_context_{init_upload_context(context_).expect("Failed to create upload context")},
+      frame_deletion_queue_{DeletionQueue{context_}, DeletionQueue{context_}},
       shader_compiler_{std::make_unique<ShaderCompiler>()},
       pipeline_manager_{std::make_unique<PipelineManager>(context_)},
-      upload_context_{init_upload_context(context_).expect("Failed to create upload context")},
       textures_{std::make_unique<TextureManager>(context_, upload_context_,
-                                                 sampler_cache_->default_sampler())},
-      frame_deletion_queue_{DeletionQueue{context_}, DeletionQueue{context_}}
+                                                 sampler_cache_->default_sampler())}
 {
   init_depth_image();
   init_final_hdr_image();
@@ -107,8 +107,8 @@ Renderer::Renderer(Window& window, InputHandler& input_handler)
   input_handler.add_listener(std::bind_front(&Renderer::on_input_event, std::ref(*this)));
 }
 
-auto Renderer::upload_image(const charlie::CPUImage& cpu_image,
-                            const ImageUploadInfo& upload_info) -> VkImage
+auto Renderer::upload_image(const charlie::CPUImage& cpu_image, const ImageUploadInfo& upload_info)
+    -> VkImage
 {
   return textures_->upload_image(cpu_image, upload_info);
 }

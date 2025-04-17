@@ -37,7 +37,7 @@ struct Vertex {
 // TODO: test this
 [[nodiscard]] inline auto vec3_to_oct(Vec3 v) -> Vec2
 {
-  const Vec2 p = Vec2{v.x, v.y} * (1.0f / (abs(v.x) + abs(v.y) + abs(v.z)));
+  const Vec2 p = Vec2{v.x, v.y} * (1.0f / (std::abs(v.x) + std::abs(v.y) + std::abs(v.z)));
   if (v.z <= 0.0f) {
     const auto sign = sign_not_zero(p);
     const float x = (1.0f - std::abs(p.y)) * sign.x;

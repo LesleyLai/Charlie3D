@@ -27,7 +27,7 @@ using beyond::ref;
 
 auto main(int argc, const char** argv) -> int
 {
-  std::string_view scene_file = "models/gltf_box/box.gltf";
+  std::string_view scene_file = "models/gltf_box/Box.gltf";
   if (argc == 2) { scene_file = argv[1]; }
 
   auto window = charlie::WindowManager::instance().create(1440, 900, "Charlie3D",

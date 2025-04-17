@@ -2,35 +2,61 @@ add_subdirectory(beyond-core)
 
 include("../cmake/CPM.cmake")
 
+cpmaddpackage(
+        NAME                volk
+        GITHUB_REPOSITORY   zeux/volk
+        GIT_TAG             vulkan-sdk-1.4.309.0
+        OPTIONS
+        "VOLK_PULL_IN_VULKAN OFF"
+        "VOLK_INSTALL OFF"
+        SYSTEM TRUE
+        EXCLUDE_FROM_ALL TRUE
+)
+
 CPMAddPackage(
         NAME vk-bootstrap
         GITHUB_REPOSITORY charles-lunarg/vk-bootstrap
-        GIT_TAG v1.3.273
+        GIT_TAG v1.4.312
+        SYSTEM TRUE
+        EXCLUDE_FROM_ALL TRUE
 )
 
 CPMAddPackage(
         NAME Vulkan-Headers
         GITHUB_REPOSITORY KhronosGroup/Vulkan-Headers
-        GIT_TAG v1.3.273
+        GIT_TAG v1.4.312
         OVERRIDE_FIND_PACKAGE
+        SYSTEM TRUE
+        EXCLUDE_FROM_ALL TRUE
 )
 
-CPMAddPackage("gh:KhronosGroup/Vulkan-Utility-Libraries@1.3.273")
+CPMAddPackage(
+        NAME Vulkan-Utility-Libraries
+        GITHUB_REPOSITORY KhronosGroup/Vulkan-Utility-Libraries
+        GIT_TAG v1.4.312
+        SYSTEM TRUE
+        EXCLUDE_FROM_ALL TRUE
+)
 
 CPMAddPackage(
         NAME SPIRV-Headers
         GITHUB_REPOSITORY KhronosGroup/SPIRV-Headers
-        GIT_TAG vulkan-sdk-1.3.268.0
+        GIT_TAG vulkan-sdk-1.4.309.0
+        SYSTEM TRUE
+        EXCLUDE_FROM_ALL TRUE
 )
 
 CPMAddPackage(
         NAME SPIRV-Tools
         GITHUB_REPOSITORY KhronosGroup/SPIRV-Tools
-        GIT_TAG vulkan-sdk-1.3.268.0
+        GIT_TAG vulkan-sdk-1.4.309.0
+        SYSTEM TRUE
+        EXCLUDE_FROM_ALL TRUE
         OPTIONS
         "SKIP_SPIRV_TOOLS_INSTALL ON"
         "SPIRV_SKIP_EXECUTABLES ON"
         "SPIRV_SKIP_TESTS ON"
+        "SPIRV_WERROR OFF"
 )
 
 CPMAddPackage(

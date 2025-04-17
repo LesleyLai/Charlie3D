@@ -150,7 +150,7 @@ void charlie::Renderer::draw_gui_lighting_window()
 
   ImGui::SliderAngle("polar (theta)", &theta, 0, 90);
   ImGui::SliderAngle("azimuthal (phi)", &phi, 0, 360);
-  beyond::Vec3 sunlight_direction = {sin(theta) * cos(phi), cos(theta), sin(theta) * sin(phi)};
+  beyond::Vec3 sunlight_direction = {std::sin(theta) * std::cos(phi), std::cos(theta), std::sin(theta) * std::sin(phi)};
   sunlight_direction = -sunlight_direction;
 
   scene_parameters_.sunlight_direction.xyz = sunlight_direction;

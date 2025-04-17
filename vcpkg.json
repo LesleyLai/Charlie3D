@@ -1,7 +1,10 @@
 {
   "dependencies": [
+    {
+      "name": "dbus",
+      "default-features": false
+    },
     "fmt",
-    "volk",
     "spdlog",
     {
       "name": "sdl2",

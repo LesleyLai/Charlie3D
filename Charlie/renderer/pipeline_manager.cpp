@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-#include <Tracy/Tracy.hpp>
+#include <tracy/Tracy.hpp>
 
 #include "../utils/asset_path.hpp"
 #include "../utils/string_map.hpp"
