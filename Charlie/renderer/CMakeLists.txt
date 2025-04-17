@@ -50,18 +50,3 @@ target_link_libraries(charlie3d_renderer
         SDL2::SDL2
         charlie3d::compiler_options
 )
-
-
-#include(../../cmake/CompileShader.cmake)
-##compile_shader(mesh_vert_shader
-##        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.vert.glsl
-##        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/mesh.vert.spv
-##        )
-#
-#compile_shader(mesh_frag_shader
-#        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.frag.glsl
-#        TARGET ${CMAKE_BINARY_DIR}/bin/shaders/mesh.frag.spv
-#        )
-
-#add_dependencies(charlie3d_renderer mesh_vert_shader)
-#add_dependencies(charlie3d_renderer mesh_frag_shader)
