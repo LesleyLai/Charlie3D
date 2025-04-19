@@ -3,11 +3,10 @@ add_subdirectory(beyond-core)
 include("../cmake/CPM.cmake")
 
 cpmaddpackage(
-        NAME                volk
-        GITHUB_REPOSITORY   zeux/volk
-        GIT_TAG             vulkan-sdk-1.4.309.0
+        NAME volk
+        GITHUB_REPOSITORY zeux/volk
+        GIT_TAG vulkan-sdk-1.4.309.0
         OPTIONS
-        "VOLK_PULL_IN_VULKAN OFF"
         "VOLK_INSTALL OFF"
         SYSTEM TRUE
         EXCLUDE_FROM_ALL TRUE
