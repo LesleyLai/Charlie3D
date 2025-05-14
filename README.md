@@ -3,6 +3,8 @@
 Charlie 3D is my personal R&D rendering framework in Vulkan. It is constructed on top of
 my [beyond-core](https://github.com/Beyond-Engine/Core) library.
 
+**Note**: This repository is not archived. Further development will be migrated to [Codeberg](https://codeberg.org/Lesley/Charlie3D).
+
 ![Amazon Bistro](images/Bistro.png)
 
 ## Goals and no-goals
